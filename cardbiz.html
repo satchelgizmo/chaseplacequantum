@@ -1072,6 +1072,7 @@ function buildSalePanel(sid){
         <div class="pn-meta">${esc(s.date)} · Order #${esc(s.recordNum)}</div>
         <div style="margin-top:6px">${typeBadge(s.type)}</div>
       </div>
+      <button class="btn ghost sm" style="margin-right:6px;flex-shrink:0" onclick="openRelinkPanel('${sid}')">🔗 Change Link</button>
       <button class="pn-close" onclick="closePanel()">✕</button>
     </div>
     <div class="pn-body">
@@ -1095,7 +1096,7 @@ function buildSalePanel(sid){
       </div>
 
       <div class="ps">
-        <div class="ps-title" style="justify-content:space-between"><span>Linked Purchase</span><button class="edit-btn" onclick="event.stopPropagation();openRelinkPanel('${sid}')">🔗 Change Link</button></div>
+        <div class="ps-title">Linked Purchase</div>
         ${lp?`<div class="mc active" onclick="closePanel();showPurchase('${lp.id}')" style="cursor:pointer">
           ${lp.img?`<img class="mc-img" src="${esc(lp.img)}" onerror="this.style.display='none'">` :''}
           <div class="mc-info"><div class="mc-name">${esc(lp.name)}</div>
