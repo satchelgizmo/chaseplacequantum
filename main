@@ -212,6 +212,34 @@ input[type=text],input[type=number],textarea{caret-color:var(--gold)}
 .alert.warn{background:rgba(245,200,66,.1);border:1px solid rgba(245,200,66,.2);color:var(--gold)}
 .alert.info{background:rgba(77,166,255,.08);border:1px solid rgba(77,166,255,.2);color:var(--blue)}
 .alert.err{background:rgba(224,82,82,.1);border:1px solid rgba(224,82,82,.2);color:var(--red)}
+/* ── SORT HEADERS ── */
+thead th.sh{cursor:pointer;user-select:none}
+thead th.sh:hover{color:var(--text)}
+/* ── MARKET VALUE ── */
+.mkt{font-family:var(--mono);font-size:11px}
+.mkt.up{color:var(--green)}.mkt.dn{color:var(--red)}.mkt.neu{color:var(--gold)}
+.mkt-badge{display:inline-block;font-size:9px;font-family:var(--mono);padding:1px 5px;border-radius:3px;margin-top:2px}
+.mkt-badge.stale{background:rgba(66,77,92,.2);color:var(--faint)}
+.mkt-badge.fresh{background:rgba(46,204,138,.08);color:var(--green)}
+/* ── IMPORT PAGE ── */
+.import-drop{border:2px dashed var(--border2);border-radius:var(--r);padding:24px;text-align:center;transition:border-color .15s;cursor:pointer}
+.import-drop:hover,.import-drop.drag{border-color:var(--gold);background:rgba(245,200,66,.04)}
+.import-drop .di{font-size:32px;margin-bottom:8px}
+.import-drop p{font-size:12px;color:var(--dim);font-family:var(--mono)}
+.parse-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.parse-row{background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);padding:10px 12px;font-size:12px}
+.parse-row .pr-name{font-weight:600;font-size:12px;margin-bottom:5px;word-break:break-word}
+.parse-row .pr-tags{display:flex;flex-wrap:wrap;gap:3px;margin-bottom:5px}
+.parse-row .pr-thumb{width:40px;height:56px;object-fit:cover;border-radius:4px;float:right;margin-left:8px}
+.parse-row .pr-cost{font-family:var(--mono);color:var(--gold);font-size:11px;margin-top:4px}
+.scan-btn{background:rgba(164,126,245,.1);border:1px solid rgba(164,126,245,.3);color:var(--purple);padding:3px 8px;border-radius:4px;font-size:10px;font-family:var(--mono);cursor:pointer}
+.scan-btn:hover{background:rgba(164,126,245,.2)}
+/* ── API KEY SETTINGS ── */
+.sf-key{padding:10px 12px;border-top:1px solid var(--border);font-family:var(--mono)}
+.key-input{width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:5px 7px;border-radius:4px;font-size:10px;font-family:var(--mono);outline:none}
+.key-input:focus{border-color:var(--purple)}
+.key-status{font-size:9px;margin-top:4px;letter-spacing:.5px}
+.key-status.ok{color:var(--green)}.key-status.no{color:var(--faint)}
 </style>
 </head>
 <body>
@@ -227,11 +255,17 @@ input[type=text],input[type=number],textarea{caret-color:var(--gold)}
       <div class="ni" id="ni-buys" onclick="nav('buys')"><span class="ic">🛒</span><span>Purchases</span></div>
       <div class="ni" id="ni-sells" onclick="nav('sells')"><span class="ic">💰</span><span>Sales</span></div>
       <div class="ni" id="ni-pnl" onclick="nav('pnl')"><span class="ic">🔗</span><span>P&amp;L Flips</span></div>
+      <div class="ni" id="ni-imp" onclick="nav('imp')"><span class="ic">📥</span><span>Import</span></div>
     </div>
     <div class="side-foot">
       <div class="sf-row"><div class="sf-lbl">Net P&amp;L</div><div class="sf-val" id="sf-pnl">—</div></div>
       <div class="sf-row"><div class="sf-lbl">Revenue</div><div class="sf-val g" id="sf-rev">—</div></div>
       <div class="sf-row"><div class="sf-lbl">Inventory</div><div class="sf-val o" id="sf-inv">—</div></div>
+    </div>
+    <div class="sf-key">
+      <div style="font-size:9px;color:var(--faint);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">Anthropic API Key</div>
+      <input class="key-input" type="password" id="api-key-input" placeholder="sk-ant-…" oninput="saveApiKey(this.value)">
+      <div class="key-status" id="key-status">—</div>
     </div>
   </nav>
   <div class="main" id="main"></div>
@@ -260,7 +294,25 @@ function editP(pid, fields) { purchaseEdits[pid] = {...(purchaseEdits[pid]||{}),
 function editS(sid, fields) { saleEdits[sid] = {...(saleEdits[sid]||{}), ...fields}; updateSidebar(); }
 
 let page = 'dash', pgNum = {};
-let sortState = { inv: {col:'date',dir:-1}, buys: {col:'date',dir:-1}, sells: {col:'date',dir:-1}, pnl: {col:'pnl',dir:1} };
+let sortState = { inv: {col:'date',dir:-1}, buys: {col:'date',dir:-1}, sells: {col:'date',dir:-1}, pnl: {col:'pnl',dir:1}, imp: {col:'date',dir:-1} };
+// persist market lookups: pid -> {avgPrice, lowPrice, highPrice, confidence, recentSales, ts}
+let valueLookups = JSON.parse(localStorage.getItem('cb_lookups')||'{}');
+function persistLookups() { try { localStorage.setItem('cb_lookups', JSON.stringify(valueLookups)); } catch(e){} }
+// API key
+function getApiKey() { return localStorage.getItem('cb_apikey')||''; }
+function saveApiKey(v) {
+  localStorage.setItem('cb_apikey', v.trim());
+  const el = document.getElementById('key-status');
+  if(el) { el.textContent = v.trim() ? '✓ saved' : '—'; el.className = 'key-status '+(v.trim()?'ok':'no'); }
+}
+// init API key field
+function initApiKeyField() {
+  const el = document.getElementById('api-key-input');
+  const k = getApiKey();
+  if(el) el.value = k;
+  const st = document.getElementById('key-status');
+  if(st) { st.textContent = k ? '✓ saved' : 'enter key to enable AI features'; st.className = 'key-status '+(k?'ok':'no'); }
+}
 function setSort(key, col) {
   if (sortState[key].col === col) sortState[key].dir *= -1;
   else { sortState[key].col = col; sortState[key].dir = -1; }
@@ -317,10 +369,11 @@ function applySortS(items, key) {
   });
 }
 let filt = {
-  inv:   {q:'', type:'', status:''},
+  inv:   {q:'', type:'', status:'', mkt:''},
   buys:  {q:'', type:''},
   sells: {q:'', type:'', linked:''},
   pnl:   {q:''},
+  imp:   {q:''},
 };
 const PS = 50;
 
@@ -407,6 +460,7 @@ function render(){
   else if(page==='buys')  m.innerHTML=renderBuys();
   else if(page==='sells') m.innerHTML=renderSells();
   else if(page==='pnl')   m.innerHTML=renderPnl();
+  else if(page==='imp')   m.innerHTML=renderImport();
   updateSidebar();
 }
 function renderPag(total,cur,key){
@@ -488,13 +542,16 @@ function renderInv(){
   let items=purchases.filter(p=>!sp.has(p.id)).map(p=>getP(p.id));
   if(f.q){const q=f.q.toLowerCase();items=items.filter(p=>p.name.toLowerCase().includes(q)||(p.player||'').toLowerCase().includes(q)||(p.set||'').toLowerCase().includes(q));}
   if(f.type) items=items.filter(p=>p.type===f.type);
+  if(f.mkt==='yes') items=items.filter(p=>valueLookups[p.id]);
+  if(f.mkt==='no')  items=items.filter(p=>!valueLookups[p.id]);
   items=applySortP(items,'inv');
   const pn=pgNum.inv||0,total=items.length;
   const page_items=items.slice(pn*PS,(pn+1)*PS);
   const inv_cost=items.reduce((a,p)=>a+p.cost,0);
+  const inv_mkt=items.reduce((a,p)=>a+(valueLookups[p.id]?.avgPrice||0),0);
   return`
   <div class="topbar">
-    <div class="pg-title">Inventory <span class="pg-sub">${total} in stock · ${f$(inv_cost)} cost basis</span></div>
+    <div class="pg-title">Inventory <span class="pg-sub">${total} in stock · ${f$(inv_cost)} cost · ${inv_mkt?f$(inv_mkt)+' est. market':''}</span></div>
   </div>
   <div class="content">
     <div class="fb">
@@ -503,12 +560,30 @@ function renderInv(){
         <option value="">All Types</option>
         ${['Soccer','Pokémon','NFL','MLB','Marvel','NBA','Yu-Gi-Oh'].map(t=>`<option value="${t}" ${f.type===t?'selected':''}>${t}</option>`).join('')}
       </select>
+      <select onchange="filt.inv.mkt=this.value;pgNum.inv=0;render()">
+        <option value="">All</option>
+        <option value="yes" ${f.mkt==='yes'?'selected':''}>Valued</option>
+        <option value="no" ${f.mkt==='no'?'selected':''}>Unvalued</option>
+      </select>
     </div>
     <div class="tw"><table>
-      <thead><tr><th></th><th>CARD</th><th>PARSED FIELDS</th><th>TYPE</th><th>DATE</th><th>COST</th><th>ACTIONS</th></tr></thead>
+      <thead><tr><th></th>
+        <th onclick="setSort('inv','name')" class="sh">CARD${sortIcon('inv','name')}</th>
+        <th onclick="setSort('inv','player')" class="sh">PARSED${sortIcon('inv','player')}</th>
+        <th onclick="setSort('inv','type')" class="sh">TYPE${sortIcon('inv','type')}</th>
+        <th onclick="setSort('inv','date')" class="sh">DATE${sortIcon('inv','date')}</th>
+        <th onclick="setSort('inv','cost')" class="sh">COST${sortIcon('inv','cost')}</th>
+        <th>MKT VALUE</th>
+        <th>ACTIONS</th>
+      </tr></thead>
       <tbody>${page_items.length===0
-        ?`<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--faint);font-family:var(--mono)">No cards found</td></tr>`
-        :page_items.map(p=>`
+        ?`<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--faint);font-family:var(--mono)">No cards found</td></tr>`
+        :page_items.map(p=>{
+          const vl=valueLookups[p.id];
+          const mktDiff=vl?.avgPrice?(vl.avgPrice-p.cost):null;
+          const mktAge=vl?.ts?Math.floor((Date.now()-vl.ts)/86400000):null;
+          const mktHtml=vl?`<div class="mkt ${mktDiff>=0?'up':'dn'}">${f$(vl.avgPrice)}</div><div class="mkt-badge ${mktAge<3?'fresh':'stale'}">${mktDiff>=0?'+':''}${f$(mktDiff)} · ${mktAge}d ago</div>`:`<span style="color:var(--faint);font-size:11px;font-family:var(--mono)">—</span>`;
+          return`
         <tr onclick="showPurchase('${p.id}')" style="cursor:pointer">
           <td class="cic">${thumb(p.img)}</td>
           <td><div class="cn">${esc(p.name)}</div><div class="cm">${esc(p.seller)} · ${esc(p.orderNum)}</div>
@@ -518,12 +593,13 @@ function renderInv(){
           <td>${typeBadge(p.type)}</td>
           <td><span class="pr d">${esc(p.date)}</span></td>
           <td><span class="pr o" style="font-weight:700">${f$(p.cost)}</span></td>
+          <td>${mktHtml}</td>
           <td onclick="event.stopPropagation()" style="white-space:nowrap">
             <button class="btn xs" onclick="showPurchase('${p.id}')">✏ Edit</button>
             <button class="btn xs" style="margin-left:3px" onclick="lookupCard('${p.id}')">💡</button>
             <button class="btn xs" style="margin-left:3px" onclick="buildListing('${p.id}')">📝</button>
           </td>
-        </tr>`).join('')}
+        </tr>`;}).join('')}
       </tbody>
     </table></div>
     ${renderPag(total,pn,'inv')}
@@ -693,7 +769,7 @@ function renderPnl(){
         <th onclick="setSort('pnl','pnl')" class="sh">NET P&L${sortIcon('pnl','pnl')}</th>
         <th onclick="setSort('pnl','roi')" class="sh">ROI${sortIcon('pnl','roi')}</th>
       </tr></thead>
-      <tbody>${page_items.map(({sale:ss,purchase:pp,rev,pnl})=>{
+      <tbody>${page_items.map(({sale:ss,purchase:pp,rev,pnl,netPnl,fee})=>{
         const roi=pp.cost>0?((netPnl/pp.cost)*100).toFixed(0)+'%':'—';
         return`<tr onclick="showSale('${ss.id}')" style="cursor:pointer">
           <td class="cic">${thumb(pp.img)}</td>
@@ -701,8 +777,8 @@ function renderPnl(){
           <td>${parsedTags(pp)}</td>
           <td><span class="pr o">${f$(pp.cost)}</span></td>
           <td><span class="pr g">${f$(rev)}</span></td>
-          <td><span class="pr ${pnl>=0?'g':'r'}" style="font-weight:700">${f$(pnl)}</span></td>
-          <td><span class="pr ${pnl>=0?'g':'r'}">${roi}</span></td>
+          <td><span class="pr ${netPnl>=0?'g':'r'}" style="font-weight:700">${f$(netPnl)}</span><div style="font-size:9px;color:var(--faint);font-family:var(--mono)">fee ${f$(fee)}</div></td>
+          <td><span class="pr ${netPnl>=0?'g':'r'}">${roi}</span></td>
         </tr>`;}).join('')}
       </tbody>
     </table></div>
@@ -835,7 +911,12 @@ function buildPurchaseEditForm(pid){
         ${types.map(t=>`<option value="${t}" ${p.type===t?'selected':''}>${t}</option>`).join('')}
       </select>
     </div>
-    <div class="field-item"><label>Image URL</label><input class="field-input mono" id="ef-img-${pid}" value="${esc(p.img||'')}" placeholder="https://i.ebayimg.com/..."></div>
+    <div class="field-item"><label>Image URL</label>
+      <div style="display:flex;gap:4px">
+        <input class="field-input mono" id="ef-img-${pid}" value="${esc(p.img||'')}" placeholder="https://i.ebayimg.com/..." style="flex:1">
+        <button class="scan-btn" onclick="scanCardImage(document.getElementById('ef-img-${pid}').value||'${esc(p.img||'')}','${pid}')" title="Scan image to auto-fill fields">🔍 Scan</button>
+      </div>
+    </div>
   </div>
   <div style="display:flex;gap:14px;margin:10px 0">
     <label class="cb-row"><input type="checkbox" id="ef-auto-${pid}" ${p.is_auto?'checked':''}> Auto</label>
@@ -1183,10 +1264,19 @@ function renderRelinkResultsHtml(sid,q){
 // ─────────────────────────────────────────────
 // VALUE LOOKUP
 // ─────────────────────────────────────────────
-const lookupCache={};
 async function lookupCard(pid){
   const p=getP(pid);
-  if(lookupCache[pid]){showLookupResult(pid,lookupCache[pid]);return;}
+  const apiKey=getApiKey();
+  const ebayUrl=`https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(p.name)}&LH_Complete=1&LH_Sold=1&_sop=13`;
+  // Show cached result immediately if fresh (<24h)
+  const cached=valueLookups[pid];
+  if(cached&&(Date.now()-cached.ts)<86400000){showLookupResult(pid,cached);return;}
+  if(!apiKey){
+    openPanel(`<div class="pn-head"><div><div class="pn-title">${esc(p.name)}</div></div><button class="pn-close" onclick="closePanel()">✕</button></div>
+      <div class="pn-body"><div class="alert warn">Enter your Anthropic API key in the sidebar to enable AI value lookup.</div>
+      <a href="${ebayUrl}" target="_blank" class="btn" style="text-decoration:none;margin-top:10px;display:inline-block">Search eBay Sold manually →</a></div>`);
+    return;
+  }
   openPanel(`
     <div class="pn-head">
       ${p.img?`<img class="pn-img" src="${esc(p.img)}" onerror="this.style.display='none'">`:`<div class="pn-img" style="display:flex;align-items:center;justify-content:center;font-size:32px">🃏</div>`}
@@ -1197,30 +1287,52 @@ async function lookupCard(pid){
       <div class="spin" style="width:22px;height:22px;margin:0 auto 12px"></div>
       <div style="font-size:12px;font-family:var(--mono);color:var(--dim)">Searching sold listings…</div>
     </div>`);
-  const src=(p.type==='Pokémon'||p.type==='Yu-Gi-Oh'||p.type==='Marvel')?'tcgplayer':'ebay';
-  const ebayUrl=`https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(p.name)}&LH_Complete=1&LH_Sold=1&_sop=13`;
-  const searchTip=p.serial?`IMPORTANT: card is serial numbered /${p.serial} — only match exact same print run.`:'';
-  const prompt=`Trading card pricing expert. Find current market value:
-CARD: ${p.name}
-TYPE: ${p.type} | PLAYER: ${p.player||'?'} | YEAR: ${p.year||'?'} | SET: ${p.set||'?'}
-VARIATION: ${p.variation||'base'} | SERIAL: ${p.serial?'/'+p.serial:'not serialized'} | GRADE: ${p.grade||'raw'}
-PAID: $${p.cost}
-${searchTip}
-Run 2-4 searches. ${src==='tcgplayer'?`Search tcgplayer.com for Market Price + eBay sold.`:`Search "${p.name} ebay sold" for hammer prices.`}
-Return ONLY valid JSON (no fences): {"cardName":"","avgPrice":0,"lowPrice":0,"highPrice":0,"confidence":"high|medium|low","notes":"","recentSales":[{"title":"","price":0,"date":"","imageUrl":null}]}
-imageUrl: only real https:// from i.ebayimg.com or cdn.tcgplayer.com. Null otherwise.`;
+  // Build tight search query emphasizing variation/serial/grade
+  const varParts=[p.variation,p.grade?p.grade:'raw',p.serial?`/${p.serial}`:''].filter(Boolean).join(' ');
+  const searchQ=`${p.player||''} ${p.year||''} ${p.set||''} ${varParts} sold ebay`.replace(/\s+/g,' ').trim();
+  const prompt=`You are a trading card market research expert. Search for RECENT eBay sold prices for this EXACT card:
+
+FULL TITLE: ${p.name}
+PLAYER/SUBJECT: ${p.player||'?'}
+YEAR: ${p.year||'?'} | SET: ${p.set||'?'} | BRAND: ${p.brand||'?'}
+VARIATION/PARALLEL: ${p.variation||'base (no parallel)'}
+SERIAL #: ${p.serial?'YES — /'+p.serial+' — CRITICAL: ONLY match this exact print run, NOT other serials':' NOT serialized'}
+GRADE: ${p.grade||'raw/ungraded'}
+AUTO: ${p.is_auto?'YES — must be autographed':'no'}
+RC/ROOKIE: ${p.is_rc?'YES':'no'}
+TYPE: ${p.type}
+
+CRITICAL MATCHING RULES:
+- ${p.serial?`Serial /${p.serial} is NON-NEGOTIABLE. A /10 and /25 are completely different cards.`:'Match the exact variation/parallel — Gold Prizm ≠ Silver Prizm ≠ Base'}
+- ${p.variation?`Variation "${p.variation}" must match exactly — different parallels have very different values`:'If card has no variation, do not include parallel versions in comps'}
+- ${p.grade?`Grade ${p.grade} only — raw card prices are irrelevant`:'Raw card only — do not include graded comps'}
+- Search: "${searchQ}"
+- Also try: "${p.player||p.name.split(' ').slice(0,3).join(' ')} ${p.set||''} ${p.serial?'/'+p.serial:''} sold"
+
+Gather 6-8 recent sold prices. Return ONLY valid JSON (no markdown):
+{"cardName":"","avgPrice":0,"lowPrice":0,"highPrice":0,"confidence":"high|medium|low","notes":"brief note on match quality and market trend","recentSales":[{"title":"","price":0,"date":"","url":"","imageUrl":null}]}
+recentSales: up to 8 items, sorted newest first. imageUrl: only real https:// URLs from i.ebayimg.com or cdn.tcgplayer.com, null otherwise. url: direct eBay sold listing URL if available.`;
   try{
-    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:2000,
+    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
+      headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-beta':'prompt-caching-2024-07-31','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:'claude-opus-4-5',max_tokens:2500,
         tools:[{type:'web_search_20250305',name:'web_search'}],messages:[{role:'user',content:prompt}]})});
-    if(!res.ok)throw new Error('API '+res.status);
+    if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error((e.error?.message)||'API '+res.status);}
     const data=await res.json();
     const text=data.content.filter(b=>b.type==='text').map(b=>b.text).join('');
-    const json=JSON.parse(text.replace(/```json|```/g,'').trim());
-    json.avgPrice=parseFloat(json.avgPrice)||0;json.lowPrice=parseFloat(json.lowPrice)||0;json.highPrice=parseFloat(json.highPrice)||0;
-    json.recentSales=(json.recentSales||[]).slice(0,4).map(s=>({...s,price:parseFloat(s.price)||0,
-      imageUrl:(typeof s.imageUrl==='string'&&s.imageUrl.startsWith('https://')&&/ebayimg|tcgplayer/.test(s.imageUrl))?s.imageUrl:null}));
-    lookupCache[pid]=json;showLookupResult(pid,json);
+    const raw=text.replace(/```json|```/g,'').trim();
+    const json=JSON.parse(raw);
+    json.avgPrice=parseFloat(json.avgPrice)||0;
+    json.lowPrice=parseFloat(json.lowPrice)||0;
+    json.highPrice=parseFloat(json.highPrice)||0;
+    json.recentSales=(json.recentSales||[]).slice(0,8).map(s=>({
+      ...s,price:parseFloat(s.price)||0,
+      imageUrl:(typeof s.imageUrl==='string'&&s.imageUrl.startsWith('https://')&&/ebayimg|tcgplayer/.test(s.imageUrl))?s.imageUrl:null,
+      url:(typeof s.url==='string'&&s.url.startsWith('https://'))?s.url:null,
+    }));
+    json.ts=Date.now();
+    valueLookups[pid]=json;persistLookups();
+    showLookupResult(pid,json);
   }catch(e){
     openPanel(`<div class="pn-head"><div><div class="pn-title">${esc(p.name)}</div></div><button class="pn-close" onclick="closePanel()">✕</button></div>
       <div class="pn-body"><div class="alert err">Lookup failed: ${esc(e.message)}</div>
@@ -1228,14 +1340,19 @@ imageUrl: only real https:// from i.ebayimg.com or cdn.tcgplayer.com. Null other
   }
 }
 function showLookupResult(pid,r){
-  const p=getP(pid);const pnl=r.avgPrice?r.avgPrice-p.cost:null;
+  const p=getP(pid);
+  const pnl=r.avgPrice?r.avgPrice-p.cost:null;
+  const netPnlEst=pnl!=null?pnl-ebayFee(r.avgPrice,1):null;
   const imgUrl=r.recentSales?.[0]?.imageUrl;
   const ebayUrl=`https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(p.name)}&LH_Complete=1&LH_Sold=1&_sop=13`;
+  const ageHrs=r.ts?Math.round((Date.now()-r.ts)/3600000):null;
   openPanel(`
     <div class="pn-head">
       ${(imgUrl||p.img)?`<img class="pn-img" src="${esc(imgUrl||p.img)}" onerror="this.parentElement.innerHTML='<div class=pn-img style=display:flex;align-items:center;justify-content:center;font-size:32px>🃏</div>'">`:`<div class="pn-img" style="display:flex;align-items:center;justify-content:center;font-size:32px">🃏</div>`}
-      <div style="flex:1;min-width:0"><div class="pn-title">${esc(r.cardName||p.name)}</div>
-      <div class="pn-meta">Confidence: <span style="color:${r.confidence==='high'?'var(--green)':r.confidence==='medium'?'var(--gold)':'var(--red)'}">${r.confidence}</span></div></div>
+      <div style="flex:1;min-width:0">
+        <div class="pn-title">${esc(r.cardName||p.name)}</div>
+        <div class="pn-meta">Confidence: <span style="color:${r.confidence==='high'?'var(--green)':r.confidence==='medium'?'var(--gold)':'var(--red)'}">${r.confidence}</span>${ageHrs!=null?` · ${ageHrs<1?'just now':ageHrs+'h ago'}`:''}</div>
+      </div>
       <button class="pn-close" onclick="closePanel()">✕</button>
     </div>
     <div class="pn-body">
@@ -1247,20 +1364,319 @@ function showLookupResult(pid,r){
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
         <div class="lp-c"><div class="lp-lbl">YOU PAID</div><div class="lp-val" style="color:var(--gold)">${f$(p.cost)}</div></div>
         <div class="lp-c"><div class="lp-lbl">UNREALIZED P&L</div><div class="lp-val" style="color:${pnl!=null?(pnl>=0?'var(--green)':'var(--red)'):'var(--faint)'}">${pnl!=null?f$(pnl):'—'}</div></div>
+        <div class="lp-c"><div class="lp-lbl">NET (after eBay fee)</div><div class="lp-val" style="color:${netPnlEst!=null?(netPnlEst>=0?'var(--green)':'var(--red)'):'var(--faint)'};font-size:13px">${netPnlEst!=null?f$(netPnlEst):'—'}</div></div>
+        <div class="lp-c"><div class="lp-lbl">ROI</div><div class="lp-val" style="color:var(--dim);font-size:13px">${p.cost>0&&netPnlEst!=null?((netPnlEst/p.cost*100).toFixed(0)+'%'):'—'}</div></div>
       </div>
       ${r.notes?`<div class="alert info" style="margin-bottom:12px">${esc(r.notes)}</div>`:''}
-      ${r.recentSales?.length?`<div class="ps"><div class="ps-title">Recent Comps</div>
-        ${r.recentSales.map(s=>`<div class="comp-row">
-          ${s.imageUrl?`<img src="${esc(s.imageUrl)}" style="width:24px;height:34px;border-radius:2px;object-fit:cover;flex-shrink:0" onerror="this.style.display='none'">` :''}
+      ${r.recentSales?.length?`<div class="ps"><div class="ps-title">Recent Sold Comps (${r.recentSales.length})</div>
+        ${r.recentSales.map(s=>`<div class="comp-row" ${s.url?`onclick="window.open('${esc(s.url)}','_blank')" style="cursor:pointer"`:''}>
+          ${s.imageUrl?`<img src="${esc(s.imageUrl)}" style="width:30px;height:42px;border-radius:3px;object-fit:cover;flex-shrink:0" onerror="this.style.display='none'">` :'<div style="width:30px;flex-shrink:0"></div>'}
           <span class="comp-title">${esc(s.title||'—')}</span>
           <span class="comp-price">${f$(s.price)}</span>
           <span class="comp-date">${esc(s.date||'')}</span>
         </div>`).join('')}</div>`:''}
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <a href="${ebayUrl}" target="_blank" class="btn" style="text-decoration:none">🔍 eBay Sold</a>
-        <button class="btn ghost sm" onclick="delete lookupCache['${pid}'];lookupCard('${pid}')">↻ Refresh</button>
+        <button class="btn ghost sm" onclick="delete valueLookups['${pid}'];persistLookups();lookupCard('${pid}')">↻ Refresh</button>
+        <button class="btn ghost sm" onclick="showPurchase('${pid}')">← Card Detail</button>
       </div>
     </div>`);
+}
+
+// ─────────────────────────────────────────────
+// CARD TITLE PARSER
+// ─────────────────────────────────────────────
+function parseCardTitle(title) {
+  const t = title || '';
+  const out = { name:t, player:'', year:'', brand:'', set:'', variation:'', serial:'', grade:'', is_auto:false, is_rc:false, is_lot:false, lotQty:1, type:'', comp:'' };
+
+  // Year: 4-digit starting with 19xx/20xx, optionally followed by -xx or -xxxx
+  const yearM = t.match(/\b((?:19|20)\d{2})(?:-(\d{2,4}))?\b/);
+  if(yearM) out.year = yearM[2] ? `${yearM[1]}-${yearM[2].length===2?yearM[1].slice(0,2)+yearM[2]:yearM[2]}` : yearM[1];
+
+  // Serial number: /N or #N/N or N/N
+  const serialM = t.match(/(?:^|\s)(?:#\d+\s*)?\/(\d+)\b/) || t.match(/\b(\d+)\/(\d+)\b/);
+  if(serialM) out.serial = serialM[1]==='1'&&serialM[2]?serialM[2]:serialM[1];
+
+  // Grade
+  const gradeM = t.match(/\b(PSA|BGS|SGC|CGC|BVG)\s*(\d+(?:\.\d+)?)\b/i);
+  if(gradeM) out.grade = gradeM[1].toUpperCase()+gradeM[2];
+
+  // Auto / RC flags
+  if(/\b(auto|autograph|signed)\b/i.test(t)) out.is_auto=true;
+  if(/\b(RC|rookie card|rookie)\b/i.test(t)) out.is_rc=true;
+  if(/\b(lot|bundle|collection)\b/i.test(t)) out.is_lot=true;
+
+  // Brand detection
+  const brands=[['Panini','Panini'],['Topps','Topps'],['Upper Deck','Upper Deck'],['Donruss','Donruss'],['Bowman','Bowman'],['Fleer','Fleer'],['Score','Score'],['Select','Panini']];
+  for(const [kw,br] of brands){if(t.toLowerCase().includes(kw.toLowerCase())){out.brand=br;break;}}
+
+  // Set detection (after brand match)
+  const sets=[['Prizm','Prizm'],['Chrome','Chrome'],['Optic','Optic'],['Mosaic','Mosaic'],['Obsidian','Obsidian'],['National Treasures','National Treasures'],['Contenders','Contenders'],['Select','Select'],['Revolution','Revolution'],['Immaculate','Immaculate'],['Finest','Finest'],['Sapphire','Sapphire'],['Heritage','Heritage'],['Stadium Club','Stadium Club'],['Inception','Inception'],['Certified','Certified'],['Elements','Elements'],['Spectra','Spectra']];
+  for(const [kw,sn] of sets){if(t.toLowerCase().includes(kw.toLowerCase())){out.set=sn;break;}}
+
+  // Variation/parallel detection — order matters (more specific first)
+  const vars=[
+    [/\bBlack\s+Finite\b/i,'Black Finite'],[/\bBlack\s+Gold\b/i,'Black Gold'],
+    [/\bGold\s+Vinyl\b/i,'Gold Vinyl'],[/\bGold\s+Prizm\b/i,'Gold Prizm'],[/\bGold\s+Refractor\b/i,'Gold Refractor'],
+    [/\bSilver\s+Prizm\b/i,'Silver Prizm'],[/\bRainbow\s+Prizm\b/i,'Rainbow Prizm'],
+    [/\bRed\s+Wave\b/i,'Red Wave'],[/\bRed\s+Scope\b/i,'Red Scope'],[/\bRed\s+Ice\b/i,'Red Ice'],[/\bRed\s+Prizm\b/i,'Red Prizm'],
+    [/\bBlue\s+Wave\b/i,'Blue Wave'],[/\bBlue\s+Prizm\b/i,'Blue Prizm'],
+    [/\bHolo\s+Gold\b/i,'Holo Gold'],[/\bHolo\s+Silver\b/i,'Holo Silver'],
+    [/\bSuperFractor\b/i,'Superfractor'],[/\bRefractor\b/i,'Refractor'],
+    [/\bSapphire\b/i,'Sapphire'],[/\bAqua\b/i,'Aqua'],[/\bOrange\b/i,'Orange'],
+    [/\bPurple\b/i,'Purple'],[/\bGreen\b/i,'Green'],[/\bPink\b/i,'Pink'],
+    [/\bCamo\b/i,'Camo'],[/\bWhite\s+Sparkle\b/i,'White Sparkle'],[/\bSparkle\b/i,'Sparkle'],
+    [/\bXRC\b/i,'XRC'],[/\bHolo\b/i,'Holo'],[/\bGold\b/i,'Gold'],[/\bSilver\b/i,'Silver'],
+    [/\bPrizm\b/i,'Base Prizm'],[/\bSIR\b/,'Special Illustration Rare'],[/\bSAR\b/,'Special Art Rare'],
+    [/\bFull\s+Art\b/i,'Full Art'],[/\bIllustration\s+Rare\b/i,'Illustration Rare'],
+    [/\bex\b/,'ex'],[/\bVmax\b/i,'VMAX'],[/\bVstar\b/i,'VSTAR'],
+  ];
+  for(const [rx,vn] of vars){if(rx.test(t)){out.variation=vn;break;}}
+
+  // Sport/type detection
+  if(/\b(Premier League|La Liga|Bundesliga|MLS|NWSL|FIFA|soccer|football club)\b/i.test(t)||/\b(CWC|UCL|EPL|PL|MLS)\b/.test(t)) out.type='Soccer';
+  else if(/\b(Pokemon|Pokémon|TCG|Pikachu|Charizard|Mewtwo|Destined Rivals|Scarlet|Violet|Paldea)\b/i.test(t)) out.type='Pokémon';
+  else if(/\b(NFL|football|quarterback|touchdown|Super Bowl|NFC|AFC)\b/i.test(t)&&!/soccer/i.test(t)) out.type='NFL';
+  else if(/\b(MLB|baseball|pitcher|batting|World Series|ALDS|NLCS)\b/i.test(t)) out.type='MLB';
+  else if(/\b(NBA|basketball|dunk|three-point|Finals)\b/i.test(t)) out.type='NBA';
+  else if(/\b(Marvel|Spider-Man|Iron Man|Avengers|X-Men|Captain)\b/i.test(t)) out.type='Marvel';
+  else if(/\b(Yu-Gi-Oh|Yugioh|Duel Monsters)\b/i.test(t)) out.type='Yu-Gi-Oh';
+
+  return out;
+}
+
+// ─────────────────────────────────────────────
+// IMAGE SCANNER (Vision API)
+// ─────────────────────────────────────────────
+async function scanCardImage(imgUrl, pid) {
+  const apiKey = getApiKey();
+  if(!apiKey) { toast('Enter API key in sidebar first'); return; }
+  if(!imgUrl || !imgUrl.startsWith('http')) { toast('No image URL to scan'); return; }
+  toast('Scanning image…');
+  const prompt = `This is a trading card image. Extract ALL visible information and return ONLY valid JSON:
+{"player":"","year":"","brand":"","set":"","variation":"","serial":"","grade":"","is_auto":false,"is_rc":false,"type":"","comp":"","notes":""}
+
+Rules:
+- player: the subject/player name printed on the card
+- year: the card year (4 digits, or YYYY-YY)
+- brand: Panini, Topps, Upper Deck, etc.
+- set: Prizm, Chrome, Finest, etc.
+- variation: EXACT parallel name visible (Gold Prizm, Silver, Refractor, Holo, etc.) — be very specific
+- serial: print run number only (e.g. if card says 23/99, return "99"; if 1/1, return "1")
+- grade: grading slab text if visible (e.g. PSA 10, BGS 9.5)
+- is_auto: true if signature visible
+- is_rc: true if RC or Rookie Card logo visible
+- type: Soccer, Pokémon, NFL, MLB, NBA, Marvel, Yu-Gi-Oh, or Other
+- comp: competition/league shorthand (PL, CWC, UCL, etc.)
+- notes: any other notable info`;
+  try {
+    // Fetch image as base64 if from ebayimg (cross-origin may fail, use url type instead)
+    const imgContent = imgUrl.includes('ebayimg.com') || imgUrl.includes('tcgplayer.com')
+      ? {type:'image',source:{type:'url',url:imgUrl}}
+      : {type:'image',source:{type:'url',url:imgUrl}};
+    const res = await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
+      headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:'claude-opus-4-5',max_tokens:800,
+        messages:[{role:'user',content:[imgContent,{type:'text',text:prompt}]}]})});
+    if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error((e.error?.message)||'API '+res.status);}
+    const data = await res.json();
+    const text = data.content.filter(b=>b.type==='text').map(b=>b.text).join('');
+    const json = JSON.parse(text.replace(/```json|```/g,'').trim());
+    // Merge into purchase
+    editP(pid, {
+      player:    json.player    || '',
+      year:      json.year      || '',
+      brand:     json.brand     || '',
+      set:       json.set       || '',
+      variation: json.variation || '',
+      serial:    json.serial    || '',
+      grade:     json.grade     || '',
+      is_auto:   !!json.is_auto,
+      is_rc:     !!json.is_rc,
+      type:      json.type      || '',
+      comp:      json.comp      || '',
+    });
+    toast('Image scanned — fields updated ✓');
+    document.getElementById('pn').innerHTML = buildPurchasePanel(pid);
+    render();
+  } catch(e) {
+    toast('Scan failed: ' + e.message);
+  }
+}
+
+// ─────────────────────────────────────────────
+// IMPORT PAGE
+// ─────────────────────────────────────────────
+let _importRows = []; // parsed rows pending review
+
+function renderImport() {
+  const f = filt.imp;
+  const apiKey = getApiKey();
+  return`
+  <div class="topbar"><div class="pg-title">Import <span class="pg-sub">paste eBay order data or title list</span></div></div>
+  <div class="content">
+    ${!apiKey?`<div class="alert warn" style="margin-bottom:16px">⚠ Enter your Anthropic API key in the sidebar to enable AI parsing and image scanning.</div>`:''}
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:20px">
+      <!-- PASTE IMPORT -->
+      <div>
+        <div style="font-size:13px;font-weight:700;margin-bottom:8px">Paste Card Titles / eBay Data</div>
+        <div style="font-size:11px;color:var(--dim);font-family:var(--mono);margin-bottom:8px">One card per line. Accepts raw eBay order export, item titles, or CSV rows with price.</div>
+        <textarea id="import-text" rows="8" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:10px;border-radius:var(--r2);font-size:11px;font-family:var(--mono);outline:none;resize:vertical" placeholder="2024-25 Panini Prizm Premier League Mohamed Salah Gold Prizm /10 RC
+PSA 10 2023 Topps Chrome Refractor #101 Lionel Messi
+Lot: 5x 2025 Topps Chrome Soccer Base cards $12.50"></textarea>
+        <div style="margin-top:8px;display:flex;gap:8px">
+          <button class="btn pri sm" onclick="runImportParse()">⚡ Parse Titles</button>
+          <button class="btn ghost sm" onclick="document.getElementById('import-text').value=''">Clear</button>
+        </div>
+      </div>
+
+      <!-- IMAGE SCAN (single card) -->
+      <div>
+        <div style="font-size:13px;font-weight:700;margin-bottom:8px">Scan a Card Image</div>
+        <div style="font-size:11px;color:var(--dim);font-family:var(--mono);margin-bottom:8px">Paste an image URL to auto-extract card details using AI vision.</div>
+        <input id="scan-url" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:var(--r2);font-size:11px;font-family:var(--mono);outline:none;margin-bottom:8px" placeholder="https://i.ebayimg.com/…">
+        <div style="margin-bottom:8px">
+          <img id="scan-preview" src="" style="max-width:100%;max-height:160px;border-radius:6px;display:none;object-fit:contain">
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn sm" style="background:rgba(164,126,245,.1);border-color:rgba(164,126,245,.3);color:var(--purple)" onclick="previewScanImage()">👁 Preview</button>
+          <button class="btn sm" style="background:rgba(164,126,245,.1);border-color:rgba(164,126,245,.3);color:var(--purple)" onclick="runStandaloneScan()">🔍 Scan & Parse</button>
+        </div>
+        <div id="scan-result" style="margin-top:10px"></div>
+      </div>
+    </div>
+
+    <!-- PARSED RESULTS -->
+    <div id="import-results">
+      ${_importRows.length ? renderImportResults() : `<div class="empty"><div class="ei">📥</div><div>Paste card titles above and click Parse to begin</div></div>`}
+    </div>
+  </div>`;
+}
+
+function previewScanImage() {
+  const url = document.getElementById('scan-url')?.value?.trim();
+  const img = document.getElementById('scan-preview');
+  if(!img||!url) return;
+  img.src = url; img.style.display = 'block';
+  img.onerror = () => { img.style.display='none'; toast('Could not load image'); };
+}
+
+async function runStandaloneScan() {
+  const url = document.getElementById('scan-url')?.value?.trim();
+  const apiKey = getApiKey();
+  if(!apiKey){toast('Enter API key in sidebar');return;}
+  if(!url){toast('Enter an image URL');return;}
+  const resEl = document.getElementById('scan-result');
+  if(resEl) resEl.innerHTML=`<div style="font-size:11px;font-family:var(--mono);color:var(--dim)">Scanning…</div>`;
+  const prompt=`This is a trading card image. Extract ALL visible information and return ONLY valid JSON:
+{"player":"","year":"","brand":"","set":"","variation":"","serial":"","grade":"","is_auto":false,"is_rc":false,"type":"","comp":""}
+variation: be very specific about the exact parallel (Gold Prizm, Silver Prizm, Refractor, Holo, etc.). serial: print run denominator only (e.g. card says 5/25, return "25"). type: Soccer/Pokémon/NFL/MLB/NBA/Marvel/Yu-Gi-Oh/Other.`;
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
+      headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:'claude-opus-4-5',max_tokens:600,
+        messages:[{role:'user',content:[{type:'image',source:{type:'url',url}},{type:'text',text:prompt}]}]})});
+    if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error((e.error?.message)||'API '+res.status);}
+    const data = await res.json();
+    const text = data.content.filter(b=>b.type==='text').map(b=>b.text).join('');
+    const json = JSON.parse(text.replace(/```json|```/g,'').trim());
+    if(resEl) resEl.innerHTML=`<div style="background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);padding:10px;font-size:11px;font-family:var(--mono)">
+      ${Object.entries(json).filter(([,v])=>v&&v!==false).map(([k,v])=>`<div><span style="color:var(--faint)">${k}:</span> <span style="color:var(--text)">${v}</span></div>`).join('')}
+    </div>`;
+    toast('Scan complete ✓');
+  } catch(e) {
+    if(resEl) resEl.innerHTML=`<div class="alert err">Scan failed: ${esc(e.message)}</div>`;
+  }
+}
+
+function runImportParse() {
+  const raw = document.getElementById('import-text')?.value || '';
+  const lines = raw.split('\n').map(l=>l.trim()).filter(l=>l.length>5);
+  _importRows = lines.map((line, i) => {
+    // Try to extract price from end of line: $12.50 or 12.50
+    const priceM = line.match(/\$?([\d,]+\.?\d*)\s*$/);
+    const costRaw = priceM ? parseFloat(priceM[1].replace(',','')) : 0;
+    const cleanTitle = priceM ? line.slice(0, line.lastIndexOf(priceM[0])).trim() : line;
+    const parsed = parseCardTitle(cleanTitle);
+    return { _id:'IMP'+i, ...parsed, name:cleanTitle, cost:costRaw, costRaw, img:'', seller:'', orderNum:'', date:new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}), _confirmed:false };
+  });
+  // Re-render the import page to show results
+  document.getElementById('import-results').innerHTML = _importRows.length ? renderImportResults() : '<div style="color:var(--faint);font-size:12px;font-family:var(--mono)">No valid lines found</div>';
+  toast(`Parsed ${_importRows.length} card${_importRows.length===1?'':'s'}`);
+}
+
+function renderImportResults() {
+  if(!_importRows.length) return '';
+  const confirmed = _importRows.filter(r=>r._confirmed).length;
+  return`
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+      <div style="font-size:13px;font-weight:700">Parsed Cards (${_importRows.length})</div>
+      <span style="font-size:11px;font-family:var(--mono);color:var(--dim)">${confirmed} confirmed</span>
+      <button class="btn pri sm" style="margin-left:auto" onclick="confirmAllImport()">✓ Add All to Purchases</button>
+    </div>
+    <div style="display:grid;gap:8px">
+      ${_importRows.map((r,i)=>`
+      <div style="background:var(--surf);border:1px solid ${r._confirmed?'var(--green)':'var(--border)'};border-radius:var(--r);padding:12px;opacity:${r._confirmed?'.6':'1'}">
+        <div style="display:flex;gap:10px;align-items:flex-start">
+          ${r.img?`<img src="${esc(r.img)}" style="width:40px;height:56px;object-fit:cover;border-radius:4px;flex-shrink:0" onerror="this.style.display='none'">`:'<div style="width:40px;flex-shrink:0"></div>'}
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:600;font-size:12px;margin-bottom:4px;word-break:break-word">${esc(r.name)}</div>
+            <div style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:6px">
+              ${r.type?`<span class="tb ${(r.type||'').toLowerCase().replace(/[^a-z0-9-]/g,'')}">${esc(r.type)}</span>`:''}
+              ${r.year?`<span class="pt year">${esc(r.year)}</span>`:''}
+              ${r.set?`<span class="pt set">${esc(r.set)}</span>`:''}
+              ${r.variation?`<span class="pt var">${esc(r.variation)}</span>`:''}
+              ${r.serial?`<span class="pt serial">/${esc(r.serial)}</span>`:''}
+              ${r.grade?`<span class="pt grade">${esc(r.grade)}</span>`:''}
+              ${r.is_auto?`<span class="pt auto">AUTO</span>`:''}
+              ${r.is_rc?`<span class="pt rc">RC</span>`:''}
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
+              <div><label style="font-size:9px;color:var(--faint);font-family:var(--mono);text-transform:uppercase;display:block;margin-bottom:2px">Player</label>
+                <input style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:4px 6px;border-radius:4px;font-size:11px;font-family:var(--mono);outline:none" value="${esc(r.player||'')}" oninput="_importRows[${i}].player=this.value"></div>
+              <div><label style="font-size:9px;color:var(--faint);font-family:var(--mono);text-transform:uppercase;display:block;margin-bottom:2px">Cost ($)</label>
+                <input type="number" step="0.01" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:4px 6px;border-radius:4px;font-size:11px;font-family:var(--mono);outline:none" value="${r.cost||0}" oninput="_importRows[${i}].cost=parseFloat(this.value)||0"></div>
+              <div><label style="font-size:9px;color:var(--faint);font-family:var(--mono);text-transform:uppercase;display:block;margin-bottom:2px">Variation</label>
+                <input style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:4px 6px;border-radius:4px;font-size:11px;font-family:var(--mono);outline:none" value="${esc(r.variation||'')}" oninput="_importRows[${i}].variation=this.value"></div>
+              <div><label style="font-size:9px;color:var(--faint);font-family:var(--mono);text-transform:uppercase;display:block;margin-bottom:2px">Image URL</label>
+                <input style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:4px 6px;border-radius:4px;font-size:11px;font-family:var(--mono);outline:none" value="${esc(r.img||'')}" oninput="_importRows[${i}].img=this.value" placeholder="https://i.ebayimg.com/…"></div>
+              <div><label style="font-size:9px;color:var(--faint);font-family:var(--mono);text-transform:uppercase;display:block;margin-bottom:2px">Date</label>
+                <input style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:4px 6px;border-radius:4px;font-size:11px;font-family:var(--mono);outline:none" value="${esc(r.date||'')}" oninput="_importRows[${i}].date=this.value"></div>
+              <div><label style="font-size:9px;color:var(--faint);font-family:var(--mono);text-transform:uppercase;display:block;margin-bottom:2px">Seller</label>
+                <input style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:4px 6px;border-radius:4px;font-size:11px;font-family:var(--mono);outline:none" value="${esc(r.seller||'')}" oninput="_importRows[${i}].seller=this.value"></div>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">
+            <button class="btn xs" ${r._confirmed?'disabled':''} onclick="confirmImportRow(${i})">${r._confirmed?'✓ Added':'+ Add'}</button>
+            <button class="btn xs red" onclick="_importRows.splice(${i},1);document.getElementById('import-results').innerHTML=renderImportResults()">✕</button>
+          </div>
+        </div>
+      </div>`).join('')}
+    </div>`;
+}
+
+function confirmImportRow(i) {
+  const r = _importRows[i];
+  if(!r||r._confirmed) return;
+  const newId = 'P' + String(Date.now()).slice(-6) + i;
+  purchases.push({
+    id:newId, name:r.name, date:r.date||'', cost:r.cost||0, costRaw:r.costRaw||r.cost||0,
+    lotQty:r.lotQty||1, qty:1, img:r.img||'', itemId:'', orderNum:r.orderNum||'',
+    seller:r.seller||'', type:r.type||'', player:r.player||'', year:r.year||'',
+    brand:r.brand||'', set:r.set||'', comp:r.comp||'', variation:r.variation||'',
+    serial:r.serial||'', grade:r.grade||'', is_auto:!!r.is_auto, is_rc:!!r.is_rc,
+    is_lot:!!r.is_lot, notes:'',
+  });
+  _importRows[i]._confirmed = true;
+  document.getElementById('import-results').innerHTML = renderImportResults();
+  toast(`Added: ${r.name.slice(0,40)}…`);
+  render();
+}
+
+function confirmAllImport() {
+  _importRows.forEach((_,i) => { if(!_importRows[i]._confirmed) confirmImportRow(i); });
 }
 
 // ─────────────────────────────────────────────
@@ -1316,4 +1732,5 @@ function showListingResult(pid,text){
 // INIT
 // ─────────────────────────────────────────────
 render();
+initApiKeyField();
 </script></body></html>
