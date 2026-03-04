@@ -102,6 +102,13 @@ td{padding:8px 10px;vertical-align:middle}
 .pt[onclick]:hover{filter:brightness(1.4);border-color:currentColor;transition:filter .1s}
 .et-del{background:none;border:none;color:inherit;cursor:pointer;opacity:0.45;padding:0 0 0 2px;font-size:12px;line-height:1;flex-shrink:0;font-family:var(--mono)}
 .et-del:hover{opacity:1}
+.tc-dot{width:12px;height:12px;border-radius:50%;cursor:pointer;flex-shrink:0;border:2px solid transparent;display:inline-block;transition:border .1s}
+.tc-dot.sel{border-color:var(--text)!important}
+.add-tag-form{display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-top:8px;padding:8px 10px;background:var(--surf2);border:1px solid var(--border);border-radius:var(--r)}
+.add-tag-inp{background:var(--surf3);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:11px;padding:3px 7px;border-radius:3px;outline:none;width:130px}
+.add-tag-inp:focus{border-color:var(--blue)}
+.add-tag-btn{background:none;border:none;cursor:pointer;font-size:10px;font-family:var(--mono);color:var(--faint);padding:2px 5px;border:1px solid var(--border);border-radius:3px;letter-spacing:.3px}
+.add-tag-btn:hover{color:var(--text);border-color:var(--border2)}
 
 /* ── TYPE BADGE ── */
 .tb{display:inline-block;padding:2px 7px;border-radius:3px;font-size:9px;font-family:var(--mono);font-weight:500;letter-spacing:.5px}
@@ -256,7 +263,7 @@ thead th.sh:hover{color:var(--text)}
       <div class="ni on" id="ni-dash" onclick="nav('dash')"><span class="ic">📊</span><span>Dashboard</span></div>
       <div class="ni" id="ni-inv" onclick="nav('inv')"><span class="ic">📦</span><span>Inventory</span></div>
       <div class="ni" id="ni-buys" onclick="nav('buys')"><span class="ic">🛒</span><span>Purchases</span></div>
-      <div class="ni" id="ni-sells" onclick="nav('sells')"><span class="ic">💰</span><span>Sales &amp; P&amp;L</span></div>
+      <div class="ni" id="ni-sells" onclick="nav('sells')"><span class="ic">💰</span><span>Sales Hub</span></div>
       <div class="ni" id="ni-imp" onclick="nav('imp')"><span class="ic">📥</span><span>Import</span></div>
     </div>
     <div class="side-foot">
@@ -300,6 +307,8 @@ let sortState = { inv: {col:'date',dir:-1}, buys: {col:'date',dir:-1}, sells: {c
 // persist market lookups: pid -> {avgPrice, lowPrice, highPrice, confidence, recentSales, ts}
 let valueLookups = JSON.parse(localStorage.getItem('cb_lookups')||'{}');
 function persistLookups() { try { localStorage.setItem('cb_lookups', JSON.stringify(valueLookups)); } catch(e){} }
+// Custom tag color palette
+const TAG_COLORS=['#4da6ff','#a47ef5','#f5c842','#f5824a','#2ecc8a','#e05252','#2ecccc','#e05299'];
 // API key
 function getApiKey() { return localStorage.getItem('cb_apikey')||''; }
 function saveApiKey(v) {
@@ -441,6 +450,11 @@ function parsedTags(o,clickable){
   if(o.grade)     t.push(`<span class="pt grade"${c(o.grade)}>${esc(o.grade)}</span>`);
   if(o.is_auto)   t.push(`<span class="pt auto"${c('auto')}>AUTO</span>`);
   if(o.is_rc)     t.push(`<span class="pt rc"${c('RC')}>RC</span>`);
+  (o.customTags||[]).forEach(tag=>{
+    const col=tag.color||TAG_COLORS[0];
+    const click=clickable?` onclick="event.stopPropagation();setTagSearch('${tag.label.replace(/'/g,"\\'")}')" title="Filter by ${tag.label}" style="cursor:pointer;border-color:${col}40;color:${col}"`:`style="border-color:${col}40;color:${col}"`;
+    t.push(`<span class="pt"${click}>${esc(tag.label)}</span>`);
+  });
   return t.length?`<div class="ptags">${t.join('')}</div>`:'';
 }
 function scoreClass(sc){return sc>=70?'hi':sc>=50?'med':'lo';}
@@ -696,7 +710,7 @@ function renderSells(){
   const losers=linked.filter(s=>_np(s)<=0);
   const linkRate=allSales.length?Math.round(linked.length/allSales.length*100):0;
   return`
-  <div class="topbar"><div class="pg-title">Sales &amp; P&amp;L <span class="pg-sub">${total} orders · ${f$(items.reduce((a,s)=>a+s.price*(s.qty||1),0))} revenue</span></div></div>
+  <div class="topbar"><div class="pg-title">Sales Hub <span class="pg-sub">${total} orders · ${f$(items.reduce((a,s)=>a+s.price*(s.qty||1),0))} revenue</span></div></div>
   <div class="content">
     <div class="sg" style="margin-bottom:16px">
       <div class="sc"><div class="sc-lbl">Net P&amp;L (after fees)</div><div class="sc-val ${allNetPnl>=0?'g':'r'}">${f$(allNetPnl)}</div><div class="sc-sub">${linked.length} linked flips</div></div>
@@ -1081,7 +1095,7 @@ function buildSalePanel(sid){
       </div>
 
       <div class="ps">
-        <div class="ps-title">Linked Purchase <button class="edit-btn" onclick="openRelinkPanel('${sid}')">🔗 Change</button></div>
+        <div class="ps-title" style="justify-content:space-between"><span>Linked Purchase</span><button class="edit-btn" onclick="event.stopPropagation();openRelinkPanel('${sid}')">🔗 Change Link</button></div>
         ${lp?`<div class="mc active" onclick="closePanel();showPurchase('${lp.id}')" style="cursor:pointer">
           ${lp.img?`<img class="mc-img" src="${esc(lp.img)}" onerror="this.style.display='none'">` :''}
           <div class="mc-info"><div class="mc-name">${esc(lp.name)}</div>
@@ -1451,8 +1465,69 @@ function editableTags(type,id,o){
   if(o.grade)     tt.push(chip('grade','grade',o.grade,o.grade));
   if(o.is_auto)   tt.push(`<span class="pt auto" style="gap:2px">AUTO<button class="et-del" onclick="event.stopPropagation();etDel('${type}','${id}','is_auto')" title="Remove">×</button></span>`);
   if(o.is_rc)     tt.push(`<span class="pt rc" style="gap:2px">RC<button class="et-del" onclick="event.stopPropagation();etDel('${type}','${id}','is_rc')" title="Remove">×</button></span>`);
-  if(!tt.length)return`<span style="color:var(--faint);font-size:11px;font-family:var(--mono)">No tags — click "Edit Tags" to add</span>`;
-  return`<div class="ptags">${tt.join('')}</div>`;
+  (o.customTags||[]).forEach((tag,idx)=>{
+    const col=tag.color||TAG_COLORS[0];
+    tt.push(`<span class="pt" style="gap:2px;border-color:${col}40;color:${col}"><span style="width:7px;height:7px;border-radius:50%;background:${col};display:inline-block;flex-shrink:0;cursor:pointer" onclick="event.stopPropagation();cycleCustomTagColor('${type}','${id}',${idx})" title="Change color"></span><span class="et-text" onclick="etEditCustomTag(this,'${type}','${id}',${idx})" style="cursor:pointer" title="Click to edit">${esc(tag.label)}</span><button class="et-del" onclick="event.stopPropagation();delCustomTag('${type}','${id}',${idx})" title="Remove">×</button></span>`);
+  });
+  const chips=tt.length?`<div class="ptags" id="etags-${type}-${id}">${tt.join('')}</div>`:`<div class="ptags" id="etags-${type}-${id}"><span style="color:var(--faint);font-size:11px;font-family:var(--mono)">No tags yet</span></div>`;
+  return`${chips}<button class="add-tag-btn" style="margin-top:6px" onclick="showAddTagForm('${type}','${id}')">+ Add Tag</button>`;
+}
+function delCustomTag(type,id,idx){
+  const o=type==='p'?getP(id):getS(id);
+  const ct=[...(o.customTags||[])];ct.splice(idx,1);
+  if(type==='p'){editP(id,{customTags:ct});_panelEditMode={};openPanel(buildPurchasePanel(id));}
+  else{editS(id,{customTags:ct});_salePanelEdit={};openPanel(buildSalePanel(id));}
+}
+function cycleCustomTagColor(type,id,idx){
+  const o=type==='p'?getP(id):getS(id);
+  const ct=[...(o.customTags||[])];
+  const ci=TAG_COLORS.indexOf(ct[idx].color||TAG_COLORS[0]);
+  ct[idx]={...ct[idx],color:TAG_COLORS[(ci+1)%TAG_COLORS.length]};
+  if(type==='p'){editP(id,{customTags:ct});_panelEditMode={};openPanel(buildPurchasePanel(id));}
+  else{editS(id,{customTags:ct});_salePanelEdit={};openPanel(buildSalePanel(id));}
+}
+function etEditCustomTag(spanEl,type,id,idx){
+  const raw=spanEl.textContent;
+  spanEl.style.display='none';
+  const inp=document.createElement('input');
+  inp.value=raw;
+  inp.style.cssText='background:transparent;border:none;border-bottom:1px solid currentColor;color:inherit;font-family:var(--mono);font-size:9px;font-weight:500;letter-spacing:.3px;outline:none;padding:0;min-width:30px;max-width:120px';
+  inp.size=Math.max(4,raw.length);
+  spanEl.parentElement.insertBefore(inp,spanEl);
+  inp.focus();inp.select();
+  let done=false;
+  function save(){
+    if(done)return;done=true;
+    const v=inp.value.trim();
+    if(!v){spanEl.style.display='';inp.remove();return;}
+    const o=type==='p'?getP(id):getS(id);
+    const ct=[...(o.customTags||[])];ct[idx]={...ct[idx],label:v};
+    if(type==='p'){editP(id,{customTags:ct});_panelEditMode={};openPanel(buildPurchasePanel(id));}
+    else{editS(id,{customTags:ct});_salePanelEdit={};openPanel(buildSalePanel(id));}
+  }
+  inp.addEventListener('blur',save);
+  inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();inp.blur();}if(e.key==='Escape'){done=true;spanEl.style.display='';inp.remove();}});
+}
+function showAddTagForm(type,id){
+  const wrapper=document.getElementById(`etags-${type}-${id}`);
+  if(!wrapper)return;
+  const existing=document.getElementById('add-tag-form');
+  if(existing){existing.remove();return;}
+  const form=document.createElement('div');
+  form.id='add-tag-form';form.className='add-tag-form';
+  const dotsHtml=TAG_COLORS.map((col,i)=>`<span class="tc-dot${i===0?' sel':''}" style="background:${col}" data-col="${col}" onclick="document.querySelectorAll('.tc-dot').forEach(d=>d.classList.remove('sel'));this.classList.add('sel');document.getElementById('atf-color').value=this.dataset.col"></span>`).join('');
+  form.innerHTML=`<input id="atf-inp" class="add-tag-inp" placeholder="Tag label…" onkeydown="if(event.key==='Enter'){event.preventDefault();_doAddTag('${type}','${id}')}if(event.key==='Escape'){document.getElementById('add-tag-form').remove()}"><div style="display:flex;gap:3px;align-items:center">${dotsHtml}</div><input type="hidden" id="atf-color" value="${TAG_COLORS[0]}"><button class="btn xs" onclick="_doAddTag('${type}','${id}')">Add</button><button class="btn xs ghost" onclick="document.getElementById('add-tag-form').remove()">Cancel</button>`;
+  wrapper.after(form);
+  setTimeout(()=>document.getElementById('atf-inp')?.focus(),10);
+}
+function _doAddTag(type,id){
+  const label=(document.getElementById('atf-inp')?.value||'').trim();
+  const color=document.getElementById('atf-color')?.value||TAG_COLORS[0];
+  if(!label)return;
+  const o=type==='p'?getP(id):getS(id);
+  const ct=[...(o.customTags||[]),{label,color}];
+  if(type==='p'){editP(id,{customTags:ct});_panelEditMode={};openPanel(buildPurchasePanel(id));}
+  else{editS(id,{customTags:ct});_salePanelEdit={};openPanel(buildSalePanel(id));}
 }
 // ─────────────────────────────────────────────
 // CARD TITLE PARSER
@@ -1755,8 +1830,11 @@ function confirmAllImport() {
 // LISTING BUILDER
 // ─────────────────────────────────────────────
 const listingCache={};
+let _listingData={};
 async function buildListing(pid){
   const p=getP(pid);
+  const apiKey=getApiKey();
+  if(!apiKey){openPanel(`<div class="pn-head"><div><div class="pn-title">API Key Required</div></div><button class="pn-close" onclick="closePanel()">✕</button></div><div class="pn-body"><div class="alert warn">Add your Anthropic API key in the sidebar first.</div></div>`);return;}
   if(listingCache[pid]){showListingResult(pid,listingCache[pid]);return;}
   openPanel(`
     <div class="pn-head"><div><div class="pn-title">Building Listing…</div><div class="pn-meta">${esc(p.name)}</div></div>
@@ -1765,15 +1843,17 @@ async function buildListing(pid){
       <div class="spin" style="width:22px;height:22px;margin:0 auto 12px"></div>
       <div style="font-size:12px;font-family:var(--mono);color:var(--dim)">Writing your eBay listing…</div>
     </div>`);
-  const prompt=`Professional eBay listing for this trading card:
-CARD: ${p.name}
-PLAYER: ${p.player||''} | YEAR: ${p.year||''} | SET: ${p.set||''} | VARIATION: ${p.variation||'base'}
-SERIAL: ${p.serial?'/'+p.serial:'not serialized'} | GRADE: ${p.grade||'raw'} | AUTO: ${p.is_auto?'yes':'no'} | RC: ${p.is_rc?'yes':'no'}
-TYPE: ${p.type}
-Write: 1) TITLE (80 chars max, keyword-rich) 2) DESCRIPTION (4-6 sentences, NM condition unless graded) 3) SUGGESTED PRICE (auction start + BIN) 4) ITEM SPECIFICS (key:value list). Plain text, clear headers.`;
+  const prompt=`Generate an eBay listing for this trading card. Return ONLY valid JSON, no markdown fences or extra text.
+Card: ${p.name}
+Player: ${p.player||'unknown'} | Year: ${p.year||''} | Set: ${p.set||''} | Variation: ${p.variation||'base'}
+Serial: ${p.serial?'/'+p.serial:'not serialized'} | Grade: ${p.grade||'raw'} | Auto: ${p.is_auto?'yes':'no'} | RC: ${p.is_rc?'yes':'no'}
+Type: ${p.type} | Paid: $${p.cost||'unknown'}
+Return this JSON structure exactly:
+{"title":"80-char max keyword-rich eBay title","description":"4-6 sentence listing description, NM unless graded","auction_start":9.99,"buy_it_now":29.99,"condition":"Near Mint","specifics":{"Sport":"","Year":"","Player":"","Set":"","Variation":"","Graded":"No","Autograph":"No","Rookie":"No"}}`;
   try{
-    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,messages:[{role:'user',content:prompt}]})});
+    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
+      headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:800,messages:[{role:'user',content:prompt}]})});
     if(!res.ok)throw new Error('API '+res.status);
     const data=await res.json();
     const text=data.content.filter(b=>b.type==='text').map(b=>b.text).join('');
@@ -1785,6 +1865,11 @@ Write: 1) TITLE (80 chars max, keyword-rich) 2) DESCRIPTION (4-6 sentences, NM c
 }
 function showListingResult(pid,text){
   const p=getP(pid);
+  let listing=null;
+  try{const m=text.match(/\{[\s\S]*\}/);if(m)listing=JSON.parse(m[0]);}catch(e){}
+  const csvHeader='"Title","AuctionStart","BuyItNow","Condition","Description","Quantity"';
+  const csvRow=listing?[listing.title||'',listing.auction_start||'',listing.buy_it_now||'',listing.condition||'Near Mint',(listing.description||'').replace(/"/g,'""'),'1'].map(v=>`"${v}"`).join(','):'';
+  _listingData={pid,title:listing?.title||'',csv:csvHeader+'\n'+csvRow,raw:text};
   openPanel(`
     <div class="pn-head">
       ${p.img?`<img class="pn-img" src="${esc(p.img)}" onerror="this.style.display='none'">`:`<div class="pn-img" style="display:flex;align-items:center;justify-content:center;font-size:32px">🃏</div>`}
@@ -1792,10 +1877,29 @@ function showListingResult(pid,text){
       <button class="pn-close" onclick="closePanel()">✕</button>
     </div>
     <div class="pn-body">
-      <div class="listing-out">${esc(text)}</div>
-      <div style="display:flex;gap:8px;margin-top:10px">
-        <button class="btn pri" onclick="navigator.clipboard.writeText(${JSON.stringify(text)}).then(()=>toast('Copied!'))">📋 Copy</button>
-        <button class="btn ghost sm" onclick="delete listingCache['${pid}'];buildListing('${pid}')">↻ Regenerate</button>
+      ${listing?`
+      <div class="ps">
+        <div class="ps-title">Title <span style="color:var(--faint);font-weight:400">${(listing.title||'').length}/80 chars</span></div>
+        <div style="font-family:var(--mono);font-size:12px;background:var(--surf2);padding:8px 10px;border-radius:var(--r);border:1px solid var(--border)">${esc(listing.title||'')}</div>
+      </div>
+      <div class="ps">
+        <div class="ps-title">Pricing</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div class="lp-c"><div class="lp-lbl">AUCTION START</div><div class="lp-val" style="color:var(--gold)">$${listing.auction_start||'—'}</div></div>
+          <div class="lp-c"><div class="lp-lbl">BUY IT NOW</div><div class="lp-val" style="color:var(--green)">$${listing.buy_it_now||'—'}</div></div>
+        </div>
+      </div>
+      <div class="ps">
+        <div class="ps-title">Description</div>
+        <div style="font-size:12px;color:var(--dim);line-height:1.6">${esc(listing.description||'')}</div>
+      </div>
+      ${listing.specifics&&Object.keys(listing.specifics).length?`<div class="ps"><div class="ps-title">Item Specifics</div><div class="field-grid">${Object.entries(listing.specifics).map(([k,v])=>`<div class="field-item"><label>${esc(k)}</label><div class="field-val">${esc(String(v))}</div></div>`).join('')}</div></div>`:''}
+      `:`<div class="listing-out">${esc(text)}</div>`}
+      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+        ${listing?`<button class="btn pri" onclick="navigator.clipboard.writeText(_listingData.title).then(()=>toast('Title copied!'))">📋 Copy Title</button>`:''}
+        <button class="btn" onclick="navigator.clipboard.writeText(_listingData.csv).then(()=>toast('CSV copied — paste into spreadsheet'))">📊 Copy eBay CSV</button>
+        <button class="btn ghost sm" onclick="navigator.clipboard.writeText(_listingData.raw).then(()=>toast('Copied!'))">📋 Raw</button>
+        <button class="btn ghost sm" onclick="delete listingCache[_listingData.pid];buildListing(_listingData.pid)">↻ Regenerate</button>
       </div>
     </div>`);
 }
