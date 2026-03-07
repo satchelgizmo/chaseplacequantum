@@ -48,10 +48,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);min-height:100
 .content{padding:20px 24px;flex:1}
 
 /* ── STAT GRID ── */
-.sg{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:24px}
-.sc{background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:12px 14px;min-width:0;overflow:hidden}
+.sg{display:grid;grid-template-columns:repeat(auto-fill,minmax(165px,1fr));gap:10px;margin-bottom:24px}
+.sc{background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:12px 14px}
 .sc-lbl{font-size:9px;color:var(--dim);letter-spacing:1px;text-transform:uppercase;font-family:var(--mono);margin-bottom:7px}
-.sc-val{font-size:clamp(13px,2.2vw,21px);font-weight:800;letter-spacing:-.3px;word-break:break-all;line-height:1.15;overflow-wrap:anywhere}
+.sc-val{font-size:17px;font-weight:700;letter-spacing:-.5px;line-height:1.2;white-space:nowrap;font-family:var(--mono)}
 .sc-val.g{color:var(--green)}.sc-val.r{color:var(--red)}.sc-val.o{color:var(--gold)}.sc-val.b{color:var(--blue)}
 .sc-sub{font-size:11px;color:var(--faint);margin-top:3px;font-family:var(--mono)}
 
@@ -91,7 +91,7 @@ td{padding:8px 10px;vertical-align:middle}
 
 /* ── PARSED TAGS ── */
 .ptags{display:flex;flex-wrap:wrap;gap:3px;margin-top:4px}
-.pt{display:inline-flex;align-items:center;gap:3px;padding:2px 6px;border-radius:3px;font-size:9px;font-family:var(--mono);font-weight:500;letter-spacing:.3px;background:var(--surf3);border:1px solid var(--border);color:var(--dim)}
+.pt{display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:3px;font-size:9px;font-family:var(--mono);font-weight:500;letter-spacing:.3px;background:var(--surf3);border:1px solid var(--border);color:var(--dim);white-space:nowrap;min-width:max-content;height:18px;line-height:14px}
 .pt.year{border-color:rgba(77,166,255,.3);color:var(--blue)}
 .pt.set{border-color:rgba(164,126,245,.3);color:var(--purple)}
 .pt.serial{border-color:rgba(245,200,66,.4);color:var(--gold)}
@@ -253,8 +253,7 @@ thead th.sh:hover{color:var(--text)}
       <div class="ni on" id="ni-dash" onclick="nav('dash')"><span class="ic">📊</span><span>Dashboard</span></div>
       <div class="ni" id="ni-inv" onclick="nav('inv')"><span class="ic">📦</span><span>Inventory</span></div>
       <div class="ni" id="ni-buys" onclick="nav('buys')"><span class="ic">🛒</span><span>Purchases</span></div>
-      <div class="ni" id="ni-sells" onclick="nav('sells')"><span class="ic">💰</span><span>Sales</span></div>
-      <div class="ni" id="ni-pnl" onclick="nav('pnl')"><span class="ic">🔗</span><span>P&amp;L Flips</span></div>
+      <div class="ni" id="ni-sells" onclick="nav('sells')"><span class="ic">💰</span><span>Sales &amp; P&amp;L</span></div>
       <div class="ni" id="ni-imp" onclick="nav('imp')"><span class="ic">📥</span><span>Import</span></div>
     </div>
     <div class="side-foot">
@@ -437,7 +436,7 @@ function parsedTags(o) {
 function scoreClass(sc){return sc>=70?'hi':sc>=50?'med':'lo';}
 function scoreLabel(sc){return sc>=70?`✓ ${sc}`:sc>=50?`~ ${sc}`:`? ${sc}`;}
 function toast(msg,ms=2200){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),ms);}
-function nav(p){page=p;document.querySelectorAll('.ni').forEach(el=>el.classList.remove('on'));const ni=document.getElementById('ni-'+p);if(ni)ni.classList.add('on');render();}
+function nav(p){if(p==='pnl')p='sells';page=p;document.querySelectorAll('.ni').forEach(el=>el.classList.remove('on'));const ni=document.getElementById('ni-'+p);if(ni)ni.classList.add('on');render();}
 function openPanel(html){document.getElementById('pn').innerHTML=html;document.getElementById('ov').classList.add('open');}
 function closePanel(){document.getElementById('ov').classList.remove('open');}
 function ovClick(e){if(e.target===document.getElementById('ov'))closePanel();}
@@ -455,13 +454,19 @@ function updateSidebar(){
 // ─────────────────────────────────────────────
 function render(){
   const m=document.getElementById('main');
+  // Save focus before replacing DOM
+  const ae=document.activeElement;
+  const savedId=ae?.id||null;
+  const savedSel0=ae?.selectionStart??null;
+  const savedSel1=ae?.selectionEnd??null;
   if(page==='dash')  m.innerHTML=renderDash();
   else if(page==='inv')   m.innerHTML=renderInv();
   else if(page==='buys')  m.innerHTML=renderBuys();
   else if(page==='sells') m.innerHTML=renderSells();
-  else if(page==='pnl')   m.innerHTML=renderPnl();
   else if(page==='imp')   m.innerHTML=renderImport();
   updateSidebar();
+  // Restore focus to search input if it was focused
+  if(savedId){const el=document.getElementById(savedId);if(el){el.focus();try{if(savedSel0!==null)el.setSelectionRange(savedSel0,savedSel1);}catch(e){}}}
 }
 function renderPag(total,cur,key){
   const tp=Math.ceil(total/PS);
@@ -555,7 +560,7 @@ function renderInv(){
   </div>
   <div class="content">
     <div class="fb">
-      <div class="sw"><span class="si">🔍</span><input value="${esc(f.q)}" placeholder="Search name, player, set…" oninput="filt.inv.q=this.value;pgNum.inv=0;render()"></div>
+      <div class="sw"><span class="si">🔍</span><input id="search-inv" value="${esc(f.q)}" placeholder="Search name, player, set…" oninput="filt.inv.q=this.value;pgNum.inv=0;render()"></div>
       <select onchange="filt.inv.type=this.value;pgNum.inv=0;render()">
         <option value="">All Types</option>
         ${['Soccer','Pokémon','NFL','MLB','Marvel','NBA','Yu-Gi-Oh'].map(t=>`<option value="${t}" ${f.type===t?'selected':''}>${t}</option>`).join('')}
@@ -622,7 +627,7 @@ function renderBuys(){
   <div class="topbar"><div class="pg-title">Purchases <span class="pg-sub">${total.toLocaleString()} total · ${f$(items.reduce((a,p)=>a+p.cost,0))}</span></div></div>
   <div class="content">
     <div class="fb">
-      <div class="sw"><span class="si">🔍</span><input value="${esc(f.q)}" placeholder="Search purchases…" oninput="filt.buys.q=this.value;pgNum.buys=0;render()"></div>
+      <div class="sw"><span class="si">🔍</span><input id="search-buys" value="${esc(f.q)}" placeholder="Search purchases…" oninput="filt.buys.q=this.value;pgNum.buys=0;render()"></div>
       <select onchange="filt.buys.type=this.value;pgNum.buys=0;render()">
         <option value="">All Types</option>
         ${['Soccer','Pokémon','NFL','MLB','Marvel','NBA','Yu-Gi-Oh'].map(t=>`<option value="${t}" ${f.type===t?'selected':''}>${t}</option>`).join('')}
@@ -672,11 +677,24 @@ function renderSells(){
   items=applySortS(items,'sells');
   const pn=pgNum.sells||0,total=items.length;
   const page_items=items.slice(pn*PS,(pn+1)*PS);
+  // P&L summary from ALL linked sales (unfiltered)
+  const allSales=sales.map(s=>getS(s.id));
+  const linked=allSales.filter(s=>s.linkedPid);
+  const allNetPnl=linked.reduce((a,s)=>a+netProfit(s.price,s.qty||1,getP(s.linkedPid).cost),0);
+  const winners=linked.filter(s=>netProfit(s.price,s.qty||1,getP(s.linkedPid).cost)>0);
+  const losers=linked.filter(s=>netProfit(s.price,s.qty||1,getP(s.linkedPid).cost)<=0);
+  const linkRate=allSales.length?Math.round(linked.length/allSales.length*100):0;
   return`
-  <div class="topbar"><div class="pg-title">Sales <span class="pg-sub">${total} orders · ${f$(items.reduce((a,s)=>a+s.price*(s.qty||1),0))}</span></div></div>
+  <div class="topbar"><div class="pg-title">Sales &amp; P&amp;L <span class="pg-sub">${total} orders · ${f$(items.reduce((a,s)=>a+s.price*(s.qty||1),0))} revenue</span></div></div>
   <div class="content">
+    <div class="sg" style="margin-bottom:16px">
+      <div class="sc"><div class="sc-lbl">Net P&amp;L (after fees)</div><div class="sc-val ${allNetPnl>=0?'g':'r'}">${f$(allNetPnl)}</div><div class="sc-sub">${linked.length} linked flips</div></div>
+      <div class="sc"><div class="sc-lbl">Winners</div><div class="sc-val g">${winners.length}</div><div class="sc-sub">${f$(winners.reduce((a,s)=>a+netProfit(s.price,s.qty||1,getP(s.linkedPid).cost),0))} net</div></div>
+      <div class="sc"><div class="sc-lbl">Losers</div><div class="sc-val r">${losers.length}</div><div class="sc-sub">${f$(losers.reduce((a,s)=>a+netProfit(s.price,s.qty||1,getP(s.linkedPid).cost),0))} net</div></div>
+      <div class="sc"><div class="sc-lbl">Link Rate</div><div class="sc-val">${linkRate}%</div><div class="sc-sub">${linked.length}/${allSales.length} matched</div></div>
+    </div>
     <div class="fb">
-      <div class="sw"><span class="si">🔍</span><input value="${esc(f.q)}" placeholder="Search sales…" oninput="filt.sells.q=this.value;pgNum.sells=0;render()"></div>
+      <div class="sw"><span class="si">🔍</span><input id="search-sells" value="${esc(f.q)}" placeholder="Search sales…" oninput="filt.sells.q=this.value;pgNum.sells=0;render()"></div>
       <select onchange="filt.sells.type=this.value;pgNum.sells=0;render()">
         <option value="">All Types</option>
         ${['Soccer','Pokémon','NFL','MLB','Marvel','NBA','Yu-Gi-Oh'].map(t=>`<option value="${t}" ${f.type===t?'selected':''}>${t}</option>`).join('')}
@@ -831,8 +849,8 @@ function buildPurchasePanel(pid){
 
       <!-- CARD INFO (editable) -->
       <div class="ps">
-        <div class="ps-title">Card Info
-          <button class="edit-btn" onclick="togglePanelEdit('${pid}','main')">${editing?'✕ Cancel':'✏ Edit'}</button>
+        <div class="ps-title">Parsed Tags &amp; Card Info
+          <button class="edit-btn" onclick="togglePanelEdit('${pid}','main')">${editing?'✕ Cancel':'✏ Edit Tags'}</button>
         </div>
         <div id="pf-main-${pid}">
           ${editing ? buildPurchaseEditForm(pid) : buildPurchaseReadView(pid)}
@@ -841,9 +859,9 @@ function buildPurchasePanel(pid){
 
       <!-- FINANCIALS (editable) -->
       <div class="ps">
-        <div class="ps-title">Financials
+        <div class="ps-title">Financials · Cost &amp; Order
           <button class="edit-btn" onclick="togglePanelEdit('${pid}','fin')">
-            ${_panelEditMode['fin']?'✕ Cancel':'✏ Edit'}
+            ${_panelEditMode['fin']?'✕ Cancel':'✏ Edit Cost'}
           </button>
         </div>
         <div id="pf-fin-${pid}">
@@ -937,7 +955,7 @@ function buildPurchaseEditForm(pid){
 function buildFinReadView(pid,pnl,rev){
   const p=getP(pid);
   return`<div class="field-grid">
-    <div class="field-item"><label>Cost Per Card</label><div class="field-val pr o">${f$(p.cost)}</div></div>
+    <div class="field-item"><label>Cost Per Card <span style="font-size:8px;color:var(--gold);cursor:pointer" onclick="togglePanelEdit('${pid}','fin')">(click to edit)</span></label><div class="field-val pr o" style="cursor:pointer" onclick="togglePanelEdit('${pid}','fin')" title="Click to edit cost">${f$(p.cost)}</div></div>
     ${p.is_lot?`<div class="field-item"><label>Lot Total (×${p.lotQty})</label><div class="field-val pr d">${f$(p.costRaw)}</div></div>`:''}
     <div class="field-item"><label>Order #</label><div class="field-val" style="font-family:var(--mono);font-size:11px">${esc(p.orderNum)}</div></div>
     <div class="field-item"><label>eBay Item ID</label><div class="field-val" style="font-family:var(--mono);font-size:11px">${esc(p.itemId)}</div></div>
@@ -1035,8 +1053,8 @@ function buildSalePanel(sid){
     <div class="pn-body">
 
       <div class="ps">
-        <div class="ps-title">Sale Fields
-          <button class="edit-btn" onclick="toggleSaleEdit('${sid}','main')">${editing?'✕ Cancel':'✏ Edit'}</button>
+        <div class="ps-title">Parsed Tags &amp; Sale Info
+          <button class="edit-btn" onclick="toggleSaleEdit('${sid}','main')">${editing?'✕ Cancel':'✏ Edit Tags'}</button>
         </div>
         <div id="sf-main-${sid}">
           ${editing ? buildSaleEditForm(sid) : buildSaleReadView(sid)}
@@ -1197,6 +1215,7 @@ function openRelinkPanel(sid){
         <div class="pn-meta">${esc(s.title)}</div>
         <div style="margin-top:4px">${parsedTags(s)}</div>
       </div>
+      <button class="btn ghost sm" style="margin-right:6px;flex-shrink:0" onclick="showSale('${sid}')">← Back to Sale</button>
       <button class="pn-close" onclick="closePanel()">✕</button>
     </div>
     <div class="pn-body">
@@ -1216,7 +1235,7 @@ function openRelinkPanel(sid){
             <div class="mc-detail">${esc(cp.date)} · ${f$(cp.cost)}</div>${parsedTags(cp)}</div>
             <div style="text-align:right;flex-shrink:0">
               <div class="mc-score ${scoreClass(c.score)}">${scoreLabel(c.score)}</div>
-              ${!isL?`<button class="btn xs" style="margin-top:4px" onclick="linkSale('${sid}','${c.pid}');openRelinkPanel('${sid}')">Link</button>`:`<span style="font-size:10px;color:var(--green)">✓ linked</span>`}
+              ${!isL?`<button class="btn xs" style="margin-top:4px" onclick="linkSale('${sid}','${c.pid}');showSale('${sid}')">Link</button>`:`<span style="font-size:10px;color:var(--green)">✓ linked</span>`}
             </div>
           </div>`;}).join('')}
       </div>`:''}
@@ -1256,7 +1275,7 @@ function renderRelinkResultsHtml(sid,q){
       <div class="sr-meta">${esc(pp.date)} · ${f$(pp.cost)} · ${esc(pp.seller)}</div>${parsedTags(pp)}</div>
       <div class="sr-actions">
         ${isL?`<button class="btn xs red" onclick="unlinkSale('${sid}');openRelinkPanel('${sid}')">Unlink</button>`
-             :`<button class="btn xs" onclick="linkSale('${sid}','${p.id}');openRelinkPanel('${sid}')">Link</button>`}
+             :`<button class="btn xs" onclick="linkSale('${sid}','${p.id}');showSale('${sid}')">Link</button>`}
       </div>
     </div>`;}).join('');
 }
@@ -1394,8 +1413,9 @@ function parseCardTitle(title) {
   const yearM = t.match(/\b((?:19|20)\d{2})(?:-(\d{2,4}))?\b/);
   if(yearM) out.year = yearM[2] ? `${yearM[1]}-${yearM[2].length===2?yearM[1].slice(0,2)+yearM[2]:yearM[2]}` : yearM[1];
 
-  // Serial number: /N or #N/N or N/N
-  const serialM = t.match(/(?:^|\s)(?:#\d+\s*)?\/(\d+)\b/) || t.match(/\b(\d+)\/(\d+)\b/);
+  // Serial number: /N or #N/N or N/N — but NOT year ranges like 2024/25 or 24/25
+  const tNoYearSlash = t.replace(/\b(?:19|20)\d{2}\/\d{2,4}\b/g, ' ').replace(/\b\d{2}\/\d{2}\b(?=\s|$)/g, ' ');
+  const serialM = tNoYearSlash.match(/(?:^|\s)#?\d*\s*\/(\d+)\b/) || tNoYearSlash.match(/\b(\d+)\/(\d+)\b/);
   if(serialM) out.serial = serialM[1]==='1'&&serialM[2]?serialM[2]:serialM[1];
 
   // Grade
