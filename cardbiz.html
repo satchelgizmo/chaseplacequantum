@@ -99,7 +99,7 @@ td{padding:8px 10px;vertical-align:middle}
 .pt.rc{border-color:rgba(46,204,138,.3);color:var(--green)}
 .pt.grade{border-color:rgba(224,82,82,.4);color:var(--red)}
 .pt.var{border-color:rgba(142,162,184,.2);color:var(--dim)}
-.pt[data-edit]:hover{filter:brightness(1.35);border-color:currentColor;cursor:pointer;transition:filter .1s}
+.pt[data-edit]:hover,.pt[onclick]:hover{filter:brightness(1.35);border-color:currentColor;cursor:pointer;transition:filter .1s}
 .pt-del{background:none;border:none;cursor:pointer;color:inherit;opacity:0;padding:0 0 0 3px;font-size:11px;line-height:1;transition:opacity .1s}
 .pt:hover .pt-del{opacity:.55}
 .pt-del:hover{opacity:1!important}
@@ -257,7 +257,7 @@ thead th.sh:hover{color:var(--text)}
       <div class="ni on" id="ni-dash" onclick="nav('dash')"><span class="ic">📊</span><span>Dashboard</span></div>
       <div class="ni" id="ni-inv" onclick="nav('inv')"><span class="ic">📦</span><span>Inventory</span></div>
       <div class="ni" id="ni-buys" onclick="nav('buys')"><span class="ic">🛒</span><span>Purchases</span></div>
-      <div class="ni" id="ni-sells" onclick="nav('sells')"><span class="ic">💰</span><span>Sales &amp; P&amp;L</span></div>
+      <div class="ni" id="ni-sells" onclick="nav('sells')"><span class="ic">💰</span><span>Sales Hub</span></div>
       <div class="ni" id="ni-imp" onclick="nav('imp')"><span class="ic">📥</span><span>Import</span></div>
     </div>
     <div class="side-foot">
@@ -426,15 +426,21 @@ function thumb(url,cls='ct') {
   if (url&&url.startsWith('http')) return `<img class="${cls}" src="${esc(url)}" loading="lazy" onerror="this.parentElement.innerHTML='<div class=ctp>🃏</div>'">`;
   return `<div class="ctp">🃏</div>`;
 }
-function parsedTags(o) {
+function setTagSearch(val){
+  const key=({inv:'inv',buys:'buys',sells:'sells',pnl:'pnl'})[page];
+  if(!key)return;
+  filt[key].q=val;pgNum[key]=0;render();
+}
+function parsedTags(o,clickable){
   const t=[];
-  if(o.year) t.push(`<span class="pt year">${esc(o.year)}</span>`);
-  if(o.set)  t.push(`<span class="pt set">${esc(o.set)}</span>`);
-  if(o.variation) t.push(`<span class="pt var">${esc(o.variation)}</span>`);
-  if(o.serial)    t.push(`<span class="pt serial">/${esc(o.serial)}</span>`);
-  if(o.grade)     t.push(`<span class="pt grade">${esc(o.grade)}</span>`);
-  if(o.is_auto)   t.push(`<span class="pt auto">AUTO</span>`);
-  if(o.is_rc)     t.push(`<span class="pt rc">RC</span>`);
+  const c=clickable?(v)=>` onclick="event.stopPropagation();setTagSearch('${v.replace(/'/g,"\\'")}');return false" title="Filter by ${v}" style="cursor:pointer"`:'';
+  if(o.year) t.push(`<span class="pt year"${c(o.year)}>${esc(o.year)}</span>`);
+  if(o.set)  t.push(`<span class="pt set"${c(o.set)}>${esc(o.set)}</span>`);
+  if(o.variation) t.push(`<span class="pt var"${c(o.variation)}>${esc(o.variation)}</span>`);
+  if(o.serial)    t.push(`<span class="pt serial"${c('/'+o.serial)}>/${esc(o.serial)}</span>`);
+  if(o.grade)     t.push(`<span class="pt grade"${c(o.grade)}>${esc(o.grade)}</span>`);
+  if(o.is_auto)   t.push(`<span class="pt auto"${c('AUTO')}>AUTO</span>`);
+  if(o.is_rc)     t.push(`<span class="pt rc"${c('RC')}>RC</span>`);
   return t.length?`<div class="ptags">${t.join('')}</div>`:'';
 }
 function editableTags(type, id, o){
@@ -562,6 +568,8 @@ function renderDash(){
   const pnl=linkedPnl(),rev=totalRev(),cost=totalCost();
   const linked=sales.filter(s=>(saleEdits[s.id]?.linkedPid??s.linkedPid)).length;
   const unlinked=sales.length-linked;
+  const soldCost=sales.reduce((a,s)=>{const lp=(saleEdits[s.id]?.linkedPid??s.linkedPid);return lp?a+getP(lp).cost:a;},0);
+  const roi=soldCost>0?((pnl/soldCost)*100).toFixed(0)+'%':'—';
   const monthly={};
   for(const s of sales){const d=getS(s.id).date||'';const m=d.slice(0,7);if(m)monthly[m]=(monthly[m]||0)+getS(s.id).price*(getS(s.id).qty||1);}
   const months=Object.keys(monthly).sort().slice(-12);
@@ -582,6 +590,7 @@ function renderDash(){
       <div class="sc"><div class="sc-lbl">Inventory</div><div class="sc-val b">${purchases.length-sp.size}</div><div class="sc-sub">${f$(invCost())} cost</div></div>
       <div class="sc"><div class="sc-lbl">Unlinked Sales</div><div class="sc-val ${unlinked>0?'r':'g'}">${unlinked}</div><div class="sc-sub">need matching</div></div>
       <div class="sc"><div class="sc-lbl">Link Rate</div><div class="sc-val">${Math.round(linked/Math.max(sales.length,1)*100)}%</div><div class="sc-sub">${linked}/${sales.length}</div></div>
+      <div class="sc"><div class="sc-lbl">Total ROI</div><div class="sc-val ${pnl>=0?'g':'r'}">${roi}</div><div class="sc-sub">net ÷ cost sold</div></div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:20px">
       <div><div style="font-size:13px;font-weight:700;margin-bottom:10px">Monthly Revenue</div>
@@ -666,7 +675,7 @@ function renderInv(){
           <td><div class="cn">${esc(p.name)}</div><div class="cm">${esc(p.seller)} · ${esc(p.orderNum)}</div>
             ${p.is_lot?`<div class="cm" style="color:var(--orange)">Lot ×${p.lotQty} · raw ${f$(p.costRaw)}</div>`:''}
           </td>
-          <td><span class="pr d" style="font-family:var(--mono);font-size:11px">${esc(p.player||'—')}</span>${parsedTags(p)}</td>
+          <td><span class="pr d" style="font-family:var(--mono);font-size:11px">${esc(p.player||'—')}</span>${parsedTags(p,true)}</td>
           <td>${typeBadge(p.type)}</td>
           <td><span class="pr d">${esc(p.date)}</span></td>
           <td><span class="pr o" style="font-weight:700">${f$(p.cost)}</span></td>
@@ -723,7 +732,7 @@ function renderBuys(){
         return`<tr onclick="showPurchase('${p.id}')" style="cursor:pointer">
           <td class="cic">${thumb(p.img)}</td>
           <td><div class="cn">${esc(p.name)}</div><div class="cm">${esc(p.date)} · ${esc(p.seller)}</div></td>
-          <td>${parsedTags(p)}</td>
+          <td>${parsedTags(p,true)}</td>
           <td>${typeBadge(p.type)}</td>
           <td><span class="pr d">${esc(p.date)}</span></td>
           <td><span class="pr o">${f$(p.cost)}</span></td>
@@ -757,7 +766,7 @@ function renderSells(){
   const losers=linked.filter(s=>netProfit(s.price,s.qty||1,getP(s.linkedPid).cost)<=0);
   const linkRate=allSales.length?Math.round(linked.length/allSales.length*100):0;
   return`
-  <div class="topbar"><div class="pg-title">Sales &amp; P&amp;L <span class="pg-sub">${total} orders · ${f$(items.reduce((a,s)=>a+s.price*(s.qty||1),0))} revenue</span></div></div>
+  <div class="topbar"><div class="pg-title">Sales Hub <span class="pg-sub">${total} orders · ${f$(items.reduce((a,s)=>a+s.price*(s.qty||1),0))} revenue</span></div></div>
   <div class="content">
     <div class="sg" style="margin-bottom:16px">
       <div class="sc"><div class="sc-lbl">Net P&amp;L (after fees)</div><div class="sc-val ${allNetPnl>=0?'g':'r'}">${f$(allNetPnl)}</div><div class="sc-sub">${linked.length} linked flips</div></div>
@@ -794,7 +803,7 @@ function renderSells(){
         return`<tr onclick="showSale('${ss.id}')" style="cursor:pointer">
           <td class="cic">${thumb(lp?.img||'')}</td>
           <td><div class="cn">${esc(ss.title)}</div><div class="cm">#${esc(ss.recordNum)}</div></td>
-          <td>${parsedTags(ss)}</td>
+          <td>${parsedTags(ss,true)}</td>
           <td>${typeBadge(ss.type)}</td>
           <td><span class="pr d">${esc(ss.date)}</span></td>
           <td><span class="pr g">${f$(ss.price)}</span><div style="font-size:9px;font-family:var(--mono);color:var(--faint)">×${ss.qty||1}</div></td>
@@ -864,7 +873,7 @@ function renderPnl(){
         return`<tr onclick="showSale('${ss.id}')" style="cursor:pointer">
           <td class="cic">${thumb(pp.img)}</td>
           <td><div class="cn">${esc(pp.name)}</div><div class="cm">→ ${esc(ss.title)}</div><div class="cm">${esc(pp.date)} · sold ${esc(ss.date)}</div></td>
-          <td>${parsedTags(pp)}</td>
+          <td>${parsedTags(pp,true)}</td>
           <td><span class="pr o">${f$(pp.cost)}</span></td>
           <td><span class="pr g">${f$(rev)}</span></td>
           <td><span class="pr ${netPnl>=0?'g':'r'}" style="font-weight:700">${f$(netPnl)}</span><div style="font-size:9px;color:var(--faint);font-family:var(--mono)">fee ${f$(fee)}</div></td>
