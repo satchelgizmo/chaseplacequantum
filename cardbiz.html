@@ -433,7 +433,7 @@ function setTagSearch(val){
 }
 function parsedTags(o,clickable){
   const t=[];
-  const c=clickable?(v)=>` onclick="event.stopPropagation();setTagSearch('${v.replace(/'/g,"\\'")}');return false" title="Filter by ${v}" style="cursor:pointer"`:'';
+  const c=clickable?(v)=>` onclick="event.stopPropagation();setTagSearch('${v.replace(/'/g,"\\'")}');return false" title="Filter by ${v}" style="cursor:pointer"`:()=>'';
   if(o.year) t.push(`<span class="pt year"${c(o.year)}>${esc(o.year)}</span>`);
   if(o.set)  t.push(`<span class="pt set"${c(o.set)}>${esc(o.set)}</span>`);
   if(o.variation) t.push(`<span class="pt var"${c(o.variation)}>${esc(o.variation)}</span>`);
