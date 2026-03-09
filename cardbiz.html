@@ -99,6 +99,10 @@ td{padding:8px 10px;vertical-align:middle}
 .pt.rc{border-color:rgba(46,204,138,.3);color:var(--green)}
 .pt.grade{border-color:rgba(224,82,82,.4);color:var(--red)}
 .pt.var{border-color:rgba(142,162,184,.2);color:var(--dim)}
+.pt[data-edit]:hover{filter:brightness(1.35);border-color:currentColor;cursor:pointer;transition:filter .1s}
+.pt-del{background:none;border:none;cursor:pointer;color:inherit;opacity:0;padding:0 0 0 3px;font-size:11px;line-height:1;transition:opacity .1s}
+.pt:hover .pt-del{opacity:.55}
+.pt-del:hover{opacity:1!important}
 
 /* ── TYPE BADGE ── */
 .tb{display:inline-block;padding:2px 7px;border-radius:3px;font-size:9px;font-family:var(--mono);font-weight:500;letter-spacing:.5px}
@@ -432,6 +436,74 @@ function parsedTags(o) {
   if(o.is_auto)   t.push(`<span class="pt auto">AUTO</span>`);
   if(o.is_rc)     t.push(`<span class="pt rc">RC</span>`);
   return t.length?`<div class="ptags">${t.join('')}</div>`:'';
+}
+function editableTags(type, id, o){
+  const chip=(cls,field,display,raw)=>
+    `<span class="pt ${cls}" data-edit>`+
+    `<span data-raw="${esc(String(raw))}" onclick="tagEditStart(this,'${type}','${id}','${field}')" style="cursor:pointer" title="Click to edit">${esc(display)}</span>`+
+    `<button class="pt-del" onclick="event.stopPropagation();tagDel('${type}','${id}','${field}')" title="Remove">×</button>`+
+    `</span>`;
+  const tt=[];
+  if(o.year)      tt.push(chip('year','year',o.year,o.year));
+  if(o.set)       tt.push(chip('set','set',o.set,o.set));
+  if(o.variation) tt.push(chip('var','variation',o.variation,o.variation));
+  if(o.serial)    tt.push(chip('serial','serial','/'+o.serial,o.serial));
+  if(o.grade)     tt.push(chip('grade','grade',o.grade,o.grade));
+  if(o.is_auto)   tt.push(`<span class="pt auto" data-edit>AUTO<button class="pt-del" onclick="event.stopPropagation();tagDel('${type}','${id}','is_auto')" title="Remove">×</button></span>`);
+  if(o.is_rc)     tt.push(`<span class="pt rc" data-edit>RC<button class="pt-del" onclick="event.stopPropagation();tagDel('${type}','${id}','is_rc')" title="Remove">×</button></span>`);
+  const pile=tt.length?`<div class="ptags" id="ptags-${type}-${id}">${tt.join('')}</div>`:`<div class="ptags" id="ptags-${type}-${id}"><span style="color:var(--faint);font-size:11px;font-family:var(--mono)">No tags — use + Add below</span></div>`;
+  return pile+`<button onclick="tagAddShow('${type}','${id}')" style="background:none;border:1px solid var(--border);color:var(--faint);font-family:var(--mono);font-size:9px;letter-spacing:.3px;padding:2px 7px;border-radius:3px;cursor:pointer;margin-top:5px" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--faint)'">+ Add Tag</button>`;
+}
+function tagDel(type, id, field){
+  const blank=(field==='is_auto'||field==='is_rc')?false:'';
+  if(type==='p'){editP(id,{[field]:blank});showPurchase(id);}
+  else{editS(id,{[field]:blank});showSale(id);}
+}
+function tagEditStart(spanEl, type, id, field){
+  const raw=spanEl.dataset.raw!==undefined?spanEl.dataset.raw:spanEl.textContent;
+  spanEl.style.display='none';
+  const inp=document.createElement('input');
+  inp.value=raw;
+  inp.style.cssText='background:transparent;border:none;border-bottom:1px solid currentColor;color:inherit;font-family:var(--mono);font-size:9px;font-weight:500;letter-spacing:.3px;outline:none;padding:0;min-width:24px;max-width:110px';
+  inp.size=Math.max(3,raw.length+1);
+  spanEl.parentElement.insertBefore(inp,spanEl);
+  inp.focus();inp.select();
+  let done=false;
+  function save(){
+    if(done)return;done=true;
+    const v=inp.value.trim().replace(/^\/+/,'');
+    if(type==='p'){editP(id,{[field]:v});showPurchase(id);}
+    else{editS(id,{[field]:v});showSale(id);}
+  }
+  inp.addEventListener('blur',save);
+  inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();inp.blur();}if(e.key==='Escape'){done=true;spanEl.style.display='';inp.remove();}});
+}
+function tagAddShow(type, id){
+  const existing=document.getElementById('tag-add-form');
+  if(existing){existing.remove();return;}
+  const ptags=document.getElementById(`ptags-${type}-${id}`);
+  if(!ptags)return;
+  const o=type==='p'?getP(id):getS(id);
+  const avail=[['year','Year',o.year],['set','Set',o.set],['variation','Variation',o.variation],['serial','Serial /N',o.serial],['grade','Grade',o.grade],['is_auto','AUTO',o.is_auto],['is_rc','RC',o.is_rc]].filter(([,,v])=>!v);
+  if(!avail.length){toast('All tag fields are already set');return;}
+  const isBoolFirst=avail[0][0]==='is_auto'||avail[0][0]==='is_rc';
+  const form=document.createElement('div');
+  form.id='tag-add-form';
+  form.style.cssText='display:flex;align-items:center;gap:5px;margin-top:8px;flex-wrap:wrap;padding:7px 9px;background:var(--surf2);border:1px solid var(--border);border-radius:var(--r)';
+  const inp=`<input id="taf-val" placeholder="value…" style="background:var(--surf3);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:3px;outline:none;width:85px;display:${isBoolFirst?'none':'block'}" onkeydown="if(event.key==='Enter'){event.preventDefault();_tagCommit('${type}','${id}')}if(event.key==='Escape'){document.getElementById('tag-add-form').remove()}">`;
+  form.innerHTML=`<select id="taf-field" onchange="document.getElementById('taf-val').style.display=['is_auto','is_rc'].includes(this.value)?'none':'block'" style="background:var(--surf3);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:10px;padding:2px 5px;border-radius:3px;outline:none">${avail.map(([f,l])=>`<option value="${f}">${l}</option>`).join('')}</select>${inp}<button class="btn xs" onclick="_tagCommit('${type}','${id}')">Add</button><button class="btn xs ghost" onclick="document.getElementById('tag-add-form').remove()">✕</button>`;
+  ptags.after(form);
+  const v=document.getElementById('taf-val');
+  if(v&&v.style.display!=='none')v.focus();
+}
+function _tagCommit(type, id){
+  const field=document.getElementById('taf-field')?.value;
+  if(!field)return;
+  const isBool=field==='is_auto'||field==='is_rc';
+  const val=isBool?true:(document.getElementById('taf-val')?.value.trim().replace(/^\/+/,'')||'');
+  if(!isBool&&!val)return;
+  if(type==='p'){editP(id,{[field]:val});showPurchase(id);}
+  else{editS(id,{[field]:val});showSale(id);}
 }
 function scoreClass(sc){return sc>=70?'hi':sc>=50?'med':'lo';}
 function scoreLabel(sc){return sc>=70?`✓ ${sc}`:sc>=50?`~ ${sc}`:`? ${sc}`;}
@@ -814,7 +886,9 @@ function showPurchase(pid){
   const sp=soldPids().has(pid);
   const matched=salesForPid(pid);
   const rev=matched.reduce((a,s)=>a+getS(s.id).price*(getS(s.id).qty||1),0);
+  const totalFee=matched.reduce((a,s)=>{const ss=getS(s.id);return a+ebayFee(ss.price,ss.qty||1);},0);
   const pnl=sp?rev-p.cost:null;
+  const netPnl=sp?rev-p.cost-totalFee:null;
   _panelEditMode={}; // reset edit state
   openPanel(buildPurchasePanel(pid));
 }
@@ -865,7 +939,7 @@ function buildPurchasePanel(pid){
           </button>
         </div>
         <div id="pf-fin-${pid}">
-          ${_panelEditMode['fin'] ? buildFinEditForm(pid) : buildFinReadView(pid,pnl,rev)}
+          ${_panelEditMode['fin'] ? buildFinEditForm(pid) : buildFinReadView(pid,pnl,rev,totalFee,netPnl)}
         </div>
       </div>
 
@@ -894,17 +968,11 @@ function buildPurchasePanel(pid){
 
 function buildPurchaseReadView(pid){
   const p=getP(pid);
-  return`<div class="field-grid">
+  return`<div style="margin-bottom:12px">${editableTags('p',pid,p)}</div>
+  <div class="field-grid">
     <div class="field-item"><label>Player / Subject</label><div class="field-val">${esc(p.player||'—')}</div></div>
-    <div class="field-item"><label>Year</label><div class="field-val">${esc(p.year||'—')}</div></div>
-    <div class="field-item"><label>Set</label><div class="field-val">${esc(p.set||'—')}</div></div>
-    <div class="field-item"><label>Variation</label><div class="field-val">${esc(p.variation||'—')}</div></div>
-    <div class="field-item"><label>Serial Print Run</label><div class="field-val">${p.serial?'/'+esc(p.serial):'—'}</div></div>
-    <div class="field-item"><label>Grade</label><div class="field-val">${esc(p.grade||'—')}</div></div>
     <div class="field-item"><label>Type</label><div class="field-val">${typeBadge(p.type)}</div></div>
-    <div class="field-item"><label>Flags</label><div class="field-val">${[p.is_auto&&'AUTO',p.is_rc&&'RC',p.is_lot&&`LOT×${p.lotQty}`].filter(Boolean).join(' · ')||'—'}</div></div>
     ${p.notes?`<div class="field-item" style="grid-column:1/-1"><label>Notes</label><div class="field-val" style="font-size:12px;color:var(--dim)">${esc(p.notes)}</div></div>`:''}
-    <div class="field-item" style="grid-column:1/-1"><label>Full Title</label><div class="field-val" style="font-size:11px;font-family:var(--mono);color:var(--dim);word-break:break-all">${esc(p.name)}</div></div>
   </div>`;
 }
 
@@ -952,15 +1020,18 @@ function buildPurchaseEditForm(pid){
   </div>`;
 }
 
-function buildFinReadView(pid,pnl,rev){
+function buildFinReadView(pid,pnl,rev,totalFee,netPnl){
   const p=getP(pid);
   return`<div class="field-grid">
     <div class="field-item"><label>Cost Per Card <span style="font-size:8px;color:var(--gold);cursor:pointer" onclick="togglePanelEdit('${pid}','fin')">(click to edit)</span></label><div class="field-val pr o" style="cursor:pointer" onclick="togglePanelEdit('${pid}','fin')" title="Click to edit cost">${f$(p.cost)}</div></div>
     ${p.is_lot?`<div class="field-item"><label>Lot Total (×${p.lotQty})</label><div class="field-val pr d">${f$(p.costRaw)}</div></div>`:''}
     <div class="field-item"><label>Order #</label><div class="field-val" style="font-family:var(--mono);font-size:11px">${esc(p.orderNum)}</div></div>
     <div class="field-item"><label>eBay Item ID</label><div class="field-val" style="font-family:var(--mono);font-size:11px">${esc(p.itemId)}</div></div>
-    ${pnl!==null?`<div class="field-item"><label>Sale Revenue</label><div class="field-val pr g">${f$(rev)}</div></div>
-    <div class="field-item"><label>Realized P&L</label><div class="field-val pr ${pnl>=0?'g':'r'}">${f$(pnl)}</div></div>`:''}
+    ${pnl!==null?`
+    <div class="field-item"><label>Sale Revenue</label><div class="field-val pr g">${f$(rev)}</div></div>
+    <div class="field-item"><label>eBay Fees</label><div class="field-val pr r">−${f$(totalFee)}</div></div>
+    <div class="field-item"><label>Net P&amp;L (after fees)</label><div class="field-val pr ${netPnl>=0?'g':'r'}" style="font-weight:700">${f$(netPnl)}</div></div>
+    <div class="field-item"><label>ROI</label><div class="field-val pr ${netPnl>=0?'g':'r'}">${p.cost>0?((netPnl/p.cost)*100).toFixed(0)+'%':'—'}</div></div>`:''}
   </div>`;
 }
 
@@ -1096,13 +1167,10 @@ function buildSalePanel(sid){
 
 function buildSaleReadView(sid){
   const s=getS(sid);
-  return`<div class="field-grid">
+  return`<div style="margin-bottom:12px">${editableTags('s',sid,s)}</div>
+  <div class="field-grid">
     <div class="field-item"><label>Player</label><div class="field-val">${esc(s.player||'—')}</div></div>
-    <div class="field-item"><label>Year</label><div class="field-val">${esc(s.year||'—')}</div></div>
-    <div class="field-item"><label>Set</label><div class="field-val">${esc(s.set||'—')}</div></div>
-    <div class="field-item"><label>Variation</label><div class="field-val">${esc(s.variation||'—')}</div></div>
-    <div class="field-item"><label>Serial /</label><div class="field-val">${s.serial?'/'+esc(s.serial):'—'}</div></div>
-    <div class="field-item"><label>Grade</label><div class="field-val">${esc(s.grade||'—')}</div></div>
+    <div class="field-item"><label>Type</label><div class="field-val">${typeBadge(s.type)}</div></div>
   </div>`;
 }
 
