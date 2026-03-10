@@ -379,6 +379,8 @@ let filt = {
   imp:   {q:''},
 };
 const PS = 50;
+let invSelected = new Set();
+let _invPageIds = [];
 
 // ─────────────────────────────────────────────
 // COMPUTED
@@ -633,8 +635,10 @@ function renderInv(){
   items=applySortP(items,'inv');
   const pn=pgNum.inv||0,total=items.length;
   const page_items=items.slice(pn*PS,(pn+1)*PS);
+  _invPageIds=page_items.map(p=>p.id);
   const inv_cost=items.reduce((a,p)=>a+p.cost,0);
   const inv_mkt=items.reduce((a,p)=>a+(valueLookups[p.id]?.avgPrice||0),0);
+  const selCount=invSelected.size;
   return`
   <div class="topbar">
     <div class="pg-title">Inventory <span class="pg-sub">${total} in stock · ${f$(inv_cost)} cost · ${inv_mkt?f$(inv_mkt)+' est. market':''}</span></div>
@@ -651,9 +655,12 @@ function renderInv(){
         <option value="yes" ${f.mkt==='yes'?'selected':''}>Valued</option>
         <option value="no" ${f.mkt==='no'?'selected':''}>Unvalued</option>
       </select>
+      <button id="inv-export-btn" class="btn pri" style="display:${selCount?'':'none'}" onclick="exportEbayCSV()">📥 Export eBay CSV (${selCount})</button>
     </div>
     <div class="tw"><table>
-      <thead><tr><th></th>
+      <thead><tr>
+        <th style="width:32px;padding:8px 6px"><input type="checkbox" id="inv-cb-all" title="Select all on page" onchange="toggleInvSelectAll(this.checked)" style="cursor:pointer;accent-color:var(--gold)"></th>
+        <th></th>
         <th onclick="setSort('inv','name')" class="sh">CARD${sortIcon('inv','name')}</th>
         <th onclick="setSort('inv','player')" class="sh">PARSED${sortIcon('inv','player')}</th>
         <th onclick="setSort('inv','type')" class="sh">TYPE${sortIcon('inv','type')}</th>
@@ -663,14 +670,15 @@ function renderInv(){
         <th>ACTIONS</th>
       </tr></thead>
       <tbody>${page_items.length===0
-        ?`<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--faint);font-family:var(--mono)">No cards found</td></tr>`
+        ?`<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--faint);font-family:var(--mono)">No cards found</td></tr>`
         :page_items.map(p=>{
           const vl=valueLookups[p.id];
           const mktDiff=vl?.avgPrice?(vl.avgPrice-p.cost):null;
           const mktAge=vl?.ts?Math.floor((Date.now()-vl.ts)/86400000):null;
           const mktHtml=vl?`<div class="mkt ${mktDiff>=0?'up':'dn'}">${f$(vl.avgPrice)}</div><div class="mkt-badge ${mktAge<3?'fresh':'stale'}">${mktDiff>=0?'+':''}${f$(mktDiff)} · ${mktAge}d ago</div>`:`<span style="color:var(--faint);font-size:11px;font-family:var(--mono)">—</span>`;
           return`
-        <tr onclick="showPurchase('${p.id}')" style="cursor:pointer">
+        <tr onclick="showPurchase('${p.id}')" style="cursor:pointer" class="${invSelected.has(p.id)?'highlight':''}">
+          <td style="padding:5px 6px" onclick="event.stopPropagation()"><input type="checkbox" id="inv-cb-${p.id}" ${invSelected.has(p.id)?'checked':''} onchange="toggleInvSelect('${p.id}',this.checked)" style="cursor:pointer;accent-color:var(--gold)"></td>
           <td class="cic">${thumb(p.img)}</td>
           <td><div class="cn">${esc(p.name)}</div><div class="cm">${esc(p.seller)} · ${esc(p.orderNum)}</div>
             ${p.is_lot?`<div class="cm" style="color:var(--orange)">Lot ×${p.lotQty} · raw ${f$(p.costRaw)}</div>`:''}
@@ -1777,6 +1785,102 @@ function confirmAllImport() {
 }
 
 // ─────────────────────────────────────────────
+// INVENTORY SELECTION + EBAY CSV EXPORT
+// ─────────────────────────────────────────────
+function toggleInvSelect(pid, checked) {
+  if(checked) invSelected.add(pid); else invSelected.delete(pid);
+  _updateInvSelUI();
+}
+function toggleInvSelectAll(checked) {
+  if(checked) _invPageIds.forEach(id=>invSelected.add(id));
+  else _invPageIds.forEach(id=>invSelected.delete(id));
+  _updateInvSelUI();
+}
+function _updateInvSelUI() {
+  _invPageIds.forEach(id=>{
+    const cb=document.getElementById('inv-cb-'+id);
+    if(cb) cb.checked=invSelected.has(id);
+    const row=cb?.closest('tr');
+    if(row) row.className=invSelected.has(id)?'highlight':'';
+  });
+  const allCb=document.getElementById('inv-cb-all');
+  if(allCb) allCb.checked=_invPageIds.length>0&&_invPageIds.every(id=>invSelected.has(id));
+  const btn=document.getElementById('inv-export-btn');
+  if(btn){
+    btn.style.display=invSelected.size?'':'none';
+    btn.textContent=`\u{1F4E5} Export eBay CSV (${invSelected.size})`;
+  }
+}
+function _ebayTitle(p) {
+  const pts=[];
+  if(p.year) pts.push(p.year);
+  if(p.player) pts.push(p.player);
+  if(p.set) pts.push(p.set);
+  if(p.variation&&p.variation.toLowerCase()!=='base') pts.push(p.variation);
+  if(p.serial) pts.push('/'+p.serial);
+  if(p.grade) pts.push(p.grade);
+  if(p.is_auto) pts.push('Auto');
+  if(p.is_rc) pts.push('RC');
+  pts.push('Card');
+  let t=pts.join(' ');
+  if(!t.trim()||t==='Card') t=p.name;
+  return t.length>80?t.slice(0,77)+'...':t;
+}
+function _ebayDesc(p) {
+  const who=([p.year,p.player].filter(Boolean).join(' '))||p.name;
+  const what=[p.set,p.variation&&p.variation.toLowerCase()!=='base'?p.variation+' parallel':null].filter(Boolean).join(' ');
+  const feats=[p.is_auto?'autograph':null,p.is_rc?'rookie card':null,p.serial?`serial numbered /${p.serial}`:null].filter(Boolean);
+  let d=`Up for sale is this ${who}${what?' '+what:''} trading card`;
+  if(feats.length) d+=` featuring ${feats.join(', ')}`;
+  d+='. ';
+  if(p.grade) d+=`This card has been professionally graded ${p.grade}. `;
+  else d+='Raw card — near mint or better condition unless otherwise noted. ';
+  d+='Ships safely in a penny sleeve and top loader. Please view all photos and message with any questions before purchasing. Thanks!';
+  return d;
+}
+function _ebayCat(p) {
+  const m={'Soccer':183454,'NFL':215,'MLB':213,'NBA':214,'Pokémon':2536,'Pokemon':2536,'Marvel':183050,'Yu-Gi-Oh':2536,'NHL':216};
+  return m[p.type]||212;
+}
+function exportEbayCSV() {
+  const ids=[...invSelected];
+  if(!ids.length){toast('No cards selected');return;}
+  const header='"Action(SiteID=US|Country=US|Currency=USD|Version=941|CC=UTF-8)","Category","Title","Condition","Format","Duration","BuyItNowPrice","Quantity","Description","PicURL","ShippingType","ShippingService-1:Option","ShippingService-1:CostAdd"';
+  const q=v=>`"${String(v).replace(/"/g,'""')}"`;
+  const rows=ids.map(pid=>{
+    const p=getP(pid);
+    return[
+      q('Add'),
+      q(_ebayCat(p)),
+      q(_ebayTitle(p)),
+      q(p.grade?'2750':'4000'),
+      q('FixedPrice'),
+      q('GTC'),
+      q(''),
+      q('1'),
+      q(_ebayDesc(p)),
+      q(p.img||''),
+      q('Flat'),
+      q('USPSFirstClass'),
+      q('4.99'),
+    ].join(',');
+  });
+  const csv=header+'\n'+rows.join('\n');
+  const blob=new Blob([csv],{type:'text/csv'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`ebay-listings-${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  toast(`Downloaded CSV for ${ids.length} card${ids.length===1?'':'s'}`);
+}
+function exportSingleCardCSV(pid) {
+  invSelected.clear();
+  invSelected.add(pid);
+  exportEbayCSV();
+  invSelected.clear();
+}
+
+// ─────────────────────────────────────────────
 // LISTING BUILDER
 // ─────────────────────────────────────────────
 const listingCache={};
@@ -1785,7 +1889,27 @@ async function buildListing(pid){
   const p=getP(pid);
   const apiKey=getApiKey();
   if(!apiKey){
-    openPanel(`<div class="pn-head"><div style="flex:1;min-width:0"><div class="pn-title">API Key Required</div></div><button class="pn-close" onclick="closePanel()">✕</button></div><div class="pn-body"><div class="alert warn">Add your Anthropic API key in the sidebar to use listing builder.</div></div>`);
+    const p2=getP(pid);
+    openPanel(`
+      <div class="pn-head">
+        ${p2.img?`<img class="pn-img" src="${esc(p2.img)}" onerror="this.style.display='none'">`:`<div class="pn-img" style="display:flex;align-items:center;justify-content:center;font-size:32px">🃏</div>`}
+        <div style="flex:1;min-width:0"><div class="pn-title">Build Listing</div><div class="pn-meta">${esc(p2.name)}</div></div>
+        <button class="pn-close" onclick="closePanel()">✕</button>
+      </div>
+      <div class="pn-body">
+        <div style="display:grid;gap:10px">
+          <div style="background:var(--surf2);border:1px solid var(--border);border-radius:var(--r);padding:14px">
+            <div style="font-weight:700;font-size:13px;margin-bottom:4px">📥 Download eBay CSV</div>
+            <div style="font-size:12px;color:var(--dim);margin-bottom:10px;line-height:1.5">Generate an eBay File Exchange–compatible CSV row for this card. No API key needed. Open in Excel or Google Sheets and import to eBay Seller Hub.</div>
+            <button class="btn pri" onclick="exportSingleCardCSV('${pid}');closePanel()">📥 Download CSV for this card</button>
+          </div>
+          <div style="background:var(--surf2);border:1px solid var(--border);border-radius:var(--r);padding:14px">
+            <div style="font-weight:700;font-size:13px;margin-bottom:4px">✨ AI-Written Listing</div>
+            <div style="font-size:12px;color:var(--dim);margin-bottom:10px;line-height:1.5">Add your Anthropic API key in the sidebar to have Claude write a keyword-rich title, description, and pricing suggestions tailored to this card.</div>
+            <div style="font-size:11px;font-family:var(--mono);color:var(--faint)">API key → sidebar footer → paste key</div>
+          </div>
+        </div>
+      </div>`);
     return;
   }
   if(listingCache[pid]){showListingResult(pid,listingCache[pid]);return;}
