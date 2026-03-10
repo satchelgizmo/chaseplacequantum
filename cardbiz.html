@@ -1780,36 +1780,67 @@ function confirmAllImport() {
 // LISTING BUILDER
 // ─────────────────────────────────────────────
 const listingCache={};
+let _ld={};
 async function buildListing(pid){
   const p=getP(pid);
+  const apiKey=getApiKey();
+  if(!apiKey){
+    openPanel(`<div class="pn-head"><div style="flex:1;min-width:0"><div class="pn-title">API Key Required</div></div><button class="pn-close" onclick="closePanel()">✕</button></div><div class="pn-body"><div class="alert warn">Add your Anthropic API key in the sidebar to use listing builder.</div></div>`);
+    return;
+  }
   if(listingCache[pid]){showListingResult(pid,listingCache[pid]);return;}
   openPanel(`
-    <div class="pn-head"><div><div class="pn-title">Building Listing…</div><div class="pn-meta">${esc(p.name)}</div></div>
-    <button class="pn-close" onclick="closePanel()">✕</button></div>
+    <div class="pn-head">
+      ${p.img?`<img class="pn-img" src="${esc(p.img)}" onerror="this.style.display='none'">`:`<div class="pn-img" style="display:flex;align-items:center;justify-content:center;font-size:32px">🃏</div>`}
+      <div style="flex:1;min-width:0"><div class="pn-title">Building Listing…</div><div class="pn-meta">${esc(p.name)}</div></div>
+      <button class="pn-close" onclick="closePanel()">✕</button>
+    </div>
     <div class="pn-body" style="text-align:center;padding-top:50px">
       <div class="spin" style="width:22px;height:22px;margin:0 auto 12px"></div>
       <div style="font-size:12px;font-family:var(--mono);color:var(--dim)">Writing your eBay listing…</div>
     </div>`);
-  const prompt=`Professional eBay listing for this trading card:
-CARD: ${p.name}
-PLAYER: ${p.player||''} | YEAR: ${p.year||''} | SET: ${p.set||''} | VARIATION: ${p.variation||'base'}
-SERIAL: ${p.serial?'/'+p.serial:'not serialized'} | GRADE: ${p.grade||'raw'} | AUTO: ${p.is_auto?'yes':'no'} | RC: ${p.is_rc?'yes':'no'}
-TYPE: ${p.type}
-Write: 1) TITLE (80 chars max, keyword-rich) 2) DESCRIPTION (4-6 sentences, NM condition unless graded) 3) SUGGESTED PRICE (auction start + BIN) 4) ITEM SPECIFICS (key:value list). Plain text, clear headers.`;
+  const prompt=`Generate an eBay listing for this trading card. Return ONLY valid JSON, no markdown, no extra text.
+Card: ${p.name}
+Player: ${p.player||'unknown'} | Year: ${p.year||''} | Set: ${p.set||''} | Variation: ${p.variation||'base'}
+Serial: ${p.serial?'/'+p.serial:'not serialized'} | Grade: ${p.grade||'raw'} | Auto: ${p.is_auto?'yes':'no'} | RC: ${p.is_rc?'yes':'no'}
+Type: ${p.type} | Cost paid: $${p.cost||'unknown'}
+
+Return this exact JSON structure:
+{
+  "title": "eBay title 80 chars max, keyword-rich, no symbols",
+  "description": "3-5 sentence listing description. Assume NM/M condition unless graded. Mention key features.",
+  "auction_start": 9.99,
+  "buy_it_now": 29.99,
+  "condition": "Near Mint",
+  "specifics": {"Sport":"","Player":"","Year":"","Set":"","Parallel":"","Graded":"No","Auto":"No","Rookie":"No","Serial":""}
+}`;
   try{
-    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,messages:[{role:'user',content:prompt}]})});
-    if(!res.ok)throw new Error('API '+res.status);
+    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
+      headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:900,
+        messages:[{role:'user',content:prompt}]})});
+    if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error((e.error?.message)||'API '+res.status);}
     const data=await res.json();
     const text=data.content.filter(b=>b.type==='text').map(b=>b.text).join('');
-    listingCache[pid]=text;showListingResult(pid,text);
+    listingCache[pid]=text;
+    showListingResult(pid,text);
   }catch(e){
-    openPanel(`<div class="pn-head"><div><div class="pn-title">${esc(p.name)}</div></div><button class="pn-close" onclick="closePanel()">✕</button></div>
-      <div class="pn-body"><div class="alert err">Failed: ${esc(e.message)}</div></div>`);
+    openPanel(`<div class="pn-head"><div style="flex:1;min-width:0"><div class="pn-title">Listing Failed</div><div class="pn-meta">${esc(p.name)}</div></div><button class="pn-close" onclick="closePanel()">✕</button></div><div class="pn-body"><div class="alert err">${esc(e.message)}</div><button class="btn ghost sm" style="margin-top:10px" onclick="buildListing('${pid}')">↻ Try Again</button></div>`);
   }
 }
 function showListingResult(pid,text){
   const p=getP(pid);
+  let L=null;
+  try{const m=text.match(/\{[\s\S]*\}/);if(m)L=JSON.parse(m[0]);}catch(e){}
+  _ld={
+    title:L?.title||'',
+    desc:L?.description||text,
+    csv:[`"${(L?.title||'').replace(/"/g,'""')}","${L?.buy_it_now||''}","${L?.auction_start||''}","${L?.condition||'Near Mint'}","${(L?.description||text).replace(/"/g,'""')}","1"`].join(''),
+    csvFull:`"Title","BuyItNowPrice","StartPrice","Condition","Description","Quantity"\n"${(L?.title||'').replace(/"/g,'""')}","${L?.buy_it_now||''}","${L?.auction_start||''}","${L?.condition||'Near Mint'}","${(L?.description||text).replace(/"/g,'""')}","1"`,
+    raw:text,pid
+  };
+  const specs=L?.specifics?Object.entries(L.specifics).filter(([,v])=>v&&v!=='No'&&v!=='no'&&v!=='')
+    .map(([k,v])=>`<div class="field-item"><label>${esc(k)}</label><div class="field-val" style="font-size:12px">${esc(v)}</div></div>`).join(''):'';
   openPanel(`
     <div class="pn-head">
       ${p.img?`<img class="pn-img" src="${esc(p.img)}" onerror="this.style.display='none'">`:`<div class="pn-img" style="display:flex;align-items:center;justify-content:center;font-size:32px">🃏</div>`}
@@ -1817,10 +1848,33 @@ function showListingResult(pid,text){
       <button class="pn-close" onclick="closePanel()">✕</button>
     </div>
     <div class="pn-body">
-      <div class="listing-out">${esc(text)}</div>
-      <div style="display:flex;gap:8px;margin-top:10px">
-        <button class="btn pri" onclick="navigator.clipboard.writeText(${JSON.stringify(text)}).then(()=>toast('Copied!'))">📋 Copy</button>
-        <button class="btn ghost sm" onclick="delete listingCache['${pid}'];buildListing('${pid}')">↻ Regenerate</button>
+      ${L?`
+      <div class="ps">
+        <div class="ps-title">Title <span style="color:${(L.title||'').length>80?'var(--red)':'var(--faint)'}">
+          ${(L.title||'').length}/80</span>
+          <button class="edit-btn" onclick="navigator.clipboard.writeText(_ld.title).then(()=>toast('Title copied!'))">📋 Copy</button>
+        </div>
+        <div style="font-family:var(--mono);font-size:12px;background:var(--surf2);padding:9px 11px;border-radius:var(--r);border:1px solid var(--border);line-height:1.5">${esc(L.title||'')}</div>
+      </div>
+      <div class="ps">
+        <div class="ps-title">Pricing</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div class="lp-c"><div class="lp-lbl">AUCTION START</div><div class="lp-val" style="color:var(--gold)">$${L.auction_start||'—'}</div></div>
+          <div class="lp-c"><div class="lp-lbl">BUY IT NOW</div><div class="lp-val" style="color:var(--green)">$${L.buy_it_now||'—'}</div></div>
+        </div>
+      </div>
+      <div class="ps">
+        <div class="ps-title">Description
+          <button class="edit-btn" onclick="navigator.clipboard.writeText(_ld.desc).then(()=>toast('Description copied!'))">📋 Copy</button>
+        </div>
+        <div style="font-size:12px;color:var(--dim);line-height:1.7;font-family:var(--ui)">${esc(L.description||'')}</div>
+      </div>
+      ${specs?`<div class="ps"><div class="ps-title">Item Specifics</div><div class="field-grid">${specs}</div></div>`:''}
+      `:`<div class="ps"><div class="listing-out">${esc(text)}</div></div>`}
+      <div style="display:flex;gap:8px;margin-top:4px;flex-wrap:wrap">
+        <button class="btn pri" onclick="navigator.clipboard.writeText(_ld.csvFull).then(()=>toast('CSV copied — paste into eBay File Exchange spreadsheet'))">📊 Copy eBay CSV</button>
+        <button class="btn ghost sm" onclick="navigator.clipboard.writeText(_ld.raw).then(()=>toast('Copied!'))">📋 Raw JSON</button>
+        <button class="btn ghost sm" onclick="delete listingCache[_ld.pid];buildListing(_ld.pid)">↻ Regenerate</button>
       </div>
     </div>`);
 }
