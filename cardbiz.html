@@ -1855,16 +1855,17 @@ function exportEbayCSV() {
   const header=['#INFO','Action(SiteID=US|Country=US|Currency=USD|Version=1193|CC=UTF-8)','Custom label (SKU)','Category ID','Title','UPC','Price','Quantity','Item photo URL','Condition ID','Description','Format'].join(T);
   const rows=ids.map(pid=>{
     const p=getP(pid);
+    const suggestedPrice=p.cost?(p.cost*2).toFixed(2):'9.99';
     return[
       'Draft',
       q(p.id),
       q(_ebayCat(p)),
       q(_ebayTitle(p)),
       '',
-      '',
+      suggestedPrice,
       '1',
       q(p.img||''),
-      p.grade?'NEW':'USED_LIKE_NEW',
+      p.grade?'NEW':'LIKE_NEW',
       q('<p>'+_ebayDesc(p)+'</p>'),
       'FixedPrice'
     ].join(T);
