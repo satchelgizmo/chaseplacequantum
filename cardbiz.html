@@ -1869,8 +1869,9 @@ function exportEbayCSV() {
       'FixedPrice'
     ].join(T);
   });
-  const tsv=info+'\n'+header+'\n'+rows.join('\n');
-  const blob=new Blob([tsv],{type:'text/tab-separated-values'});
+  const CRLF='\r\n';
+  const tsv='\uFEFF'+info.split('\n').join(CRLF)+CRLF+header+CRLF+rows.join(CRLF);
+  const blob=new Blob([tsv],{type:'text/plain;charset=utf-8'});
   const a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
   a.download=`ebay-draft-listings-${new Date().toISOString().slice(0,10)}.csv`;
