@@ -1848,10 +1848,10 @@ function exportEbayCSV() {
   const T='\t';
   const q=v=>String(v??'');
   const info=[
-    '#INFO Version=0.0.2 Template= eBay-draft-listings-template_US',
-    '#INFO Action and Category ID are required fields. 1) Set Action to Draft 2) Please find the category ID for your listings here: https://pages.ebay.com/sellerinformation/news/categorychanges.html',
-    '#INFO After you\'ve successfully uploaded your draft from the Seller Hub Reports tab, complete your drafts to active listings here: https://www.ebay.com/sh/lst/drafts'
-  ].join('\n');
+    '#INFO\tVersion=0.0.2\tTemplate= eBay-draft-listings-template_US',
+    '#INFO\tAction and Category ID are required fields. 1) Set Action to Draft 2) Please find the category ID for your listings here: https://pages.ebay.com/sellerinformation/news/categorychanges.html',
+    '#INFO\tAfter you\'ve successfully uploaded your draft from the Seller Hub Reports tab, complete your drafts to active listings here: https://www.ebay.com/sh/lst/drafts'
+  ].join('\r\n');
   const header=['Action(SiteID=US|Country=US|Currency=USD|Version=1193|CC=UTF-8)','Custom label (SKU)','Category ID','Title','UPC','Price','Quantity','Item photo URL','Condition ID','Description','Format'].join(T);
   const rows=ids.map(pid=>{
     const p=getP(pid);
@@ -1870,7 +1870,7 @@ function exportEbayCSV() {
     ].join(T);
   });
   const CRLF='\r\n';
-  const tsv='\uFEFF'+info.split('\n').join(CRLF)+CRLF+header+CRLF+rows.join(CRLF);
+  const tsv='\uFEFF'+info+CRLF+header+CRLF+rows.join(CRLF);
   const blob=new Blob([tsv],{type:'text/plain;charset=utf-8'});
   const a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
