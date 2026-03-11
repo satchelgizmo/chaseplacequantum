@@ -1845,34 +1845,35 @@ function _ebayCat(p) {
 function exportEbayCSV() {
   const ids=[...invSelected];
   if(!ids.length){toast('No cards selected');return;}
-  const T='\t';
-  const q=v=>String(v??'');
+  const CRLF='\r\n';
+  // CSV quoting: wrap every field in double quotes, escape internal quotes by doubling
+  const qcsv=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
+  const row=fields=>fields.map(qcsv).join(',');
   const info=[
-    '#INFO\tVersion=0.0.2\tTemplate= eBay-draft-listings-template_US',
-    '#INFO\tAction and Category ID are required fields. 1) Set Action to Draft 2) Please find the category ID for your listings here: https://pages.ebay.com/sellerinformation/news/categorychanges.html',
-    '#INFO\tAfter you\'ve successfully uploaded your draft from the Seller Hub Reports tab, complete your drafts to active listings here: https://www.ebay.com/sh/lst/drafts'
-  ].join('\r\n');
-  const header=['Action(SiteID=US|Country=US|Currency=USD|Version=1193|CC=UTF-8)','Custom label (SKU)','Category ID','Title','UPC','Price','Quantity','Item photo URL','Condition ID','Description','Format'].join(T);
+    row(['#INFO','Version=0.0.2','Template= eBay-draft-listings-template_US']),
+    row(['#INFO','Action and Category ID are required fields. 1) Set Action to Draft 2) Please find the category ID for your listings here: https://pages.ebay.com/sellerinformation/news/categorychanges.html']),
+    row(['#INFO','After you\'ve successfully uploaded your draft from the Seller Hub Reports tab, complete your drafts to active listings here: https://www.ebay.com/sh/lst/drafts'])
+  ].join(CRLF);
+  const header=row(['Action(SiteID=US|Country=US|Currency=USD|Version=1193|CC=UTF-8)','Custom label (SKU)','Category ID','Title','UPC','Price','Quantity','Item photo URL','Condition ID','Description','Format']);
   const rows=ids.map(pid=>{
     const p=getP(pid);
     const suggestedPrice=p.cost?(p.cost*2).toFixed(2):'9.99';
-    return[
+    return row([
       'Draft',
-      q(p.id),
-      q(_ebayCat(p)),
-      q(_ebayTitle(p)),
+      p.id??'',
+      _ebayCat(p),
+      _ebayTitle(p),
       '',
       suggestedPrice,
       '1',
-      q(p.img||''),
+      p.img||'',
       p.grade?'2750':'3000',
-      q('<p>'+_ebayDesc(p)+'</p>'),
+      '<p>'+_ebayDesc(p)+'</p>',
       'FixedPrice'
-    ].join(T);
+    ]);
   });
-  const CRLF='\r\n';
   const tsv='\uFEFF'+info+CRLF+header+CRLF+rows.join(CRLF);
-  const blob=new Blob([tsv],{type:'text/plain;charset=utf-8'});
+  const blob=new Blob([tsv],{type:'text/csv;charset=utf-8'});
   const a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
   a.download=`ebay-draft-listings-${new Date().toISOString().slice(0,10)}.csv`;
