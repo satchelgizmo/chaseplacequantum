@@ -1852,7 +1852,7 @@ function exportEbayCSV() {
     '#INFO\tAction and Category ID are required fields. 1) Set Action to Draft 2) Please find the category ID for your listings here: https://pages.ebay.com/sellerinformation/news/categorychanges.html',
     '#INFO\tAfter you\'ve successfully uploaded your draft from the Seller Hub Reports tab, complete your drafts to active listings here: https://www.ebay.com/sh/lst/drafts'
   ].join('\r\n');
-  const header=['#INFO','Action(SiteID=US|Country=US|Currency=USD|Version=1193|CC=UTF-8)','Custom label (SKU)','Category ID','Title','UPC','Price','Quantity','Item photo URL','Condition ID','Description','Format'].join(T);
+  const header=['Action(SiteID=US|Country=US|Currency=USD|Version=1193|CC=UTF-8)','Custom label (SKU)','Category ID','Title','UPC','Price','Quantity','Item photo URL','Condition ID','Description','Format'].join(T);
   const rows=ids.map(pid=>{
     const p=getP(pid);
     const suggestedPrice=p.cost?(p.cost*2).toFixed(2):'9.99';
