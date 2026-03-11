@@ -1845,33 +1845,37 @@ function _ebayCat(p) {
 function exportEbayCSV() {
   const ids=[...invSelected];
   if(!ids.length){toast('No cards selected');return;}
-  const header='"Action(SiteID=US|Country=US|Currency=USD|Version=941|CC=UTF-8)","Category","Title","Condition","Format","Duration","BuyItNowPrice","Quantity","Description","PicURL","ShippingType","ShippingService-1:Option","ShippingService-1:CostAdd"';
-  const q=v=>`"${String(v).replace(/"/g,'""')}"`;
+  const T='\t';
+  const q=v=>String(v??'');
+  const info=[
+    '#INFO Version=0.0.2 Template= eBay-draft-listings-template_US',
+    '#INFO Action and Category ID are required fields. 1) Set Action to Draft 2) Please find the category ID for your listings here: https://pages.ebay.com/sellerinformation/news/categorychanges.html',
+    '#INFO After you\'ve successfully uploaded your draft from the Seller Hub Reports tab, complete your drafts to active listings here: https://www.ebay.com/sh/lst/drafts'
+  ].join('\n');
+  const header=['Action(SiteID=US|Country=US|Currency=USD|Version=1193|CC=UTF-8)','Custom label (SKU)','Category ID','Title','UPC','Price','Quantity','Item photo URL','Condition ID','Description','Format'].join(T);
   const rows=ids.map(pid=>{
     const p=getP(pid);
     return[
-      q('Add'),
+      'Draft',
+      q(p.id),
       q(_ebayCat(p)),
       q(_ebayTitle(p)),
-      q(p.grade?'2750':'4000'),
-      q('FixedPrice'),
-      q('GTC'),
-      q(''),
-      q('1'),
-      q(_ebayDesc(p)),
+      '',
+      '',
+      '1',
       q(p.img||''),
-      q('Flat'),
-      q('USPSFirstClass'),
-      q('4.99'),
-    ].join(',');
+      p.grade?'NEW':'USED_LIKE_NEW',
+      q('<p>'+_ebayDesc(p)+'</p>'),
+      'FixedPrice'
+    ].join(T);
   });
-  const csv=header+'\n'+rows.join('\n');
-  const blob=new Blob([csv],{type:'text/csv'});
+  const tsv=info+'\n'+header+'\n'+rows.join('\n');
+  const blob=new Blob([tsv],{type:'text/tab-separated-values'});
   const a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
-  a.download=`ebay-listings-${new Date().toISOString().slice(0,10)}.csv`;
+  a.download=`ebay-draft-listings-${new Date().toISOString().slice(0,10)}.csv`;
   a.click();
-  toast(`Downloaded CSV for ${ids.length} card${ids.length===1?'':'s'}`);
+  toast(`Downloaded eBay draft CSV for ${ids.length} card${ids.length===1?'':'s'}`);
 }
 function exportSingleCardCSV(pid) {
   invSelected.clear();
