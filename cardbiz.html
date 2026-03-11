@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CardBiz</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -1845,40 +1846,34 @@ function _ebayCat(p) {
 function exportEbayCSV() {
   const ids=[...invSelected];
   if(!ids.length){toast('No cards selected');return;}
-  const CRLF='\r\n';
-  // CSV quoting: wrap every field in double quotes, escape internal quotes by doubling
-  const qcsv=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
-  const row=fields=>fields.map(qcsv).join(',');
-  const info=[
-    row(['#INFO','Version=0.0.2','Template= eBay-draft-listings-template_US']),
-    row(['#INFO','Action and Category ID are required fields. 1) Set Action to Draft 2) Please find the category ID for your listings here: https://pages.ebay.com/sellerinformation/news/categorychanges.html']),
-    row(['#INFO','After you\'ve successfully uploaded your draft from the Seller Hub Reports tab, complete your drafts to active listings here: https://www.ebay.com/sh/lst/drafts'])
-  ].join(CRLF);
-  const header=row(['Action(SiteID=US|Country=US|Currency=USD|Version=1193|CC=UTF-8)','Custom label (SKU)','Category ID','Title','UPC','Price','Quantity','Item photo URL','Condition ID','Description','Format']);
-  const rows=ids.map(pid=>{
-    const p=getP(pid);
-    const suggestedPrice=p.cost?(p.cost*2).toFixed(2):'9.99';
-    return row([
-      'Draft',
-      p.id??'',
-      _ebayCat(p),
-      _ebayTitle(p),
-      '',
-      suggestedPrice,
-      '1',
-      p.img||'',
-      p.grade?'2750':'3000',
-      '<p>'+_ebayDesc(p)+'</p>',
-      'FixedPrice'
-    ]);
-  });
-  const tsv='\uFEFF'+info+CRLF+header+CRLF+rows.join(CRLF);
-  const blob=new Blob([tsv],{type:'text/csv;charset=utf-8'});
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(blob);
-  a.download=`ebay-draft-listings-${new Date().toISOString().slice(0,10)}.csv`;
-  a.click();
-  toast(`Downloaded eBay draft CSV for ${ids.length} card${ids.length===1?'':'s'}`);
+  const data=[
+    ['#INFO','Version=0.0.2','Template= eBay-draft-listings-template_US'],
+    ['#INFO','Action and Category ID are required fields. 1) Set Action to Draft 2) Please find the category ID for your listings here: https://pages.ebay.com/sellerinformation/news/categorychanges.html'],
+    ['#INFO','After you\'ve successfully uploaded your draft from the Seller Hub Reports tab, complete your drafts to active listings here: https://www.ebay.com/sh/lst/drafts'],
+    ['Action(SiteID=US|Country=US|Currency=USD|Version=1193|CC=UTF-8)','Custom label (SKU)','Category ID','Title','UPC','Price','Quantity','Item photo URL','Condition ID','Description','Format'],
+    ...ids.map(pid=>{
+      const p=getP(pid);
+      const suggestedPrice=p.cost?(p.cost*2).toFixed(2):'9.99';
+      return[
+        'Draft',
+        p.id??'',
+        _ebayCat(p),
+        _ebayTitle(p),
+        '',
+        suggestedPrice,
+        '1',
+        p.img||'',
+        p.grade?'2750':'3000',
+        '<p>'+_ebayDesc(p)+'</p>',
+        'FixedPrice'
+      ];
+    })
+  ];
+  const ws=XLSX.utils.aoa_to_sheet(data);
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Listings');
+  XLSX.writeFile(wb,`ebay-draft-listings-${new Date().toISOString().slice(0,10)}.xlsx`);
+  toast(`Downloaded eBay draft listings XLSX for ${ids.length} card${ids.length===1?'':'s'}`);
 }
 function exportSingleCardCSV(pid) {
   invSelected.clear();
