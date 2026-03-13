@@ -4,9 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CardBiz</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
-<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-<style>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet"><style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
   --bg:#0b0d10;--surf:#141820;--surf2:#1c2028;--surf3:#242932;
@@ -1816,11 +1814,13 @@ function exportEbayCSV() {
       ];
     })
   ];
-  const ws=XLSX.utils.aoa_to_sheet(data);
-  const wb=XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb,ws,'Listings');
-  XLSX.writeFile(wb,`ebay-draft-listings-${new Date().toISOString().slice(0,10)}.xlsx`);
-  toast(`Downloaded eBay draft listings XLSX for ${ids.length} card${ids.length===1?'':'s'}`);
+  const tsv='\uFEFF'+data.map(r=>r.join('\t')).join('\r\n');
+  const blob=new Blob([tsv],{type:'text/plain;charset=utf-8'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`ebay-draft-listings-${new Date().toISOString().slice(0,10)}.txt`;
+  a.click();
+  toast(`Downloaded eBay draft listings for ${ids.length} card${ids.length===1?'':'s'}`);
 }
 function exportSingleCardCSV(pid) {
   invSelected.clear();
