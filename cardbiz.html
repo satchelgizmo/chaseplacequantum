@@ -257,7 +257,6 @@ thead th.sh:hover{color:var(--text)}
     <div class="nav">
       <div class="ni on" id="ni-dash" onclick="nav('dash')"><span class="ic">📊</span><span>Dashboard</span></div>
       <div class="ni" id="ni-inv" onclick="nav('inv')"><span class="ic">📦</span><span>Inventory</span></div>
-      <div class="ni" id="ni-buys" onclick="nav('buys')"><span class="ic">🛒</span><span>Purchases</span></div>
       <div class="ni" id="ni-sells" onclick="nav('sells')"><span class="ic">💰</span><span>Sales Hub</span></div>
       <div class="ni" id="ni-imp" onclick="nav('imp')"><span class="ic">📥</span><span>Import</span></div>
     </div>
@@ -542,7 +541,6 @@ function render(){
   const savedSel1=ae?.selectionEnd??null;
   if(page==='dash')  m.innerHTML=renderDash();
   else if(page==='inv')   m.innerHTML=renderInv();
-  else if(page==='buys')  m.innerHTML=renderBuys();
   else if(page==='sells') m.innerHTML=renderSells();
   else if(page==='imp')   m.innerHTML=renderImport();
   updateSidebar();
@@ -702,57 +700,6 @@ function renderInv(){
 }
 
 // ─────────────────────────────────────────────
-// PURCHASES
-// ─────────────────────────────────────────────
-function renderBuys(){
-  const sp=soldPids();
-  const f=filt.buys;
-  let items=purchases.map(p=>getP(p.id));
-  if(f.q){const q=f.q.toLowerCase();items=items.filter(p=>p.name.toLowerCase().includes(q)||(p.player||'').toLowerCase().includes(q));}
-  if(f.type) items=items.filter(p=>p.type===f.type);
-  items=applySortP(items,'buys');
-  const pn=pgNum.buys||0,total=items.length;
-  const page_items=items.slice(pn*PS,(pn+1)*PS);
-  return`
-  <div class="topbar"><div class="pg-title">Purchases <span class="pg-sub">${total.toLocaleString()} total · ${f$(items.reduce((a,p)=>a+p.cost,0))}</span></div></div>
-  <div class="content">
-    <div class="fb">
-      <div class="sw"><span class="si">🔍</span><input id="search-buys" value="${esc(f.q)}" placeholder="Search purchases…" oninput="filt.buys.q=this.value;pgNum.buys=0;render()"></div>
-      <select onchange="filt.buys.type=this.value;pgNum.buys=0;render()">
-        <option value="">All Types</option>
-        ${['Soccer','Pokémon','NFL','MLB','Marvel','NBA','Yu-Gi-Oh'].map(t=>`<option value="${t}" ${f.type===t?'selected':''}>${t}</option>`).join('')}
-      </select>
-    </div>
-    <div class="tw"><table>
-      <thead><tr><th></th>
-        <th onclick="setSort('buys','name')" class="sh">CARD${sortIcon('buys','name')}</th>
-        <th onclick="setSort('buys','player')" class="sh">PARSED${sortIcon('buys','player')}</th>
-        <th onclick="setSort('buys','type')" class="sh">TYPE${sortIcon('buys','type')}</th>
-        <th onclick="setSort('buys','date')" class="sh">DATE${sortIcon('buys','date')}</th>
-        <th onclick="setSort('buys','cost')" class="sh">COST${sortIcon('buys','cost')}</th>
-        <th>STATUS</th>
-        <th onclick="setSort('buys','pnl')" class="sh">NET P&L${sortIcon('buys','pnl')}</th>
-      </tr></thead>
-      <tbody>${page_items.map(p=>{
-        const isSold=sp.has(p.id);
-        const ss=salesForPid(p.id);
-        const rev=ss.reduce((a,s)=>a+getS(s.id).price*(getS(s.id).qty||1),0);
-        const pnl=rev-p.cost;
-        return`<tr onclick="showPurchase('${p.id}')" style="cursor:pointer">
-          <td class="cic">${thumb(p.img)}</td>
-          <td><div class="cn">${esc(p.name)}</div><div class="cm">${esc(p.date)} · ${esc(p.seller)}</div></td>
-          <td>${parsedTags(p,true)}</td>
-          <td>${typeBadge(p.type)}</td>
-          <td><span class="pr d">${esc(p.date)}</span></td>
-          <td><span class="pr o">${f$(p.cost)}</span></td>
-          <td>${isSold?`<span class="sb sold">SOLD</span>`:`<span class="sb stock">IN STOCK</span>`}</td>
-          <td>${isSold?(()=>{const np=netProfit(matched.length?getS(matched[0].id).price:0,matched.length?getS(matched[0].id).qty||1:1,p.cost);const netTotal=rev-p.cost-ss.reduce((a,s)=>a+ebayFee(getS(s.id).price,getS(s.id).qty||1),0);return`<span class="pr ${netTotal>=0?'g':'r'}">${f$(netTotal)}</span><div style="font-size:9px;color:var(--faint);font-family:var(--mono)">after fees</div>`})():`<span class="pr d">—</span>`}</td>
-        </tr>`;}).join('')}
-      </tbody>
-    </table></div>
-    ${renderPag(total,pn,'buys')}
-  </div>`;
-}
 
 // ─────────────────────────────────────────────
 // SALES
