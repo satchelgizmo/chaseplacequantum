@@ -256,6 +256,7 @@ thead th.sh:hover{color:var(--text)}
       <div class="ni on" id="ni-dash" onclick="nav('dash')"><span class="ic">📊</span><span>Dashboard</span></div>
       <div class="ni" id="ni-inv" onclick="nav('inv')"><span class="ic">📦</span><span>Inventory</span></div>
       <div class="ni" id="ni-sells" onclick="nav('sells')"><span class="ic">💰</span><span>Sales Hub</span></div>
+      <div class="ni" id="ni-listings" onclick="nav('listings')"><span class="ic">🏷</span><span>Active Listings</span></div>
       <div class="ni" id="ni-imp" onclick="nav('imp')"><span class="ic">📥</span><span>Import</span></div>
     </div>
     <div class="side-foot">
@@ -299,6 +300,9 @@ let sortState = { inv: {col:'date',dir:-1}, buys: {col:'date',dir:-1}, sells: {c
 // persist market lookups: pid -> {avgPrice, lowPrice, highPrice, confidence, recentSales, ts}
 let valueLookups = JSON.parse(localStorage.getItem('cb_lookups')||'{}');
 function persistLookups() { try { localStorage.setItem('cb_lookups', JSON.stringify(valueLookups)); } catch(e){} }
+let activeListings = JSON.parse(localStorage.getItem('cb_active_listings')||'[]');
+let activeListingsTs = localStorage.getItem('cb_active_listings_ts')||null;
+function persistActiveListings() { try { localStorage.setItem('cb_active_listings', JSON.stringify(activeListings)); if(activeListingsTs) localStorage.setItem('cb_active_listings_ts', activeListingsTs); } catch(e){} }
 // API key
 function getApiKey() { return localStorage.getItem('cb_apikey')||''; }
 function saveApiKey(v) {
@@ -540,6 +544,7 @@ function render(){
   if(page==='dash')  m.innerHTML=renderDash();
   else if(page==='inv')   m.innerHTML=renderInv();
   else if(page==='sells') m.innerHTML=renderSells();
+  else if(page==='listings') m.innerHTML=renderListings();
   else if(page==='imp')   m.innerHTML=renderImport();
   updateSidebar();
   // Restore focus to search input if it was focused
@@ -677,7 +682,7 @@ function renderInv(){
         <tr onclick="showPurchase('${p.id}')" style="cursor:pointer" class="${invSelected.has(p.id)?'highlight':''}">
           <td style="padding:5px 6px" onclick="event.stopPropagation()"><input type="checkbox" id="inv-cb-${p.id}" ${invSelected.has(p.id)?'checked':''} onchange="toggleInvSelect('${p.id}',this.checked)" style="cursor:pointer;accent-color:var(--gold)"></td>
           <td class="cic">${thumb(p.img)}</td>
-          <td><div class="cn">${esc(p.name)}</div><div class="cm">${esc(p.seller)} · ${esc(p.orderNum)}</div>
+          <td><div class="cn">${esc(p.name)}${activeListings.some(l=>l.matchedPid===p.id)?` <span style="display:inline-block;font-size:8px;font-family:var(--mono);background:rgba(46,204,138,.15);color:var(--green);border:1px solid rgba(46,204,138,.35);border-radius:3px;padding:1px 5px;vertical-align:middle;letter-spacing:.5px">LISTED</span>`:''}</div><div class="cm">${esc(p.seller)} · ${esc(p.orderNum)}</div>
             ${p.is_lot?`<div class="cm" style="color:var(--orange)">Lot ×${p.lotQty} · raw ${f$(p.costRaw)}</div>`:''}
           </td>
           <td><span class="pr d" style="font-family:var(--mono);font-size:11px">${esc(p.player||'—')}</span>${parsedTags(p,true)}</td>
@@ -1554,6 +1559,204 @@ Rules:
   } catch(e) {
     toast('Scan failed: ' + e.message);
   }
+}
+
+// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────
+// ACTIVE LISTINGS PAGE
+// ─────────────────────────────────────────────
+let _listingsFilter = '';
+
+function _listingsMatchPid(title) {
+  // Try to find an unsold inventory item whose name is a substring of the listing title or vice versa
+  const sp = soldPids();
+  const t = title.toLowerCase();
+  let best = null, bestLen = 0;
+  for (const p of purchases) {
+    if (sp.has(p.id)) continue;
+    const pp = getP(p.id);
+    const n = pp.name.toLowerCase();
+    // Check if purchase name words mostly appear in listing title
+    const words = n.split(/\s+/).filter(w=>w.length>3);
+    if (!words.length) continue;
+    const hits = words.filter(w=>t.includes(w)).length;
+    const score = hits / words.length;
+    if (score >= 0.55 && n.length > bestLen) { best = p.id; bestLen = n.length; }
+  }
+  return best;
+}
+
+function parseListingsCSV(text) {
+  // Handles eBay Seller Hub "Active Listings" CSV export
+  // Skips INFO rows, finds header row, then parses data rows
+  const lines = text.split(/\r?\n/).filter(l=>l.trim());
+  // Find the header row (contains "Item number" or "item number")
+  let headerIdx = -1;
+  for (let i=0;i<lines.length;i++) {
+    const l = lines[i].toLowerCase();
+    if (l.includes('item number') || l.includes('item id') || l.includes('listing id')) { headerIdx=i; break; }
+  }
+  if (headerIdx < 0) return null; // can't find headers
+
+  function splitCSV(line) {
+    const out=[]; let cur='', inQ=false;
+    for (let i=0;i<line.length;i++) {
+      const c=line[i];
+      if (c==='"') { if (inQ && line[i+1]==='"') { cur+='"'; i++; } else inQ=!inQ; }
+      else if (c===',' && !inQ) { out.push(cur); cur=''; }
+      else cur+=c;
+    }
+    out.push(cur);
+    return out.map(s=>s.trim());
+  }
+
+  const headers = splitCSV(lines[headerIdx]).map(h=>h.toLowerCase().replace(/[^a-z0-9]/g,''));
+  const col = (names) => { for(const n of names){ const i=headers.findIndex(h=>h.includes(n.replace(/[^a-z0-9]/g,''))); if(i>=0) return i; } return -1; };
+
+  const iItem   = col(['itemnumber','itemid','listingid']);
+  const iTitle  = col(['title']);
+  const iPrice  = col(['price','butitnowprice']);
+  const iQty    = col(['availablequantity','quantity']);
+  const iWatch  = col(['watchers','watchcount']);
+  const iViews  = col(['views','totalpageviews','pageviews']);
+  const iEnd    = col(['expirydate','enddate','end']);
+  const iListed = col(['listedon','dateadded','startdate']);
+  const iCond   = col(['condition']);
+  const iImg    = col(['pictureurl','imageurl','picture']);
+
+  const results = [];
+  for (let i=headerIdx+1; i<lines.length; i++) {
+    const row = splitCSV(lines[i]);
+    if (row.length < 2 || !row[0]) continue;
+    const itemId = iItem>=0 ? row[iItem] : '';
+    const title  = iTitle>=0 ? row[iTitle] : '';
+    if (!itemId && !title) continue;
+    const price  = iPrice>=0 ? parseFloat(row[iPrice].replace(/[^0-9.]/g,''))||0 : 0;
+    const qty    = iQty>=0 ? parseInt(row[iQty])||1 : 1;
+    const watchers = iWatch>=0 ? parseInt(row[iWatch])||0 : 0;
+    const views  = iViews>=0 ? parseInt(row[iViews])||0 : 0;
+    const endDate   = iEnd>=0 ? row[iEnd] : '';
+    const listedDate = iListed>=0 ? row[iListed] : '';
+    const condition = iCond>=0 ? row[iCond] : '';
+    const imgUrl = iImg>=0 ? row[iImg] : '';
+    const matchedPid = _listingsMatchPid(title);
+    results.push({ itemId, title, price, qty, watchers, views, endDate, listedDate, condition, imgUrl, matchedPid });
+  }
+  return results;
+}
+
+function importListingsCSV() {
+  const ta = document.getElementById('listings-csv-input');
+  if (!ta) return;
+  const text = ta.value.trim();
+  if (!text) { toast('Paste your eBay Seller Hub CSV first'); return; }
+  const parsed = parseListingsCSV(text);
+  if (!parsed) { toast('Could not find column headers — paste the full CSV from eBay Seller Hub'); return; }
+  if (!parsed.length) { toast('No listings found in CSV'); return; }
+  activeListings = parsed;
+  activeListingsTs = new Date().toLocaleString();
+  persistActiveListings();
+  toast(`Loaded ${parsed.length} active listing${parsed.length===1?'':'s'}`);
+  render();
+}
+
+function clearListings() {
+  if (!activeListings.length) return;
+  activeListings = [];
+  activeListingsTs = null;
+  localStorage.removeItem('cb_active_listings');
+  localStorage.removeItem('cb_active_listings_ts');
+  render();
+}
+
+function linkListingToPurchase(itemId, pid) {
+  const l = activeListings.find(l=>l.itemId===itemId);
+  if (l) { l.matchedPid = pid || null; persistActiveListings(); render(); }
+}
+
+function renderListings() {
+  const q = _listingsFilter.toLowerCase();
+  let items = activeListings;
+  if (q) items = items.filter(l=>l.title.toLowerCase().includes(q)||(l.matchedPid?getP(l.matchedPid).name.toLowerCase().includes(q):false));
+  const totalVal = activeListings.reduce((a,l)=>a+l.price*(l.qty||1),0);
+  const totalWatch = activeListings.reduce((a,l)=>a+l.watchers,0);
+  const matched = activeListings.filter(l=>l.matchedPid).length;
+  return`
+  <div class="topbar">
+    <div class="pg-title">Active Listings <span class="pg-sub">${activeListings.length} live · ${f$(totalVal)} listed value${activeListingsTs?' · updated '+activeListingsTs:''}</span></div>
+  </div>
+  <div class="content">
+    ${!activeListings.length ? `
+      <div style="max-width:560px;margin:0 auto;padding-top:20px">
+        <div style="font-size:14px;font-weight:700;margin-bottom:8px">Import your eBay Active Listings</div>
+        <div style="font-size:12px;color:var(--dim);font-family:var(--mono);line-height:1.7;margin-bottom:16px">
+          1. Go to <strong style="color:var(--text)">eBay Seller Hub → Active Listings</strong><br>
+          2. Click <strong style="color:var(--text)">Download active listings</strong> (top right)<br>
+          3. Open the downloaded <code style="color:var(--gold)">.csv</code> file in a text editor, select all, copy<br>
+          4. Paste below and click Import
+        </div>
+        <textarea id="listings-csv-input" style="width:100%;height:160px;background:var(--surf2);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:11px;padding:10px;border-radius:var(--r2);outline:none;resize:vertical" placeholder="Paste eBay Seller Hub CSV here…" oninput="document.getElementById('listings-csv-input').style.borderColor='var(--border)'"></textarea>
+        <div style="margin-top:10px;display:flex;gap:8px">
+          <button class="btn pri" onclick="importListingsCSV()">📋 Import CSV</button>
+        </div>
+      </div>
+    ` : `
+      <div class="sg" style="margin-bottom:18px">
+        <div class="sc"><div class="sc-lbl">ACTIVE</div><div class="sc-val b">${activeListings.length}</div><div class="sc-sub">listings live</div></div>
+        <div class="sc"><div class="sc-lbl">LISTED VALUE</div><div class="sc-val g">${f$(totalVal)}</div><div class="sc-sub">total asking</div></div>
+        <div class="sc"><div class="sc-lbl">WATCHERS</div><div class="sc-val o">${totalWatch}</div><div class="sc-sub">total across all</div></div>
+        <div class="sc"><div class="sc-lbl">MATCHED</div><div class="sc-val">${matched}/${activeListings.length}</div><div class="sc-sub">linked to inventory</div></div>
+      </div>
+      <div class="fb" style="margin-bottom:14px">
+        <div class="sw"><span class="si">🔍</span><input id="search-listings" value="${esc(_listingsFilter)}" placeholder="Search listings…" oninput="_listingsFilter=this.value;render()"></div>
+        <button class="btn" onclick="document.getElementById('listings-import-area').style.display=document.getElementById('listings-import-area').style.display==='none'?'block':'none'">⬆ Update</button>
+        <button class="btn red" onclick="if(confirm('Clear all active listings?'))clearListings()">✕ Clear</button>
+      </div>
+      <div id="listings-import-area" style="display:none;background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:14px">
+        <div style="font-size:12px;color:var(--dim);font-family:var(--mono);margin-bottom:8px">Paste fresh CSV from eBay Seller Hub → Active Listings → Download active listings</div>
+        <textarea id="listings-csv-input" style="width:100%;height:120px;background:var(--surf2);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:11px;padding:10px;border-radius:var(--r2);outline:none;resize:vertical" placeholder="Paste CSV here…"></textarea>
+        <button class="btn pri" style="margin-top:8px" onclick="importListingsCSV()">📋 Import</button>
+      </div>
+      <div class="tw"><table>
+        <thead><tr>
+          <th></th>
+          <th>TITLE</th>
+          <th>ITEM #</th>
+          <th>PRICE</th>
+          <th>WATCHERS</th>
+          <th>VIEWS</th>
+          <th>ENDS</th>
+          <th>INV MATCH</th>
+          <th>NET EST</th>
+        </tr></thead>
+        <tbody>${items.length===0
+          ? `<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--faint);font-family:var(--mono)">No listings match filter</td></tr>`
+          : items.map(l=>{
+            const pp = l.matchedPid ? getP(l.matchedPid) : null;
+            const netEst = pp ? netProfit(l.price, l.qty||1, pp.cost) : null;
+            const watchClass = l.watchers>=5?'g':l.watchers>=1?'o':'';
+            return`<tr>
+              <td class="cic">${thumb(l.imgUrl||pp?.img||'')}</td>
+              <td style="max-width:260px">
+                <div class="cn"><a href="https://www.ebay.com/itm/${esc(l.itemId)}" target="_blank" style="color:var(--text);text-decoration:none" onmouseover="this.style.color='var(--gold)'" onmouseout="this.style.color='var(--text)'">${esc(l.title)}</a></div>
+                ${l.condition?`<div class="cm">${esc(l.condition)}</div>`:''}
+              </td>
+              <td><span style="font-family:var(--mono);font-size:11px;color:var(--dim)">${esc(l.itemId)}</span></td>
+              <td><span class="pr g">${f$(l.price)}</span>${l.qty>1?`<div style="font-size:9px;font-family:var(--mono);color:var(--faint)">×${l.qty} avail</div>`:''}</td>
+              <td><span class="pr ${watchClass}" style="font-family:var(--mono)">${l.watchers}</span></td>
+              <td><span style="font-family:var(--mono);font-size:12px;color:var(--faint)">${l.views||'—'}</span></td>
+              <td><span style="font-size:11px;font-family:var(--mono);color:var(--dim)">${l.endDate||'—'}</span></td>
+              <td>${pp
+                ? `<div onclick="showPurchase('${pp.id}')" style="cursor:pointer">${thumb(pp.img,'ct')}<div class="cm" style="max-width:100px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(pp.name)}">${esc(pp.name.length>28?pp.name.slice(0,25)+'…':pp.name)}</div></div>`
+                : `<span style="color:var(--faint);font-size:10px;font-family:var(--mono)">no match</span>`}
+              </td>
+              <td>${netEst!=null?`<span class="pr ${netEst>=0?'g':'r'}">${f$(netEst)}</span>`:`<span style="color:var(--faint)">—</span>`}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table></div>
+    `}
+  </div>`;
 }
 
 // ─────────────────────────────────────────────
