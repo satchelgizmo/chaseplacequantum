@@ -1674,6 +1674,40 @@ function linkListingToPurchase(itemId, pid) {
   if (l) { l.matchedPid = pid || null; persistActiveListings(); render(); }
 }
 
+let _relinkListingId = null, _relinkQ = "";
+function openListingRelink(itemId) {
+  _relinkListingId = itemId;
+  _relinkQ = "";
+  _renderListingRelink();
+}
+function _renderListingRelink() {
+  const sp = soldPids();
+  const q = _relinkQ.toLowerCase();
+  const items = purchases.filter(p=>!sp.has(p.id)).map(p=>getP(p.id))
+    .filter(p=>!q||p.name.toLowerCase().includes(q)||(p.player||"").toLowerCase().includes(q));
+  const cur = activeListings.find(l=>l.itemId===_relinkListingId)?.matchedPid;
+  const listId = _relinkListingId;
+  openPanel(
+    "<div class="pn-head"><div class="pn-title">Link to Inventory Card</div></div>" +
+    "<div class="pn-body">" +
+    "<div style="font-size:11px;font-family:var(--mono);color:var(--dim);margin-bottom:10px">Pick the inventory card this listing belongs to</div>" +
+    "<div class="sw" style="margin-bottom:10px"><span class="si">🔍</span><input id="relink-q" value="" + esc(_relinkQ) + "" placeholder="Search name, player…" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px 7px 28px;border-radius:var(--r2);font-size:12px;font-family:var(--ui);outline:none" oninput="_relinkQ=this.value;_renderListingRelink()"></div>" +
+    (cur ? "<button class="btn red" style="width:100%;margin-bottom:10px;font-size:11px" onclick="linkListingToPurchase('" + esc(listId) + "',null);closePanel();render()">✕ Unlink current match</button>" : "") +
+    "<div style="display:flex;flex-direction:column;gap:6px;max-height:420px;overflow-y:auto">" +
+    (items.length===0 ? "<div style="color:var(--faint);font-family:var(--mono);font-size:11px;padding:16px 0;text-align:center">No cards found</div>" :
+      items.map(p =>
+        "<div onclick="linkListingToPurchase('" + esc(listId) + "','" + p.id + "');closePanel();render()" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:var(--r2);border:1px solid " + (p.id===cur ? "var(--gold)" : "var(--border)") + ";background:" + (p.id===cur ? "rgba(245,200,66,.06)" : "var(--surf2)") + ";cursor:pointer" onmouseover="this.style.background='var(--surf3)'" onmouseout="this.style.background='" + (p.id===cur ? "rgba(245,200,66,.06)" : "var(--surf2)") + "'">" +
+        thumb(p.img, "ct") +
+        "<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">" + esc(p.name) + "</div><div style="font-size:10px;font-family:var(--mono);color:var(--dim)">" + f$(p.cost) + " cost · " + esc(p.date) + "</div></div>" +
+        (p.id===cur ? "<span style="font-size:9px;font-family:var(--mono);color:var(--gold);border:1px solid var(--gold);border-radius:3px;padding:1px 5px">current</span>" : "") +
+        "</div>"
+      ).join("")
+    ) +
+    "</div></div>"
+  );
+  setTimeout(()=>{ const el=document.getElementById("relink-q"); if(el) el.focus(); }, 50);
+}
+
 function renderListings() {
   const q = _listingsFilter.toLowerCase();
   let items = activeListings;
@@ -1746,9 +1780,13 @@ function renderListings() {
               <td><span class="pr ${watchClass}" style="font-family:var(--mono)">${l.watchers}</span></td>
               <td><span style="font-family:var(--mono);font-size:12px;color:var(--faint)">${l.views||'—'}</span></td>
               <td><span style="font-size:11px;font-family:var(--mono);color:var(--dim)">${l.endDate||'—'}</span></td>
-              <td>${pp
-                ? `<div onclick="showPurchase('${pp.id}')" style="cursor:pointer">${thumb(pp.img,'ct')}<div class="cm" style="max-width:100px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(pp.name)}">${esc(pp.name.length>28?pp.name.slice(0,25)+'…':pp.name)}</div></div>`
-                : `<span style="color:var(--faint);font-size:10px;font-family:var(--mono)">no match</span>`}
+              <td>
+                <div style="display:flex;align-items:center;gap:6px">
+                  ${pp
+                    ? `<div onclick="showPurchase('${pp.id}')" style="cursor:pointer;flex:1">${thumb(pp.img,'ct')}<div class="cm" style="max-width:90px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(pp.name)}">${esc(pp.name.length>22?pp.name.slice(0,19)+'…':pp.name)}</div></div>`
+                    : `<span style="color:var(--faint);font-size:10px;font-family:var(--mono);flex:1">no match</span>`}
+                  <button class="btn xs ghost" onclick="event.stopPropagation();openListingRelink('${esc(l.itemId)}')" title="Change linked card">🔗</button>
+                </div>
               </td>
               <td>${netEst!=null?`<span class="pr ${netEst>=0?'g':'r'}">${f$(netEst)}</span>`:`<span style="color:var(--faint)">—</span>`}</td>
             </tr>`;
