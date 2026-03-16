@@ -645,6 +645,7 @@ function renderInv(){
   return`
   <div class="topbar">
     <div class="pg-title">Inventory <span class="pg-sub">${total} in stock · ${f$(inv_cost)} cost · ${inv_mkt?f$(inv_mkt)+' est. market':''}</span></div>
+    <button class="btn pri" onclick="openAddPurchase()">+ Add Card</button>
   </div>
   <div class="content">
     <div class="fb">
@@ -726,7 +727,7 @@ function renderSells(){
   const losers=linked.filter(s=>netProfit(s.price,s.qty||1,getP(s.linkedPid).cost)<=0);
   const linkRate=allSales.length?Math.round(linked.length/allSales.length*100):0;
   return`
-  <div class="topbar"><div class="pg-title">Sales Hub <span class="pg-sub">${total} orders · ${f$(items.reduce((a,s)=>a+s.price*(s.qty||1),0))} revenue</span></div></div>
+  <div class="topbar"><div class="pg-title">Sales Hub <span class="pg-sub">${total} orders · ${f$(items.reduce((a,s)=>a+s.price*(s.qty||1),0))} revenue</span></div><button class="btn pri" onclick="openAddSale()">+ Add Sale</button></div>
   <div class="content">
     <div class="sg" style="margin-bottom:16px">
       <div class="sc"><div class="sc-lbl">Net P&amp;L (after fees)</div><div class="sc-val ${allNetPnl>=0?'g':'r'}">${f$(allNetPnl)}</div><div class="sc-sub">${linked.length} linked flips</div></div>
@@ -1784,9 +1785,9 @@ function renderListings() {
         + '<div class="cm" style="max-width:85px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + esc(pp.name) + '">' + esc(pp.name.length > 22 ? pp.name.slice(0,19)+'...' : pp.name) + '</div></div>'
         + '<button class="btn xs ghost" onclick="event.stopPropagation();openRelinkListing(\'' + esc(l.itemId) + '\')" title="Change linked card">&#x1F517;</button>'
         + '</div>'
-      : '<div style="display:flex;align-items:center;gap:6px">'
-        + '<span style="color:var(--faint);font-size:10px;font-family:var(--mono);flex:1">no match</span>'
-        + '<button class="btn xs ghost" onclick="event.stopPropagation();openRelinkListing(\'' + esc(l.itemId) + '\')" title="Link to card">&#x1F517;</button>'
+      : '<div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">'
+        + '<button class="btn xs" onclick="event.stopPropagation();saveListingToInventory(\'' + esc(l.itemId) + '\')" title="Add as new inventory card" style="font-size:9px">+ Inv</button>'
+        + '<button class="btn xs ghost" onclick="event.stopPropagation();openRelinkListing(\'' + esc(l.itemId) + '\')" title="Link to existing card">&#x1F517;</button>'
         + '</div>'
     );
     rows += '<tr>'
@@ -2222,6 +2223,247 @@ function showListingResult(pid,text){
         <button class="btn ghost sm" onclick="delete listingCache[_ld.pid];buildListing(_ld.pid)">↻ Regenerate</button>
       </div>
     </div>`);
+}
+
+// ─────────────────────────────────────────────
+// MANUAL ADD — PURCHASE
+// ─────────────────────────────────────────────
+var _addPurchaseFromListing = '';
+
+function openAddPurchase(prefill) {
+  _addPurchaseFromListing = (prefill && prefill.fromListingId) ? prefill.fromListingId : '';
+  var name  = (prefill && prefill.name)  ? prefill.name  : '';
+  var img   = (prefill && prefill.img)   ? prefill.img   : '';
+  var cost  = (prefill && prefill.cost)  ? String(prefill.cost) : '';
+  var itemId = (prefill && prefill.itemId) ? prefill.itemId : '';
+  var typeOpts = ['Soccer','Pokémon','NFL','MLB','Marvel','NBA','Yu-Gi-Oh','Other'].map(function(t){
+    return '<option value="' + t + '">' + t + '</option>';
+  }).join('');
+  openPanel(
+    '<div class="pn-head"><div class="pn-title">Add Card to Inventory</div></div>'
+    + '<div class="pn-body">'
+    + '<div style="display:grid;gap:10px">'
+
+    + '<div><label style="font-size:10px;font-family:var(--mono);color:var(--dim);display:block;margin-bottom:3px">CARD NAME *</label>'
+    + '<input id="ap-name" value="' + esc(name) + '" placeholder="e.g. 2023 Panini Prizm Erling Haaland Gold /10" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:var(--r2);font-size:12px;font-family:var(--ui);outline:none">'
+    + '</div>'
+
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
+    + '<div><label style="font-size:10px;font-family:var(--mono);color:var(--dim);display:block;margin-bottom:3px">DATE</label>'
+    + '<input id="ap-date" type="date" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:var(--r2);font-size:12px;font-family:var(--ui);outline:none">'
+    + '</div>'
+    + '<div><label style="font-size:10px;font-family:var(--mono);color:var(--dim);display:block;margin-bottom:3px">COST ($)</label>'
+    + '<input id="ap-cost" type="number" step="0.01" min="0" value="' + esc(cost) + '" placeholder="0.00" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:var(--r2);font-size:12px;font-family:var(--mono);outline:none">'
+    + '</div></div>'
+
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
+    + '<div><label style="font-size:10px;font-family:var(--mono);color:var(--dim);display:block;margin-bottom:3px">SELLER</label>'
+    + '<input id="ap-seller" placeholder="seller username" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:var(--r2);font-size:12px;font-family:var(--ui);outline:none">'
+    + '</div>'
+    + '<div><label style="font-size:10px;font-family:var(--mono);color:var(--dim);display:block;margin-bottom:3px">ORDER #</label>'
+    + '<input id="ap-order" placeholder="order number" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:var(--r2);font-size:12px;font-family:var(--ui);outline:none">'
+    + '</div></div>'
+
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
+    + '<div><label style="font-size:10px;font-family:var(--mono);color:var(--dim);display:block;margin-bottom:3px">TYPE</label>'
+    + '<select id="ap-type" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:var(--r2);font-size:12px;font-family:var(--ui);outline:none"><option value="">— select —</option>' + typeOpts + '</select>'
+    + '</div>'
+    + '<div><label style="font-size:10px;font-family:var(--mono);color:var(--dim);display:block;margin-bottom:3px">PLAYER / SUBJECT</label>'
+    + '<input id="ap-player" placeholder="e.g. Erling Haaland" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:var(--r2);font-size:12px;font-family:var(--ui);outline:none">'
+    + '</div></div>'
+
+    + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">'
+    + '<div><label style="font-size:10px;font-family:var(--mono);color:var(--dim);display:block;margin-bottom:3px">YEAR</label>'
+    + '<input id="ap-year" placeholder="2024" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:var(--r2);font-size:12px;font-family:var(--mono);outline:none">'
+    + '</div>'
+    + '<div><label style="font-size:10px;font-family:var(--mono);color:var(--dim);display:block;margin-bottom:3px">BRAND</label>'
+    + '<input id="ap-brand" placeholder="Panini" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:var(--r2);font-size:12px;font-family:var(--ui);outline:none">'
+    + '</div>'
+    + '<div><label style="font-size:10px;font-family:var(--mono);color:var(--dim);display:block;margin-bottom:3px">SET</label>'
+    + '<input id="ap-set" placeholder="Prizm" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:var(--r2);font-size:12px;font-family:var(--ui);outline:none">'
+    + '</div></div>'
+
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
+    + '<div><label style="font-size:10px;font-family:var(--mono);color:var(--dim);display:block;margin-bottom:3px">VARIATION / PARALLEL</label>'
+    + '<input id="ap-var" placeholder="Gold Prizm" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:var(--r2);font-size:12px;font-family:var(--ui);outline:none">'
+    + '</div>'
+    + '<div><label style="font-size:10px;font-family:var(--mono);color:var(--dim);display:block;margin-bottom:3px">SERIAL / PRINT RUN</label>'
+    + '<input id="ap-serial" placeholder="e.g. 10 (for /10)" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:var(--r2);font-size:12px;font-family:var(--mono);outline:none">'
+    + '</div></div>'
+
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
+    + '<div><label style="font-size:10px;font-family:var(--mono);color:var(--dim);display:block;margin-bottom:3px">GRADE</label>'
+    + '<input id="ap-grade" placeholder="PSA 10, BGS 9.5, Raw..." style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:var(--r2);font-size:12px;font-family:var(--mono);outline:none">'
+    + '</div>'
+    + '<div><label style="font-size:10px;font-family:var(--mono);color:var(--dim);display:block;margin-bottom:3px">IMAGE URL</label>'
+    + '<input id="ap-img" value="' + esc(img) + '" placeholder="https://..." style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:var(--r2);font-size:12px;font-family:var(--mono);outline:none">'
+    + '</div></div>'
+
+    + '<div><label style="font-size:10px;font-family:var(--mono);color:var(--dim);display:block;margin-bottom:3px">EBAY ITEM ID</label>'
+    + '<input id="ap-itemid" value="' + esc(itemId) + '" placeholder="eBay item number" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:var(--r2);font-size:12px;font-family:var(--mono);outline:none">'
+    + '</div>'
+
+    + '<div style="display:flex;gap:8px;align-items:center;padding:4px 0">'
+    + '<label style="display:flex;align-items:center;gap:5px;font-size:11px;font-family:var(--mono);cursor:pointer"><input type="checkbox" id="ap-auto" style="accent-color:var(--gold)"> Auto</label>'
+    + '<label style="display:flex;align-items:center;gap:5px;font-size:11px;font-family:var(--mono);cursor:pointer"><input type="checkbox" id="ap-rc" style="accent-color:var(--gold)"> RC</label>'
+    + '<label style="display:flex;align-items:center;gap:5px;font-size:11px;font-family:var(--mono);cursor:pointer"><input type="checkbox" id="ap-lot" style="accent-color:var(--gold)"> Lot</label>'
+    + '</div>'
+
+    + '<div><label style="font-size:10px;font-family:var(--mono);color:var(--dim);display:block;margin-bottom:3px">NOTES</label>'
+    + '<textarea id="ap-notes" rows="2" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:var(--r2);font-size:12px;font-family:var(--ui);outline:none;resize:vertical"></textarea>'
+    + '</div>'
+
+    + '<button class="btn pri" style="width:100%;margin-top:4px" onclick="saveNewPurchase()">&#x2714; Add to Inventory</button>'
+    + '</div></div>'
+  );
+  setTimeout(function(){ var el=document.getElementById('ap-name'); if(el) el.focus(); }, 50);
+}
+
+function saveNewPurchase() {
+  var g = function(id){ var el=document.getElementById(id); return el ? el.value : ''; };
+  var gc = function(id){ var el=document.getElementById(id); return el ? el.checked : false; };
+  var name = g('ap-name').trim();
+  if (!name) { toast('Card name is required'); document.getElementById('ap-name').style.borderColor='var(--red)'; return; }
+  var newId = 'M' + Date.now().toString(36).slice(-5) + Math.floor(Math.random()*999);
+  var dateVal = g('ap-date');
+  // Format date like the rest: "Jan 1, 2024" style — keep raw if user typed it
+  var cost = parseFloat(g('ap-cost')) || 0;
+  purchases.push({
+    id: newId,
+    name: name,
+    date: dateVal,
+    cost: cost,
+    costRaw: cost,
+    lotQty: 1,
+    qty: 1,
+    img: g('ap-img').trim(),
+    itemId: g('ap-itemid').trim(),
+    orderNum: g('ap-order').trim(),
+    seller: g('ap-seller').trim(),
+    type: g('ap-type'),
+    player: g('ap-player').trim(),
+    year: g('ap-year').trim(),
+    brand: g('ap-brand').trim(),
+    set: g('ap-set').trim(),
+    comp: '',
+    variation: g('ap-var').trim(),
+    serial: g('ap-serial').trim(),
+    grade: g('ap-grade').trim(),
+    is_auto: gc('ap-auto'),
+    is_rc: gc('ap-rc'),
+    is_lot: gc('ap-lot'),
+    notes: g('ap-notes').trim(),
+    candidates: []
+  });
+  if (_addPurchaseFromListing) {
+    linkListingTo(_addPurchaseFromListing, newId);
+    _addPurchaseFromListing = '';
+  }
+  closePanel();
+  toast('Added: ' + name.slice(0, 40));
+  render();
+}
+
+function saveListingToInventory(itemId) {
+  var l = null;
+  for (var i = 0; i < activeListings.length; i++) {
+    if (activeListings[i].itemId === itemId) { l = activeListings[i]; break; }
+  }
+  if (!l) return;
+  openAddPurchase({ fromListingId: itemId, name: l.title, img: l.imgUrl, cost: l.price, itemId: l.itemId });
+}
+
+// ─────────────────────────────────────────────
+// MANUAL ADD — SALE
+// ─────────────────────────────────────────────
+function openAddSale() {
+  var typeOpts = ['Soccer','Pokémon','NFL','MLB','Marvel','NBA','Yu-Gi-Oh','Other'].map(function(t){
+    return '<option value="' + t + '">' + t + '</option>';
+  }).join('');
+  openPanel(
+    '<div class="pn-head"><div class="pn-title">Add Sale</div></div>'
+    + '<div class="pn-body">'
+    + '<div style="display:grid;gap:10px">'
+
+    + '<div><label style="font-size:10px;font-family:var(--mono);color:var(--dim);display:block;margin-bottom:3px">SALE TITLE *</label>'
+    + '<input id="as-title" placeholder="e.g. 2023 Panini Prizm Erling Haaland Gold /10" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:var(--r2);font-size:12px;font-family:var(--ui);outline:none">'
+    + '</div>'
+
+    + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">'
+    + '<div><label style="font-size:10px;font-family:var(--mono);color:var(--dim);display:block;margin-bottom:3px">SALE DATE</label>'
+    + '<input id="as-date" type="date" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:var(--r2);font-size:12px;font-family:var(--ui);outline:none">'
+    + '</div>'
+    + '<div><label style="font-size:10px;font-family:var(--mono);color:var(--dim);display:block;margin-bottom:3px">PRICE ($)</label>'
+    + '<input id="as-price" type="number" step="0.01" min="0" placeholder="0.00" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:var(--r2);font-size:12px;font-family:var(--mono);outline:none">'
+    + '</div>'
+    + '<div><label style="font-size:10px;font-family:var(--mono);color:var(--dim);display:block;margin-bottom:3px">QTY</label>'
+    + '<input id="as-qty" type="number" min="1" value="1" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:var(--r2);font-size:12px;font-family:var(--mono);outline:none">'
+    + '</div></div>'
+
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
+    + '<div><label style="font-size:10px;font-family:var(--mono);color:var(--dim);display:block;margin-bottom:3px">TYPE</label>'
+    + '<select id="as-type" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:var(--r2);font-size:12px;font-family:var(--ui);outline:none"><option value="">— select —</option>' + typeOpts + '</select>'
+    + '</div>'
+    + '<div><label style="font-size:10px;font-family:var(--mono);color:var(--dim);display:block;margin-bottom:3px">PLAYER / SUBJECT</label>'
+    + '<input id="as-player" placeholder="e.g. Erling Haaland" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:var(--r2);font-size:12px;font-family:var(--ui);outline:none">'
+    + '</div></div>'
+
+    + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">'
+    + '<div><label style="font-size:10px;font-family:var(--mono);color:var(--dim);display:block;margin-bottom:3px">YEAR</label>'
+    + '<input id="as-year" placeholder="2024" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:var(--r2);font-size:12px;font-family:var(--mono);outline:none">'
+    + '</div>'
+    + '<div><label style="font-size:10px;font-family:var(--mono);color:var(--dim);display:block;margin-bottom:3px">SET</label>'
+    + '<input id="as-set" placeholder="Prizm" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:var(--r2);font-size:12px;font-family:var(--ui);outline:none">'
+    + '</div>'
+    + '<div><label style="font-size:10px;font-family:var(--mono);color:var(--dim);display:block;margin-bottom:3px">GRADE</label>'
+    + '<input id="as-grade" placeholder="PSA 10, Raw..." style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:var(--r2);font-size:12px;font-family:var(--mono);outline:none">'
+    + '</div></div>'
+
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
+    + '<div><label style="font-size:10px;font-family:var(--mono);color:var(--dim);display:block;margin-bottom:3px">VARIATION</label>'
+    + '<input id="as-var" placeholder="Gold Prizm" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:var(--r2);font-size:12px;font-family:var(--ui);outline:none">'
+    + '</div>'
+    + '<div><label style="font-size:10px;font-family:var(--mono);color:var(--dim);display:block;margin-bottom:3px">SERIAL</label>'
+    + '<input id="as-serial" placeholder="/10" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:var(--r2);font-size:12px;font-family:var(--mono);outline:none">'
+    + '</div></div>'
+
+    + '<div><label style="font-size:10px;font-family:var(--mono);color:var(--dim);display:block;margin-bottom:3px">ORDER / RECORD #</label>'
+    + '<input id="as-recnum" placeholder="e.g. eBay order number" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:var(--r2);font-size:12px;font-family:var(--mono);outline:none">'
+    + '</div>'
+
+    + '<button class="btn pri" style="width:100%;margin-top:4px" onclick="saveNewSale()">&#x2714; Add Sale</button>'
+    + '</div></div>'
+  );
+  setTimeout(function(){ var el=document.getElementById('as-title'); if(el) el.focus(); }, 50);
+}
+
+function saveNewSale() {
+  var g = function(id){ var el=document.getElementById(id); return el ? el.value : ''; };
+  var title = g('as-title').trim();
+  if (!title) { toast('Sale title is required'); document.getElementById('as-title').style.borderColor='var(--red)'; return; }
+  var newId = 'MS' + Date.now().toString(36).slice(-5) + Math.floor(Math.random()*999);
+  sales.push({
+    id: newId,
+    title: title,
+    date: g('as-date'),
+    price: parseFloat(g('as-price')) || 0,
+    qty: parseInt(g('as-qty')) || 1,
+    itemNum: '',
+    recordNum: g('as-recnum').trim(),
+    type: g('as-type'),
+    player: g('as-player').trim(),
+    year: g('as-year').trim(),
+    set: g('as-set').trim(),
+    variation: g('as-var').trim(),
+    serial: g('as-serial').trim(),
+    grade: g('as-grade').trim(),
+    is_auto: false,
+    linkedPid: null,
+    candidates: []
+  });
+  closePanel();
+  toast('Sale added: ' + title.slice(0, 40));
+  render();
 }
 
 // ─────────────────────────────────────────────
