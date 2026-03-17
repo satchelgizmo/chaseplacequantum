@@ -1906,7 +1906,8 @@ function renderListings() {
     for (var i = 0; i < activeListings.length; i++) {
       var l = activeListings[i];
       var pp = l.matchedPid ? getP(l.matchedPid) : null;
-      if (l.title.toLowerCase().indexOf(q) >= 0 || (pp && pp.name.toLowerCase().indexOf(q) >= 0)) items.push(l);
+      if (pp && !pp.id) pp = null;
+      if (l.title.toLowerCase().indexOf(q) >= 0 || (pp && pp.name && pp.name.toLowerCase().indexOf(q) >= 0)) items.push(l);
     }
   }
   var totalVal = 0, totalWatch = 0, matchedCount = 0;
@@ -1944,6 +1945,7 @@ function renderListings() {
   for (var i = 0; i < items.length; i++) {
     var l = items[i];
     var pp = l.matchedPid ? getP(l.matchedPid) : null;
+    if (pp && !pp.id) pp = null; // matchedPid pointed to a deleted purchase
     var netEst = pp ? netProfit(l.price, l.qty || 1, pp.cost) : null;
     var wCls = l.watchers >= 5 ? 'g' : l.watchers >= 1 ? 'o' : '';
     var matchCell = (pp
