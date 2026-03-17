@@ -468,7 +468,7 @@ function editableTags(type, id, o){
 }
 function tagDel(type, id, field){
   const blank=(field==='is_auto'||field==='is_rc')?false:'';
-  if(type==='p'){editP(id,{[field]:blank});showPurchase(id);}
+  if(type==='p'){editP(id,{[field]:blank});if(page==='card')render();else showPurchase(id);}
   else{editS(id,{[field]:blank});showSale(id);}
 }
 function tagEditStart(spanEl, type, id, field){
@@ -484,7 +484,7 @@ function tagEditStart(spanEl, type, id, field){
   function save(){
     if(done)return;done=true;
     const v=inp.value.trim().replace(/^\/+/,'');
-    if(type==='p'){editP(id,{[field]:v});showPurchase(id);}
+    if(type==='p'){editP(id,{[field]:v});if(page==='card')render();else showPurchase(id);}
     else{editS(id,{[field]:v});showSale(id);}
   }
   inp.addEventListener('blur',save);
@@ -514,7 +514,7 @@ function _tagCommit(type, id){
   const isBool=field==='is_auto'||field==='is_rc';
   const val=isBool?true:(document.getElementById('taf-val')?.value.trim().replace(/^\/+/,'')||'');
   if(!isBool&&!val)return;
-  if(type==='p'){editP(id,{[field]:val});showPurchase(id);}
+  if(type==='p'){editP(id,{[field]:val});if(page==='card')render();else showPurchase(id);}
   else{editS(id,{[field]:val});showSale(id);}
 }
 function scoreClass(sc){return sc>=70?'hi':sc>=50?'med':'lo';}
@@ -1105,6 +1105,17 @@ function removeCardImg(pid,idx){
 
 function setCardPhotoIdx(idx){_cardPhotoIdx=idx;render();}
 
+function saveCardMeta(pid){
+  const nameEl=document.getElementById('cd-name-'+pid);
+  const typeEl=document.getElementById('cd-type-'+pid);
+  const newName=(nameEl?.value||'').trim();
+  const newType=typeEl?.value||'';
+  if(!newName)return;
+  editP(pid,{name:newName,type:newType});
+  render();
+  toast('Saved ✓');
+}
+
 function renderCardDetail(pid){
   const p=getP(pid);
   const sp=soldPids().has(pid);
@@ -1148,7 +1159,23 @@ function renderCardDetail(pid){
   const editing=_panelEditMode['main'];
   const editingFin=_panelEditMode['fin'];
 
+  const typeList=['Soccer','Pokémon','NFL','MLB','Marvel','NBA','Yu-Gi-Oh','Other'];
+  const typeOpts=typeList.map(function(t){return '<option value="'+t+'"'+(p.type===t?' selected':'')+'>'+t+'</option>';}).join('');
+
   let info='';
+  // ── Name + Category (always visible, auto-saves) ──
+  info+='<div class="ps" style="margin-bottom:16px">'
+    +'<div class="ps-title">Card Name &amp; Category</div>'
+    +'<div style="display:grid;gap:8px">'
+    +'<div><label style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:.8px;text-transform:uppercase;display:block;margin-bottom:4px">CARD NAME</label>'
+    +'<input id="cd-name-'+pid+'" value="'+esc(p.name)+'" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:var(--r2);font-size:13px;font-weight:600;font-family:var(--ui);outline:none" onblur="saveCardMeta(\''+esc(pid)+'\')" onkeydown="if(event.key===\'Enter\')this.blur()">'
+    +'</div>'
+    +'<div><label style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:.8px;text-transform:uppercase;display:block;margin-bottom:4px">CATEGORY</label>'
+    +'<select id="cd-type-'+pid+'" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:var(--r2);font-size:12px;font-family:var(--ui);outline:none" onchange="saveCardMeta(\''+esc(pid)+'\')">'
+    +'<option value="">— select —</option>'+typeOpts+'</select>'
+    +'</div>'
+    +'</div></div>';
+
   // Badges
   info+='<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:14px">';
   info+=typeBadge(p.type);
