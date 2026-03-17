@@ -296,6 +296,7 @@ function editP(pid, fields) { purchaseEdits[pid] = {...(purchaseEdits[pid]||{}),
 function editS(sid, fields) { saleEdits[sid] = {...(saleEdits[sid]||{}), ...fields}; updateSidebar(); }
 
 let page = 'dash', pgNum = {};
+let currentCardPid = '', _cardPhotoIdx = 0;
 let sortState = { inv: {col:'date',dir:-1}, buys: {col:'date',dir:-1}, sells: {col:'date',dir:-1}, pnl: {col:'pnl',dir:1}, imp: {col:'date',dir:-1} };
 // persist market lookups: pid -> {avgPrice, lowPrice, highPrice, confidence, recentSales, ts}
 let valueLookups = JSON.parse(localStorage.getItem('cb_lookups')||'{}');
@@ -547,6 +548,7 @@ function render(){
   else if(page==='sells') m.innerHTML=renderSells();
   else if(page==='listings') m.innerHTML=renderListings();
   else if(page==='imp')   m.innerHTML=renderImport();
+  else if(page==='card')  m.innerHTML=renderCardDetail(currentCardPid);
   updateSidebar();
   // Restore focus to search input if it was focused
   if(savedId){const el=document.getElementById(savedId);if(el){el.focus();try{if(savedSel0!==null)el.setSelectionRange(savedSel0,savedSel1);}catch(e){}}}
@@ -681,7 +683,7 @@ function renderInv(){
           const mktAge=vl?.ts?Math.floor((Date.now()-vl.ts)/86400000):null;
           const mktHtml=vl?`<div class="mkt ${mktDiff>=0?'up':'dn'}">${f$(vl.avgPrice)}</div><div class="mkt-badge ${mktAge<3?'fresh':'stale'}">${mktDiff>=0?'+':''}${f$(mktDiff)} · ${mktAge}d ago</div>`:`<span style="color:var(--faint);font-size:11px;font-family:var(--mono)">—</span>`;
           return`
-        <tr onclick="showPurchase('${p.id}')" style="cursor:pointer" class="${invSelected.has(p.id)?'highlight':''}">
+        <tr onclick="showCardPage('${p.id}')" style="cursor:pointer" class="${invSelected.has(p.id)?'highlight':''}">
           <td style="padding:5px 6px" onclick="event.stopPropagation()"><input type="checkbox" id="inv-cb-${p.id}" ${invSelected.has(p.id)?'checked':''} onchange="toggleInvSelect('${p.id}',this.checked)" style="cursor:pointer;accent-color:var(--gold)"></td>
           <td class="cic">${thumb(p.img)}</td>
           <td><div class="cn">${esc(p.name)}${activeListings.some(function(l){return l.matchedPid===p.id;})?'<span style="display:inline-block;font-size:8px;font-family:var(--mono);background:rgba(46,204,138,.15);color:var(--green);border:1px solid rgba(46,204,138,.35);border-radius:3px;padding:1px 5px;vertical-align:middle;margin-left:4px">LISTED</span>':''}</div><div class="cm">${esc(p.seller)} · ${esc(p.orderNum)}</div>
@@ -693,7 +695,7 @@ function renderInv(){
           <td><span class="pr o" style="font-weight:700">${f$(p.cost)}</span></td>
           <td>${mktHtml}</td>
           <td onclick="event.stopPropagation()" style="white-space:nowrap">
-            <button class="btn xs" onclick="showPurchase('${p.id}')">✏ Edit</button>
+            <button class="btn xs" onclick="showCardPage('${p.id}')">✏ Edit</button>
             <button class="btn xs" style="margin-left:3px" onclick="lookupCard('${p.id}')">💡</button>
             <button class="btn xs" style="margin-left:3px" onclick="buildListing('${p.id}')">📝</button>
           </td>
@@ -1021,7 +1023,7 @@ function buildFinEditForm(pid){
 
 function togglePanelEdit(pid, section){
   _panelEditMode[section] = !_panelEditMode[section];
-  // Rebuild the whole panel so the edit-btn label updates
+  if(page==='card'){render();return;}
   document.getElementById('pn').innerHTML = buildPurchasePanel(pid);
 }
 
@@ -1046,8 +1048,9 @@ function savePurchaseFields(pid){
     notes:     g(`ef-notes-${pid}`),
   });
   _panelEditMode['main'] = false;
-  document.getElementById('pn').innerHTML = buildPurchasePanel(pid);
   toast('Card info saved ✓');
+  if(page==='card'){render();return;}
+  document.getElementById('pn').innerHTML = buildPurchasePanel(pid);
   render();
 }
 
@@ -1060,9 +1063,143 @@ function saveFinFields(pid){
     date:     g(`ef-date-${pid}`),
   });
   _panelEditMode['fin'] = false;
-  document.getElementById('pn').innerHTML = buildPurchasePanel(pid);
   toast('Financials saved ✓');
+  if(page==='card'){render();return;}
+  document.getElementById('pn').innerHTML = buildPurchasePanel(pid);
   render();
+}
+
+// ─────────────────────────────────────────────
+// CARD DETAIL PAGE
+// ─────────────────────────────────────────────
+function showCardPage(pid){
+  currentCardPid=pid; _cardPhotoIdx=0; _panelEditMode={};
+  page='card';
+  document.querySelectorAll('.ni').forEach(el=>el.classList.remove('on'));
+  const ni=document.getElementById('ni-inv'); if(ni)ni.classList.add('on');
+  render();
+}
+
+function getImgs(pid){
+  const p=getP(pid);
+  const extra=(purchaseEdits[pid]?.imgs)||[];
+  return [p.img,...extra].filter(Boolean);
+}
+
+function addCardImg(pid){
+  const el=document.getElementById('cd-new-img');
+  const val=(el?.value||'').trim(); if(!val)return;
+  const existing=(purchaseEdits[pid]?.imgs)||[];
+  editP(pid,{imgs:[...existing,val]});
+  _cardPhotoIdx=getImgs(pid).length-1;
+  render();
+}
+
+function removeCardImg(pid,idx){
+  let imgs=getImgs(pid);
+  imgs.splice(idx,1);
+  editP(pid,{img:imgs[0]||'',imgs:imgs.slice(1)});
+  if(_cardPhotoIdx>=imgs.length)_cardPhotoIdx=Math.max(0,imgs.length-1);
+  render();
+}
+
+function setCardPhotoIdx(idx){_cardPhotoIdx=idx;render();}
+
+function renderCardDetail(pid){
+  const p=getP(pid);
+  const sp=soldPids().has(pid);
+  const matched=salesForPid(pid);
+  const rev=matched.reduce((a,s)=>a+getS(s.id).price*(getS(s.id).qty||1),0);
+  const totalFee=matched.reduce((a,s)=>{const ss=getS(s.id);return a+ebayFee(ss.price,ss.qty||1);},0);
+  const pnl=sp?rev-p.cost:null;
+  const netPnl=sp?rev-p.cost-totalFee:null;
+  const imgs=getImgs(pid);
+  const bigImg=imgs[_cardPhotoIdx]||'';
+
+  // ── Gallery ──────────────────────────────
+  let gal='<div style="background:var(--surf2);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;position:sticky;top:72px">';
+  // Big photo
+  gal+='<div style="aspect-ratio:3/4;max-height:400px;display:flex;align-items:center;justify-content:center;background:var(--surf3)">';
+  if(bigImg){
+    gal+='<img src="'+esc(bigImg)+'" style="max-width:100%;max-height:100%;object-fit:contain" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">';
+    gal+='<div style="display:none;align-items:center;justify-content:center;font-size:52px;width:100%;height:100%">🃏</div>';
+  } else {
+    gal+='<div style="font-size:52px;display:flex;align-items:center;justify-content:center;width:100%;height:100%">🃏</div>';
+  }
+  gal+='</div>';
+  // Thumbnails
+  if(imgs.length>0){
+    gal+='<div style="display:flex;gap:5px;padding:8px;overflow-x:auto;background:var(--surf2)">';
+    imgs.forEach(function(url,i){
+      gal+='<div onclick="setCardPhotoIdx('+i+')" style="flex-shrink:0;width:54px;height:54px;border-radius:4px;overflow:hidden;cursor:pointer;border:2px solid '+(i===_cardPhotoIdx?'var(--gold)':'var(--border)')+';position:relative;background:var(--surf3)">';
+      gal+='<img src="'+esc(url)+'" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display=\'none\'">';
+      gal+='<button onclick="event.stopPropagation();removeCardImg(\''+esc(pid)+'\','+i+')" style="position:absolute;top:1px;right:1px;background:rgba(0,0,0,.7);border:none;color:#fff;font-size:8px;line-height:1;padding:2px 3px;border-radius:2px;cursor:pointer" title="Remove">✕</button>';
+      gal+='</div>';
+    });
+    gal+='</div>';
+  }
+  // Add photo
+  gal+='<div style="padding:8px;border-top:1px solid var(--border);display:flex;gap:6px">';
+  gal+='<input id="cd-new-img" placeholder="Paste photo URL…" style="flex:1;background:var(--surf);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:var(--r2);font-size:11px;font-family:var(--mono);outline:none" onkeydown="if(event.key===\'Enter\')addCardImg(\''+esc(pid)+'\')">';
+  gal+='<button class="btn xs" onclick="addCardImg(\''+esc(pid)+'\')">+ Photo</button>';
+  gal+='</div></div>';
+
+  // ── Info sections ─────────────────────────
+  const editing=_panelEditMode['main'];
+  const editingFin=_panelEditMode['fin'];
+
+  let info='';
+  // Badges
+  info+='<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:14px">';
+  info+=typeBadge(p.type);
+  info+=sp?'<span class="sb sold">SOLD</span>':'<span class="sb stock">IN STOCK</span>';
+  if(p.grade) info+='<span class="pt grade">'+esc(p.grade)+'</span>';
+  if(p.is_lot) info+='<span class="pt" style="color:var(--orange)">LOT×'+p.lotQty+'</span>';
+  if(p.is_auto) info+='<span class="pt">AUTO</span>';
+  if(p.is_rc)  info+='<span class="pt">RC</span>';
+  info+='</div>';
+
+  // Card info
+  info+='<div class="ps"><div class="ps-title">Card Info'
+    +'<button class="edit-btn" onclick="togglePanelEdit(\''+pid+'\',\'main\')">'+(editing?'✕ Cancel':'✏ Edit')+'</button></div>'
+    +'<div id="pf-main-'+pid+'">'+(editing?buildPurchaseEditForm(pid):buildPurchaseReadView(pid))+'</div></div>';
+
+  // Financials
+  info+='<div class="ps"><div class="ps-title">Financials'
+    +'<button class="edit-btn" onclick="togglePanelEdit(\''+pid+'\',\'fin\')">'+(editingFin?'✕ Cancel':'✏ Edit')+'</button></div>'
+    +'<div id="pf-fin-'+pid+'">'+(editingFin?buildFinEditForm(pid):buildFinReadView(pid,pnl,rev,totalFee,netPnl))+'</div></div>';
+
+  // Linked sales
+  info+='<div class="ps"><div class="ps-title">Linked Sales ('+matched.length+')</div>';
+  if(matched.length){
+    matched.forEach(function(s){
+      const ss=getS(s.id);
+      info+='<div class="mc active"><div class="mc-info"><div class="mc-name">'+esc(ss.title)+'</div>'
+        +'<div class="mc-detail">'+esc(ss.date)+' · '+f$(ss.price)+' × '+(ss.qty||1)+' = '+f$(ss.price*(ss.qty||1))+'</div></div>'
+        +'<button class="btn xs red" onclick="unlinkSale(\''+s.id+'\');render()">unlink</button></div>';
+    });
+  } else {
+    info+='<div style="color:var(--faint);font-size:12px;font-family:var(--mono)">No sales linked.</div>';
+  }
+  info+='</div>';
+
+  // Actions
+  info+='<div class="ps"><div class="ps-title">Actions</div>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap">'
+    +'<button class="btn pri" onclick="lookupCard(\''+pid+'\')">💡 Value Lookup</button>'
+    +'<button class="btn" onclick="buildListing(\''+pid+'\')">📝 Build Listing</button>'
+    +(p.itemId?'<a href="https://www.ebay.com/itm/'+esc(p.itemId)+'" target="_blank" class="btn" style="text-decoration:none">🔗 eBay</a>':'')
+    +'</div></div>';
+
+  return '<div class="topbar">'
+    +'<button class="btn ghost" style="flex-shrink:0" onclick="nav(\'inv\')">← Inventory</button>'
+    +'<div class="pg-title" style="font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(p.name)+'</div>'
+    +'</div>'
+    +'<div class="content">'
+    +'<div style="display:grid;grid-template-columns:300px 1fr;gap:24px;align-items:start">'
+    +'<div>'+gal+'</div>'
+    +'<div>'+info+'</div>'
+    +'</div></div>';
 }
 
 // ─────────────────────────────────────────────
