@@ -942,7 +942,7 @@ function buildPurchaseReadView(pid){
   const p=getP(pid);
   return`<div style="margin-bottom:12px">${editableTags('p',pid,p)}</div>
   <div class="field-grid">
-    <div class="field-item"><label>Player / Subject</label><div class="field-val">${esc(p.player||'—')}</div></div>
+    <div class="field-item"><label>Player / Subject</label><input class="field-input" id="cd-player-${pid}" value="${esc(p.player||'')}" placeholder="e.g. Lautaro Martinez" style="color:var(--blue);font-weight:600" onblur="savePlayerField('${pid}')" onkeydown="if(event.key==='Enter')this.blur()"></div>
     <div class="field-item"><label>Type</label><div class="field-val">${typeBadge(p.type)}</div></div>
     ${p.notes?`<div class="field-item" style="grid-column:1/-1"><label>Notes</label><div class="field-val" style="font-size:12px;color:var(--dim)">${esc(p.notes)}</div></div>`:''}
   </div>`;
@@ -1115,6 +1115,15 @@ function saveCardMeta(pid){
   // Update topbar title in-place so re-render (which destroys DOM mid-click) isn't needed
   const titleEl=document.getElementById('cd-topbar-title');
   if(titleEl)titleEl.textContent=newName;
+  updateSidebar();
+  toast('Saved ✓');
+}
+
+function savePlayerField(pid){
+  const el=document.getElementById('cd-player-'+pid);
+  if(!el)return;
+  const val=el.value.trim();
+  editP(pid,{player:val});
   updateSidebar();
   toast('Saved ✓');
 }
