@@ -256,6 +256,7 @@ thead th.sh:hover{color:var(--text)}
     <div class="nav">
       <div class="ni on" id="ni-dash" onclick="nav('dash')"><span class="ic">📊</span><span>Dashboard</span></div>
       <div class="ni" id="ni-inv" onclick="nav('inv')"><span class="ic">📦</span><span>Inventory</span></div>
+      <div class="ni" id="ni-buys" onclick="nav('buys')"><span class="ic">🛒</span><span>Purchases</span></div>
       <div class="ni" id="ni-sells" onclick="nav('sells')"><span class="ic">💰</span><span>Sales Hub</span></div>
       <div class="ni" id="ni-listings" onclick="nav('listings')"><span class="ic">&#x1F3F7;</span><span>Active Listings</span></div>
       <div class="ni" id="ni-imp" onclick="nav('imp')"><span class="ic">📥</span><span>Import</span></div>
@@ -546,6 +547,7 @@ function render(){
   const savedSel1=ae?.selectionEnd??null;
   if(page==='dash')  m.innerHTML=renderDash();
   else if(page==='inv')   m.innerHTML=renderInv();
+  else if(page==='buys')  m.innerHTML=renderBuys();
   else if(page==='sells') m.innerHTML=renderSells();
   else if(page==='listings') m.innerHTML=renderListings();
   else if(page==='imp')   m.innerHTML=renderImport();
@@ -708,6 +710,145 @@ function renderInv(){
 }
 
 // ─────────────────────────────────────────────
+
+// ─────────────────────────────────────────────
+// PURCHASES
+// ─────────────────────────────────────────────
+let _purchaseCsvState = ''; // 'pending' | 'done' | ''
+function renderBuys(){
+  const sp=soldPids();
+  const f=filt.buys;
+  let items=purchases.map(p=>getP(p.id));
+  if(f.q){const q=f.q.toLowerCase();items=items.filter(p=>p.name.toLowerCase().includes(q)||(p.player||'').toLowerCase().includes(q));}
+  if(f.type) items=items.filter(p=>p.type===f.type);
+  items=applySortP(items,'buys');
+  const pn=pgNum.buys||0,total=items.length;
+  const page_items=items.slice(pn*PS,(pn+1)*PS);
+  return`
+  <div class="topbar"><div class="pg-title">Purchases <span class="pg-sub">${total.toLocaleString()} total · ${f$(items.reduce((a,p)=>a+p.cost,0))}</span></div>
+    <button class="btn sm" onclick="var a=document.getElementById('buys-csv-area');if(a)a.style.display=a.style.display==='none'?'block':'none'">&#x1F4CB; Import CSV</button>
+  </div>
+  <div class="content">
+    <div id="buys-csv-area" style="display:none;background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:14px">
+      <div style="font-size:13px;font-weight:700;margin-bottom:6px">Import Purchases from CSV</div>
+      <div style="font-size:11px;color:var(--dim);font-family:var(--mono);margin-bottom:10px;line-height:1.8">
+        CSV must have a header row. Supported columns (case-insensitive):<br>
+        <code style="color:var(--gold)">name</code> (required) · <code style="color:var(--gold)">cost</code> / <code style="color:var(--gold)">price</code> · <code style="color:var(--gold)">date</code> · <code style="color:var(--gold)">player</code> / <code style="color:var(--gold)">subject</code> · <code style="color:var(--gold)">seller</code> · <code style="color:var(--gold)">type</code> · <code style="color:var(--gold)">year</code> · <code style="color:var(--gold)">set</code> · <code style="color:var(--gold)">grade</code> · <code style="color:var(--gold)">notes</code>
+      </div>
+      <textarea id="buys-csv-ta" rows="6" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:11px;padding:10px;border-radius:var(--r2);outline:none;resize:vertical" placeholder="name,cost,date,player,seller,type&#10;2024 Topps Chrome Messi Gold /10,85.00,Mar 1 2024,Lionel Messi,eBay,Soccer"></textarea>
+      <div style="margin-top:8px;display:flex;gap:8px">
+        <button class="btn pri sm" onclick="importPurchasesCSV()">&#x2B06; Import</button>
+        <button class="btn ghost sm" onclick="document.getElementById('buys-csv-ta').value=''">Clear</button>
+      </div>
+    </div>
+    <div class="fb">
+      <div class="sw"><span class="si">&#x1F50D;</span><input id="search-buys" value="${esc(f.q)}" placeholder="Search purchases…" oninput="filt.buys.q=this.value;pgNum.buys=0;render()"></div>
+      <select onchange="filt.buys.type=this.value;pgNum.buys=0;render()">
+        <option value="">All Types</option>
+        ${['Soccer','Pokémon','NFL','MLB','Marvel','NBA','Yu-Gi-Oh'].map(t=>`<option value="${t}" ${f.type===t?'selected':''}>${t}</option>`).join('')}
+      </select>
+      <button class="btn sm" onclick="openAddPurchase()">+ Add</button>
+    </div>
+    <div class="tw"><table>
+      <thead><tr><th></th>
+        <th onclick="setSort('buys','name')" class="sh">CARD${sortIcon('buys','name')}</th>
+        <th onclick="setSort('buys','player')" class="sh">PARSED${sortIcon('buys','player')}</th>
+        <th onclick="setSort('buys','type')" class="sh">TYPE${sortIcon('buys','type')}</th>
+        <th onclick="setSort('buys','date')" class="sh">DATE${sortIcon('buys','date')}</th>
+        <th onclick="setSort('buys','cost')" class="sh">COST${sortIcon('buys','cost')}</th>
+        <th>STATUS</th>
+        <th onclick="setSort('buys','pnl')" class="sh">NET P&L${sortIcon('buys','pnl')}</th>
+      </tr></thead>
+      <tbody>${page_items.map(p=>{
+        const isSold=sp.has(p.id);
+        const ss=salesForPid(p.id);
+        const rev=ss.reduce((a,s)=>a+getS(s.id).price*(getS(s.id).qty||1),0);
+        const totalFees=ss.reduce((a,s)=>a+ebayFee(getS(s.id).price,getS(s.id).qty||1),0);
+        const netPnl=rev-p.cost-totalFees;
+        return`<tr onclick="showPurchase('${p.id}')" style="cursor:pointer">
+          <td class="cic">${thumb(p.img)}</td>
+          <td><div class="cn">${esc(p.name)}</div><div class="cm">${esc(p.date)} · ${esc(p.seller)}</div></td>
+          <td>${parsedTags(p,true)}</td>
+          <td>${typeBadge(p.type)}</td>
+          <td><span class="pr d">${esc(p.date)}</span></td>
+          <td><span class="pr o">${f$(p.cost)}</span></td>
+          <td>${isSold?`<span class="sb sold">SOLD</span>`:`<span class="sb stock">IN STOCK</span>`}</td>
+          <td>${isSold?`<span class="pr ${netPnl>=0?'g':'r'}">${f$(netPnl)}</span><div style="font-size:9px;color:var(--faint);font-family:var(--mono)">after fees</div>`:`<span class="pr d">—</span>`}</td>
+        </tr>`;}).join('')}
+      </tbody>
+    </table></div>
+    ${renderPag(total,pn,'buys')}
+  </div>`;
+}
+
+function importPurchasesCSV() {
+  var ta = document.getElementById('buys-csv-ta');
+  if (!ta || !ta.value.trim()) { toast('Paste CSV data first'); return; }
+  var text = ta.value.trim();
+  var lines = text.split(/\r?\n/).filter(function(l){ return l.trim(); });
+  if (lines.length < 2) { toast('CSV needs a header row and at least one data row'); return; }
+  // Parse header
+  var header = _csvSplitRow(lines[0]).map(function(h){ return h.toLowerCase().trim(); });
+  var col = function(names) {
+    for (var i = 0; i < names.length; i++) { var idx = header.indexOf(names[i]); if (idx >= 0) return idx; }
+    return -1;
+  };
+  var iName   = col(['name','title','card','description','item title']);
+  var iCost   = col(['cost','price','paid','amount','purchase price']);
+  var iDate   = col(['date','purchase date','order date','bought']);
+  var iPlayer = col(['player','subject','athlete','person']);
+  var iSeller = col(['seller','source','vendor','from']);
+  var iType   = col(['type','sport','category']);
+  var iYear   = col(['year']);
+  var iSet    = col(['set','series']);
+  var iGrade  = col(['grade','grading']);
+  var iNotes  = col(['notes','note','comments']);
+  var iImg    = col(['img','image','image url','photo']);
+  if (iName < 0) { toast('CSV must have a "name" column'); return; }
+  var added = 0, skipped = 0;
+  for (var r = 1; r < lines.length; r++) {
+    var cells = _csvSplitRow(lines[r]);
+    var name = (iName >= 0 ? cells[iName] : '').trim();
+    if (!name) { skipped++; continue; }
+    var newId = 'P' + String(Date.now()).slice(-6) + r;
+    purchases.push({
+      id: newId,
+      name: name,
+      date: (iDate >= 0 ? cells[iDate] : '').trim(),
+      cost: parseFloat(iCost >= 0 ? cells[iCost] : '') || 0,
+      costRaw: parseFloat(iCost >= 0 ? cells[iCost] : '') || 0,
+      player: (iPlayer >= 0 ? cells[iPlayer] : '').trim(),
+      seller: (iSeller >= 0 ? cells[iSeller] : '').trim(),
+      type: (iType >= 0 ? cells[iType] : '').trim(),
+      year: (iYear >= 0 ? cells[iYear] : '').trim(),
+      set: (iSet >= 0 ? cells[iSet] : '').trim(),
+      grade: (iGrade >= 0 ? cells[iGrade] : '').trim(),
+      notes: (iNotes >= 0 ? cells[iNotes] : '').trim(),
+      img: (iImg >= 0 ? cells[iImg] : '').trim(),
+      itemId: '', orderNum: '', qty: 1, lotQty: 1,
+      is_rc: false, is_auto: false, is_lot: false,
+      candidates: []
+    });
+    added++;
+  }
+  persist();
+  ta.value = '';
+  document.getElementById('buys-csv-area').style.display = 'none';
+  toast('Imported ' + added + ' purchase' + (added !== 1 ? 's' : '') + (skipped ? ' (' + skipped + ' skipped)' : ''));
+  render();
+}
+
+function _csvSplitRow(line) {
+  var cells = [], cur = '', inQ = false;
+  for (var i = 0; i < line.length; i++) {
+    var c = line[i];
+    if (c === '"') { inQ = !inQ; }
+    else if (c === ',' && !inQ) { cells.push(cur); cur = ''; }
+    else { cur += c; }
+  }
+  cells.push(cur);
+  return cells;
+}
 
 // ─────────────────────────────────────────────
 // SALES
@@ -1863,49 +2004,107 @@ function linkListingTo(itemId, pid) {
 }
 
 let _relinkId = '', _relinkQ = '';
+
+function _topListingCandidates(itemId) {
+  var listing = null;
+  for (var i = 0; i < activeListings.length; i++) { if (activeListings[i].itemId === itemId) { listing = activeListings[i]; break; } }
+  if (!listing) return [];
+  var sp = soldPids();
+  var t = listing.title.toLowerCase();
+  var scored = [];
+  for (var i = 0; i < purchases.length; i++) {
+    var p = purchases[i];
+    if (sp.has(p.id)) continue;
+    var pp = getP(p.id);
+    var n = pp.name.toLowerCase();
+    var words = n.split(/\s+/).filter(function(w){ return w.length > 3; });
+    if (!words.length) continue;
+    var hits = 0;
+    for (var j = 0; j < words.length; j++) { if (t.indexOf(words[j]) >= 0) hits++; }
+    var score = hits / words.length;
+    if (score >= 0.4) scored.push({pid: p.id, score: score});
+  }
+  scored.sort(function(a, b){ return b.score - a.score; });
+  return scored.slice(0, 5);
+}
+
 function openRelinkListing(itemId) {
   _relinkId = itemId;
   _relinkQ = '';
-  _showRelinkPanel();
-}
-function _showRelinkPanel() {
-  var sp = soldPids();
-  var q = _relinkQ.toLowerCase();
   var cur = null;
   for (var i = 0; i < activeListings.length; i++) { if (activeListings[i].itemId === _relinkId) { cur = activeListings[i].matchedPid; break; } }
-  var invItems = [];
+  var unlinkBtn = cur ? '<button class="btn red" style="width:100%;margin-bottom:10px;font-size:11px" id="relink-listing-unlink" onclick="linkListingTo(\'' + esc(_relinkId) + '\',null);closePanel();render()">&#x2715; Unlink current match</button>' : '';
+  var cands = _topListingCandidates(itemId);
+  var topSection = '';
+  if (cands.length) {
+    var topRows = '';
+    for (var i = 0; i < cands.length; i++) {
+      var cp = getP(cands[i].pid);
+      if (!cp || !cp.name) continue;
+      var isCur = cp.id === cur;
+      topRows += '<div class="mc ' + (isCur ? 'active' : 'candidate') + '" style="cursor:pointer" onclick="linkListingTo(\'' + esc(_relinkId) + '\',\'' + cp.id + '\');closePanel();render()">'
+        + (cp.img ? '<img class="mc-img" src="' + esc(cp.img) + '" onerror="this.style.display=\'none\'">' : '')
+        + '<div class="mc-info"><div class="mc-name">' + esc(cp.name) + '</div>'
+        + '<div class="mc-detail">' + f$(cp.cost) + ' &middot; ' + esc(cp.date) + '</div></div>'
+        + '<div style="text-align:right;flex-shrink:0">'
+        + '<div class="mc-score ' + scoreClass(Math.round(cands[i].score*100)) + '">' + scoreLabel(Math.round(cands[i].score*100)) + '</div>'
+        + (!isCur ? '<button class="btn xs" style="margin-top:4px">Link</button>' : '<span style="font-size:10px;color:var(--green)">&#x2713; linked</span>')
+        + '</div></div>';
+    }
+    if (topRows) topSection = '<div class="ps"><div class="ps-title">Top Candidates</div>' + topRows + '</div>';
+  }
+  openPanel(
+    '<div class="pn-head"><div class="pn-title">Link to Inventory Card</div><button class="pn-close" onclick="closePanel()">&#x2715;</button></div>'
+    + '<div class="pn-body">'
+    + '<div style="font-size:11px;font-family:var(--mono);color:var(--dim);margin-bottom:10px">Pick the inventory card this listing belongs to</div>'
+    + unlinkBtn
+    + topSection
+    + '<div class="ps"><div class="ps-title">Search All Inventory</div>'
+    + '<div class="fb" style="margin-bottom:8px"><div class="sw" style="flex:1"><span class="si">&#x1F50D;</span>'
+    + '<input id="relink-listing-q" placeholder="Search name, player..." oninput="_relinkQ=this.value;_updateRelinkListingResults()">'
+    + '</div></div>'
+    + '<div id="relink-listing-results"></div>'
+    + '</div>'
+    + '</div>'
+  );
+  var qEl = document.getElementById('relink-listing-q');
+  if (qEl) { qEl.focus(); }
+  _updateRelinkListingResults();
+}
+
+function _updateRelinkListingResults() {
+  var el = document.getElementById('relink-listing-results');
+  if (!el) return;
+  var cur = null;
+  for (var i = 0; i < activeListings.length; i++) { if (activeListings[i].itemId === _relinkId) { cur = activeListings[i].matchedPid; break; } }
+  var sp = soldPids();
+  var q = _relinkQ.toLowerCase().trim();
+  if (!q) { el.innerHTML = '<div style="color:var(--faint);font-size:12px;font-family:var(--mono)">Type to search…</div>'; return; }
+  var results = [];
   for (var i = 0; i < purchases.length; i++) {
     if (sp.has(purchases[i].id)) continue;
     var pp = getP(purchases[i].id);
-    if (!q || pp.name.toLowerCase().indexOf(q) >= 0 || (pp.player||'').toLowerCase().indexOf(q) >= 0) invItems.push(pp);
+    if (pp.name.toLowerCase().indexOf(q) >= 0 || (pp.player||'').toLowerCase().indexOf(q) >= 0
+        || (pp.set||'').toLowerCase().indexOf(q) >= 0 || (pp.year||'').indexOf(q) >= 0) {
+      results.push(pp);
+    }
+    if (results.length >= 25) break;
   }
+  if (!results.length) { el.innerHTML = '<div style="color:var(--faint);font-size:12px;font-family:var(--mono)">No cards found</div>'; return; }
   var rows = '';
-  for (var i = 0; i < invItems.length; i++) {
-    var p = invItems[i];
+  for (var i = 0; i < results.length; i++) {
+    var p = results[i];
     var isCur = p.id === cur;
-    var bg = isCur ? 'rgba(245,200,66,.06)' : 'var(--surf2)';
-    var border = isCur ? 'var(--gold)' : 'var(--border)';
-    rows += '<div onclick="linkListingTo(\'' + esc(_relinkId) + '\',\'' + p.id + '\');closePanel();render()" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:var(--r2);border:1px solid ' + border + ';background:' + bg + ';cursor:pointer;margin-bottom:6px" onmouseover="this.style.background=\'var(--surf3)\'" onmouseout="this.style.background=\'' + bg + '\'">'
-      + thumb(p.img, 'ct')
-      + '<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(p.name) + '</div>'
-      + '<div style="font-size:10px;font-family:var(--mono);color:var(--dim)">' + f$(p.cost) + ' &middot; ' + esc(p.date) + '</div></div>'
-      + (isCur ? '<span style="font-size:9px;font-family:var(--mono);color:var(--gold);border:1px solid var(--gold);border-radius:3px;padding:1px 5px">current</span>' : '')
-      + '</div>';
+    rows += '<div class="sr-item ' + (isCur ? 'linked-item' : '') + '">'
+      + (p.img ? '<img class="sr-img" src="' + esc(p.img) + '" onerror="this.style.display=\'none\'">' : '<div class="sr-img" style="display:flex;align-items:center;justify-content:center;font-size:14px">&#x1F0CF;</div>')
+      + '<div class="sr-info"><div class="sr-name">' + esc(p.name) + '</div>'
+      + '<div class="sr-meta">' + esc(p.date) + ' &middot; ' + f$(p.cost) + '</div></div>'
+      + '<div class="sr-actions">'
+      + (isCur ? '<button class="btn xs red" onclick="linkListingTo(\'' + esc(_relinkId) + '\',null);closePanel();render()">Unlink</button>'
+               : '<button class="btn xs" onclick="linkListingTo(\'' + esc(_relinkId) + '\',\'' + p.id + '\');closePanel();render()">Link</button>')
+      + '</div></div>';
   }
-  if (!rows) rows = '<div style="color:var(--faint);font-family:var(--mono);font-size:11px;padding:16px 0;text-align:center">No cards found</div>';
-  var unlinkBtn = cur ? '<button class="btn red" style="width:100%;margin-bottom:10px;font-size:11px" onclick="linkListingTo(\'' + esc(_relinkId) + '\',null);closePanel();render()">&#x2715; Unlink current match</button>' : '';
-  openPanel(
-    '<div class="pn-head"><div class="pn-title">Link to Inventory Card</div></div>'
-    + '<div class="pn-body">'
-    + '<div style="font-size:11px;font-family:var(--mono);color:var(--dim);margin-bottom:10px">Pick the inventory card this listing belongs to</div>'
-    + '<div class="sw" style="margin-bottom:10px"><span class="si">&#x1F50D;</span>'
-    + '<input id="relink-listing-q" value="' + esc(_relinkQ) + '" placeholder="Search name, player..." style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px 7px 28px;border-radius:var(--r2);font-size:12px;font-family:var(--ui);outline:none" oninput="_relinkQ=this.value;_showRelinkPanel()">'
-    + '</div>'
-    + unlinkBtn
-    + '<div style="max-height:420px;overflow-y:auto">' + rows + '</div>'
-    + '</div>'
-  );
-  setTimeout(function(){ var el=document.getElementById('relink-listing-q'); if(el) el.focus(); }, 50);
+  el.innerHTML = rows;
 }
 
 function renderListings() {
