@@ -715,6 +715,8 @@ function renderInv(){
 // PURCHASES
 // ─────────────────────────────────────────────
 let _purchaseCsvState = ''; // 'pending' | 'done' | ''
+let _buysCsvRows = [];
+
 function renderBuys(){
   const sp=soldPids();
   const f=filt.buys;
@@ -724,22 +726,27 @@ function renderBuys(){
   items=applySortP(items,'buys');
   const pn=pgNum.buys||0,total=items.length;
   const page_items=items.slice(pn*PS,(pn+1)*PS);
+  const hasApiKey=!!getApiKey();
   return`
   <div class="topbar"><div class="pg-title">Purchases <span class="pg-sub">${total.toLocaleString()} total · ${f$(items.reduce((a,p)=>a+p.cost,0))}</span></div>
-    <button class="btn sm" onclick="var a=document.getElementById('buys-csv-area');if(a)a.style.display=a.style.display==='none'?'block':'none'">&#x1F4CB; Import CSV</button>
+    <button class="btn sm" onclick="toggleBuysCsvArea()">&#x1F4CB; Import CSV</button>
   </div>
   <div class="content">
     <div id="buys-csv-area" style="display:none;background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:14px">
-      <div style="font-size:13px;font-weight:700;margin-bottom:6px">Import Purchases from CSV</div>
-      <div style="font-size:11px;color:var(--dim);font-family:var(--mono);margin-bottom:10px;line-height:1.8">
-        CSV must have a header row. Supported columns (case-insensitive):<br>
-        <code style="color:var(--gold)">name</code> (required) · <code style="color:var(--gold)">cost</code> / <code style="color:var(--gold)">price</code> · <code style="color:var(--gold)">date</code> · <code style="color:var(--gold)">player</code> / <code style="color:var(--gold)">subject</code> · <code style="color:var(--gold)">seller</code> · <code style="color:var(--gold)">type</code> · <code style="color:var(--gold)">year</code> · <code style="color:var(--gold)">set</code> · <code style="color:var(--gold)">grade</code> · <code style="color:var(--gold)">notes</code>
+      <div id="buys-csv-input-section">
+        <div style="font-size:13px;font-weight:700;margin-bottom:4px">Import Purchases from CSV</div>
+        <div style="font-size:11px;color:var(--dim);font-family:var(--mono);margin-bottom:10px;line-height:1.7">
+          Paste any CSV export — eBay order history works great. The <strong style="color:var(--gold)">title/name column</strong> is parsed automatically to extract player, year, set, variation, grade, etc.
+          Supported columns: <code style="color:var(--gold)">title</code>/<code style="color:var(--gold)">name</code> · <code style="color:var(--gold)">cost</code>/<code style="color:var(--gold)">price</code>/<code style="color:var(--gold)">amount</code> · <code style="color:var(--gold)">date</code> · <code style="color:var(--gold)">seller</code> · <code style="color:var(--gold)">player</code> · <code style="color:var(--gold)">type</code> · <code style="color:var(--gold)">grade</code> · <code style="color:var(--gold)">notes</code>
+        </div>
+        <textarea id="buys-csv-ta" rows="6" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:11px;padding:10px;border-radius:var(--r2);outline:none;resize:vertical" placeholder="Paste eBay order history CSV or any purchase spreadsheet here…"></textarea>
+        <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
+          <button class="btn pri sm" onclick="parseBuysCSV()">&#x1F50D; Parse &amp; Review</button>
+          <button class="btn ghost sm" onclick="document.getElementById('buys-csv-ta').value=''">Clear</button>
+          ${hasApiKey?'<span style="font-size:10px;color:var(--green);font-family:var(--mono)">&#x2714; AI parse available</span>':'<span style="font-size:10px;color:var(--faint);font-family:var(--mono)">Add API key in sidebar to enable AI title parsing</span>'}
+        </div>
       </div>
-      <textarea id="buys-csv-ta" rows="6" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:11px;padding:10px;border-radius:var(--r2);outline:none;resize:vertical" placeholder="name,cost,date,player,seller,type&#10;2024 Topps Chrome Messi Gold /10,85.00,Mar 1 2024,Lionel Messi,eBay,Soccer"></textarea>
-      <div style="margin-top:8px;display:flex;gap:8px">
-        <button class="btn pri sm" onclick="importPurchasesCSV()">&#x2B06; Import</button>
-        <button class="btn ghost sm" onclick="document.getElementById('buys-csv-ta').value=''">Clear</button>
-      </div>
+      <div id="buys-csv-review" style="display:none"></div>
     </div>
     <div class="fb">
       <div class="sw"><span class="si">&#x1F50D;</span><input id="search-buys" value="${esc(f.q)}" placeholder="Search purchases…" oninput="filt.buys.q=this.value;pgNum.buys=0;render()"></div>
@@ -765,7 +772,7 @@ function renderBuys(){
         const rev=ss.reduce((a,s)=>a+getS(s.id).price*(getS(s.id).qty||1),0);
         const totalFees=ss.reduce((a,s)=>a+ebayFee(getS(s.id).price,getS(s.id).qty||1),0);
         const netPnl=rev-p.cost-totalFees;
-        return`<tr onclick="showPurchase('${p.id}')" style="cursor:pointer">
+        return`<tr onclick="showCardPage('${p.id}')" style="cursor:pointer">
           <td class="cic">${thumb(p.img)}</td>
           <td><div class="cn">${esc(p.name)}</div><div class="cm">${esc(p.date)} · ${esc(p.seller)}</div></td>
           <td>${parsedTags(p,true)}</td>
@@ -781,73 +788,287 @@ function renderBuys(){
   </div>`;
 }
 
-function importPurchasesCSV() {
-  var ta = document.getElementById('buys-csv-ta');
-  if (!ta || !ta.value.trim()) { toast('Paste CSV data first'); return; }
-  var text = ta.value.trim();
-  var lines = text.split(/\r?\n/).filter(function(l){ return l.trim(); });
-  if (lines.length < 2) { toast('CSV needs a header row and at least one data row'); return; }
-  // Parse header
-  var header = _csvSplitRow(lines[0]).map(function(h){ return h.toLowerCase().trim(); });
-  var col = function(names) {
-    for (var i = 0; i < names.length; i++) { var idx = header.indexOf(names[i]); if (idx >= 0) return idx; }
-    return -1;
-  };
-  var iName   = col(['name','title','card','description','item title']);
-  var iCost   = col(['cost','price','paid','amount','purchase price']);
-  var iDate   = col(['date','purchase date','order date','bought']);
-  var iPlayer = col(['player','subject','athlete','person']);
-  var iSeller = col(['seller','source','vendor','from']);
-  var iType   = col(['type','sport','category']);
-  var iYear   = col(['year']);
-  var iSet    = col(['set','series']);
-  var iGrade  = col(['grade','grading']);
-  var iNotes  = col(['notes','note','comments']);
-  var iImg    = col(['img','image','image url','photo']);
-  if (iName < 0) { toast('CSV must have a "name" column'); return; }
-  var added = 0, skipped = 0;
-  for (var r = 1; r < lines.length; r++) {
-    var cells = _csvSplitRow(lines[r]);
-    var name = (iName >= 0 ? cells[iName] : '').trim();
-    if (!name) { skipped++; continue; }
-    var newId = 'P' + String(Date.now()).slice(-6) + r;
-    purchases.push({
-      id: newId,
-      name: name,
-      date: (iDate >= 0 ? cells[iDate] : '').trim(),
-      cost: parseFloat(iCost >= 0 ? cells[iCost] : '') || 0,
-      costRaw: parseFloat(iCost >= 0 ? cells[iCost] : '') || 0,
-      player: (iPlayer >= 0 ? cells[iPlayer] : '').trim(),
-      seller: (iSeller >= 0 ? cells[iSeller] : '').trim(),
-      type: (iType >= 0 ? cells[iType] : '').trim(),
-      year: (iYear >= 0 ? cells[iYear] : '').trim(),
-      set: (iSet >= 0 ? cells[iSet] : '').trim(),
-      grade: (iGrade >= 0 ? cells[iGrade] : '').trim(),
-      notes: (iNotes >= 0 ? cells[iNotes] : '').trim(),
-      img: (iImg >= 0 ? cells[iImg] : '').trim(),
-      itemId: '', orderNum: '', qty: 1, lotQty: 1,
-      is_rc: false, is_auto: false, is_lot: false,
-      candidates: []
-    });
-    added++;
+function toggleBuysCsvArea() {
+  var a = document.getElementById('buys-csv-area');
+  if (!a) return;
+  if (a.style.display === 'none') {
+    a.style.display = 'block';
+    _buysCsvRows = [];
+    var rev = document.getElementById('buys-csv-review');
+    var inp = document.getElementById('buys-csv-input-section');
+    if (rev) { rev.style.display = 'none'; rev.innerHTML = ''; }
+    if (inp) inp.style.display = 'block';
+  } else {
+    a.style.display = 'none';
   }
-  persist();
-  ta.value = '';
-  document.getElementById('buys-csv-area').style.display = 'none';
-  toast('Imported ' + added + ' purchase' + (added !== 1 ? 's' : '') + (skipped ? ' (' + skipped + ' skipped)' : ''));
-  render();
 }
 
 function _csvSplitRow(line) {
   var cells = [], cur = '', inQ = false;
   for (var i = 0; i < line.length; i++) {
     var c = line[i];
-    if (c === '"') { inQ = !inQ; }
-    else if (c === ',' && !inQ) { cells.push(cur); cur = ''; }
+    if (c === '"') { if (inQ && line[i+1]==='"') { cur+='"'; i++; } else inQ=!inQ; }
+    else if (c === ',' && !inQ) { cells.push(cur.trim()); cur = ''; }
     else { cur += c; }
   }
-  cells.push(cur);
+  cells.push(cur.trim());
   return cells;
+}
+
+function _csvCols(header) {
+  return function(names) {
+    for (var i = 0; i < names.length; i++) {
+      for (var j = 0; j < header.length; j++) {
+        if (header[j].replace(/[^a-z0-9]/g,'').indexOf(names[i].replace(/[^a-z0-9]/g,'')) >= 0) return j;
+      }
+    }
+    return -1;
+  };
+}
+
+function parseBuysCSV() {
+  var ta = document.getElementById('buys-csv-ta');
+  if (!ta || !ta.value.trim()) { toast('Paste CSV data first'); return; }
+  var text = ta.value.trim();
+  var lines = text.split(/\r?\n/).filter(function(l){ return l.trim(); });
+  if (lines.length < 2) { toast('Need a header row and at least one data row'); return; }
+
+  var header = _csvSplitRow(lines[0]).map(function(h){ return h.toLowerCase().replace(/['"]/g,'').trim(); });
+  var col = _csvCols(header);
+
+  var iName   = col(['title','itemtitle','name','card','description','item']);
+  var iCost   = col(['cost','price','paid','amount','purchaseprice','totalprice','saleprice']);
+  var iDate   = col(['date','purchasedate','orderdate','bought','saledate','orderdate']);
+  var iPlayer = col(['player','subject','athlete','person']);
+  var iSeller = col(['seller','source','vendor','from','sellerid','sellername']);
+  var iType   = col(['type','sport','category']);
+  var iYear   = col(['year']);
+  var iSet    = col(['set','series']);
+  var iGrade  = col(['grade','grading']);
+  var iNotes  = col(['notes','note','comments']);
+  var iImg    = col(['img','image','imageurl','photo','picture']);
+  var iOrderNum = col(['ordernumber','orderid','ordernum','order#','transactionid']);
+
+  if (iName < 0) { toast('Could not find a title/name column — check your CSV header row'); return; }
+
+  _buysCsvRows = [];
+  for (var r = 1; r < lines.length; r++) {
+    var cells = _csvSplitRow(lines[r]);
+    var name = (cells[iName] || '').trim();
+    if (!name) continue;
+    // Strip eBay "Quantity: N" suffixes and leading junk
+    name = name.replace(/\s*\|\s*Quantity:\s*\d+.*/i,'').replace(/^\d+\s+x\s+/i,'').trim();
+    var costRaw = parseFloat((cells[iCost]||'').replace(/[^0-9.]/g,'')) || 0;
+    var csvDate = (cells[iDate]||'').trim();
+    var csvSeller = (cells[iSeller]||'').trim();
+    var csvOrderNum = (iOrderNum >= 0 ? cells[iOrderNum] : '').trim();
+    // Use parseCardTitle to extract what we can from the title
+    var parsed = parseCardTitle(name);
+    // CSV explicit columns override title-parsed values where present
+    var player = (cells[iPlayer]||'').trim() || parsed.player;
+    var type   = (cells[iType]||'').trim()   || parsed.type;
+    var year   = (cells[iYear]||'').trim()   || parsed.year;
+    var set    = (cells[iSet]||'').trim()    || parsed.set;
+    var grade  = (cells[iGrade]||'').trim()  || parsed.grade;
+    var notes  = (cells[iNotes]||'').trim();
+    var img    = (cells[iImg]||'').trim();
+    _buysCsvRows.push({
+      _id: 'BC' + r,
+      _confirmed: false,
+      _aiDone: false,
+      name: name,
+      cost: costRaw,
+      date: csvDate,
+      seller: csvSeller,
+      orderNum: csvOrderNum,
+      player: player,
+      type: type,
+      year: year,
+      set: set,
+      grade: grade,
+      serial: parsed.serial || '',
+      variation: parsed.variation || '',
+      brand: parsed.brand || '',
+      is_auto: parsed.is_auto || false,
+      is_rc: parsed.is_rc || false,
+      is_lot: parsed.is_lot || false,
+      lotQty: parsed.lotQty || 1,
+      notes: notes,
+      img: img,
+    });
+  }
+
+  if (!_buysCsvRows.length) { toast('No valid rows found'); return; }
+
+  var inpEl = document.getElementById('buys-csv-input-section');
+  var revEl = document.getElementById('buys-csv-review');
+  if (inpEl) inpEl.style.display = 'none';
+  if (revEl) { revEl.style.display = 'block'; revEl.innerHTML = _renderBuysCsvReview(); }
+
+  // Auto-trigger AI parse if API key present
+  if (getApiKey()) parseBuysCsvWithAI();
+  else toast('Parsed ' + _buysCsvRows.length + ' rows — review below');
+}
+
+function _renderBuysCsvReview() {
+  var pending = _buysCsvRows.filter(function(r){ return !r._confirmed; }).length;
+  var confirmed = _buysCsvRows.length - pending;
+  var hasApiKey = !!getApiKey();
+  var html = '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">'
+    + '<div style="font-size:13px;font-weight:700">Review ' + _buysCsvRows.length + ' Rows</div>'
+    + '<span id="buys-csv-confirmed-ct" style="font-size:11px;font-family:var(--mono);color:var(--dim)">' + confirmed + ' confirmed</span>'
+    + (hasApiKey ? '<button class="btn sm" id="buys-ai-btn" onclick="parseBuysCsvWithAI()">&#x2728; AI Parse Titles</button>' : '')
+    + '<button class="btn pri sm" style="margin-left:auto" onclick="confirmAllBuysCsv()">&#x2713; Add All</button>'
+    + '<button class="btn ghost sm" onclick="toggleBuysCsvArea();render()">&#x2715; Cancel</button>'
+    + '</div>'
+    + '<div id="buys-csv-rows" style="display:grid;gap:8px">';
+  for (var i = 0; i < _buysCsvRows.length; i++) {
+    html += _renderBuysCsvRow(i);
+  }
+  html += '</div>';
+  return html;
+}
+
+function _renderBuysCsvRow(i) {
+  var r = _buysCsvRows[i];
+  var inp = function(field, label, w) {
+    var v = (r[field]||'').toString();
+    return '<div style="min-width:' + (w||'80px') + '">'
+      + '<label style="font-size:9px;color:var(--faint);font-family:var(--mono);text-transform:uppercase;display:block;margin-bottom:2px">' + label + '</label>'
+      + '<input style="width:100%;background:var(--surf3);border:1px solid var(--border);color:var(--text);padding:3px 5px;border-radius:3px;font-size:11px;font-family:var(--mono);outline:none" '
+      + 'value="' + esc(v) + '" oninput="_buysCsvRows[' + i + '].' + field + '=this.value">'
+      + '</div>';
+  };
+  return '<div id="buys-row-' + i + '" style="background:var(--surf);border:1px solid ' + (r._confirmed ? 'var(--green)' : (r._aiDone ? 'var(--gold)' : 'var(--border)')) + ';border-radius:var(--r);padding:10px;opacity:' + (r._confirmed ? '.55' : '1') + '">'
+    + '<div style="display:flex;gap:8px;align-items:flex-start">'
+    + '<div style="flex:1;min-width:0">'
+    + '<div style="font-size:11px;font-weight:600;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--dim)" title="' + esc(r.name) + '">' + esc(r.name.length > 80 ? r.name.slice(0,77)+'…' : r.name) + '</div>'
+    + '<div style="display:flex;gap:6px;flex-wrap:wrap">'
+    + inp('player','Player','120px')
+    + inp('type','Type','80px')
+    + inp('year','Year','60px')
+    + inp('set','Set','90px')
+    + inp('variation','Parallel','90px')
+    + inp('grade','Grade','60px')
+    + inp('cost','Cost $','70px')
+    + inp('date','Date','90px')
+    + inp('seller','Seller','90px')
+    + '</div>'
+    + '</div>'
+    + '<div style="display:flex;flex-direction:column;gap:5px;flex-shrink:0;padding-top:20px">'
+    + (r._confirmed
+        ? '<span style="font-size:10px;color:var(--green);font-family:var(--mono)">&#x2714; added</span>'
+        : '<button class="btn xs" onclick="confirmBuysCsvRow(' + i + ')">+ Add</button>')
+    + '<button class="btn xs red" onclick="_buysCsvRows.splice(' + i + ',1);document.getElementById(\'buys-csv-review\').innerHTML=_renderBuysCsvReview()">&#x2715;</button>'
+    + '</div>'
+    + '</div></div>';
+}
+
+function confirmBuysCsvRow(i) {
+  var r = _buysCsvRows[i];
+  if (!r || r._confirmed) return;
+  var newId = 'P' + Date.now().toString().slice(-6) + i;
+  purchases.push({
+    id: newId, name: r.name, date: r.date||'', cost: parseFloat(r.cost)||0,
+    costRaw: parseFloat(r.cost)||0, player: r.player||'', seller: r.seller||'',
+    type: r.type||'', year: r.year||'', set: r.set||'', grade: r.grade||'',
+    serial: r.serial||'', variation: r.variation||'', brand: r.brand||'',
+    is_auto: !!r.is_auto, is_rc: !!r.is_rc, is_lot: !!r.is_lot, lotQty: r.lotQty||1,
+    notes: r.notes||'', img: r.img||'', itemId: '', orderNum: r.orderNum||'',
+    qty: 1, candidates: []
+  });
+  persist();
+  _buysCsvRows[i]._confirmed = true;
+  var rowEl = document.getElementById('buys-row-' + i);
+  if (rowEl) rowEl.outerHTML = _renderBuysCsvRow(i);
+  var ct = document.getElementById('buys-csv-confirmed-ct');
+  if (ct) ct.textContent = _buysCsvRows.filter(function(r){ return r._confirmed; }).length + ' confirmed';
+}
+
+function confirmAllBuysCsv() {
+  for (var i = 0; i < _buysCsvRows.length; i++) {
+    if (!_buysCsvRows[i]._confirmed) confirmBuysCsvRow(i);
+  }
+  toast('Added ' + _buysCsvRows.length + ' purchases');
+  toggleBuysCsvArea();
+  render();
+}
+
+async function parseBuysCsvWithAI() {
+  var apiKey = getApiKey();
+  if (!apiKey) { toast('No API key — add one in the sidebar'); return; }
+  var pending = _buysCsvRows.filter(function(r){ return !r._confirmed && !r._aiDone; });
+  if (!pending.length) { toast('Nothing to parse'); return; }
+  var btn = document.getElementById('buys-ai-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Parsing…'; }
+  toast('Sending ' + pending.length + ' titles to AI…');
+
+  // Batch in chunks of 40 to stay within token limits
+  var CHUNK = 40;
+  for (var c = 0; c < pending.length; c += CHUNK) {
+    var chunk = pending.slice(c, c + CHUNK);
+    var prompt = 'Parse these eBay trading card listing titles. Return ONLY a JSON array, one object per title, same order:\n'
+      + '[{"i":0,"player":"","year":"","brand":"","set":"","variation":"","serial":"","grade":"","is_auto":false,"is_rc":false,"type":""}]\n\n'
+      + 'Rules: player = athlete/character name. year = 4-digit year. brand = manufacturer (Topps/Panini/Upper Deck/etc). '
+      + 'set = product line (Prizm/Chrome/Finest/etc). variation = exact parallel name (Gold Prizm, Silver, Refractor, Holo, etc) or empty string. '
+      + 'serial = print-run denominator only ("99" from "/99", "10" from "5/10"). '
+      + 'grade = slab label if present (PSA 10, BGS 9.5). '
+      + 'type = one of: Soccer/Pokémon/NFL/MLB/NBA/Marvel/Yu-Gi-Oh/Other.\n\n'
+      + 'Titles:\n' + chunk.map(function(r,j){ return j + ': ' + r.name; }).join('\n');
+    try {
+      var res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 3000,
+          messages: [{ role: 'user', content: prompt }]
+        })
+      });
+      if (!res.ok) { var e = await res.json().catch(function(){ return {}; }); throw new Error((e.error&&e.error.message)||'API '+res.status); }
+      var data = await res.json();
+      var txt = data.content.filter(function(b){ return b.type==='text'; }).map(function(b){ return b.text; }).join('');
+      var jsonStr = txt.replace(/```json|```/g,'').trim();
+      // Find the JSON array
+      var arrStart = jsonStr.indexOf('[');
+      var arrEnd = jsonStr.lastIndexOf(']');
+      if (arrStart >= 0 && arrEnd > arrStart) jsonStr = jsonStr.slice(arrStart, arrEnd+1);
+      var results = JSON.parse(jsonStr);
+      // Apply results back to the matching rows
+      for (var j = 0; j < results.length && j < chunk.length; j++) {
+        var ai = results[j];
+        var row = chunk[j];
+        // Find row index in _buysCsvRows
+        var idx = _buysCsvRows.indexOf(row);
+        if (idx < 0) continue;
+        if (ai.player) _buysCsvRows[idx].player = ai.player;
+        if (ai.year)   _buysCsvRows[idx].year   = ai.year;
+        if (ai.brand)  _buysCsvRows[idx].brand  = ai.brand;
+        if (ai.set)    _buysCsvRows[idx].set    = ai.set;
+        if (ai.variation) _buysCsvRows[idx].variation = ai.variation;
+        if (ai.serial) _buysCsvRows[idx].serial = ai.serial;
+        if (ai.grade)  _buysCsvRows[idx].grade  = ai.grade;
+        if (ai.type && ai.type !== 'Other') _buysCsvRows[idx].type = ai.type;
+        _buysCsvRows[idx].is_auto = _buysCsvRows[idx].is_auto || !!ai.is_auto;
+        _buysCsvRows[idx].is_rc   = _buysCsvRows[idx].is_rc   || !!ai.is_rc;
+        _buysCsvRows[idx]._aiDone = true;
+      }
+    } catch(err) {
+      toast('AI parse error: ' + err.message);
+      if (btn) { btn.disabled = false; btn.textContent = '✨ AI Parse Titles'; }
+      return;
+    }
+  }
+
+  // Re-render the review section
+  var revEl = document.getElementById('buys-csv-review');
+  if (revEl) revEl.innerHTML = _renderBuysCsvReview();
+  toast('AI parse complete ✓');
 }
 
 // ─────────────────────────────────────────────
