@@ -1361,6 +1361,7 @@ function buildFinReadView(pid,pnl,rev,totalFee,netPnl){
   const p=getP(pid);
   return`<div class="field-grid">
     <div class="field-item"><label>Cost Per Card <span style="font-size:8px;color:var(--gold);cursor:pointer" onclick="togglePanelEdit('${pid}','fin')">(click to edit)</span></label><div class="field-val pr o" style="cursor:pointer" onclick="togglePanelEdit('${pid}','fin')" title="Click to edit cost">${f$(p.cost)}</div></div>
+    <div class="field-item"><label>Quantity</label><div class="field-val mono">${p.qty||1}</div></div>
     ${p.is_lot?`<div class="field-item"><label>Lot Total (×${p.lotQty})</label><div class="field-val pr d">${f$(p.costRaw)}</div></div>`:''}
     <div class="field-item"><label>Order #</label><div class="field-val" style="font-family:var(--mono);font-size:11px">${esc(p.orderNum)}</div></div>
     <div class="field-item"><label>eBay Item ID</label><div class="field-val" style="font-family:var(--mono);font-size:11px">${esc(p.itemId)}</div></div>
@@ -1376,6 +1377,7 @@ function buildFinEditForm(pid){
   const p=getP(pid);
   return`<div class="field-grid">
     <div class="field-item"><label>Cost Per Card ($)</label><input class="field-input mono" type="number" step="0.01" id="ef-cost-${pid}" value="${p.cost||0}"></div>
+    <div class="field-item"><label>Quantity</label><input class="field-input mono" type="number" min="1" id="ef-qty-${pid}" value="${p.qty||1}"></div>
     <div class="field-item"><label>Order #</label><input class="field-input mono" id="ef-ordernum-${pid}" value="${esc(p.orderNum||'')}"></div>
     <div class="field-item"><label>Seller</label><input class="field-input" id="ef-seller-${pid}" value="${esc(p.seller||'')}"></div>
     <div class="field-item"><label>Date</label><input class="field-input mono" id="ef-date-${pid}" value="${esc(p.date||'')}"></div>
@@ -1423,6 +1425,7 @@ function saveFinFields(pid){
   const g = id => document.getElementById(id)?.value ?? '';
   editP(pid, {
     cost:     parseFloat(g(`ef-cost-${pid}`)) || 0,
+    qty:      Math.max(1, parseInt(g(`ef-qty-${pid}`)) || 1),
     orderNum: g(`ef-ordernum-${pid}`),
     seller:   g(`ef-seller-${pid}`),
     date:     g(`ef-date-${pid}`),
