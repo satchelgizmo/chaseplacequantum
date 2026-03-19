@@ -280,13 +280,13 @@ thead th.sh:hover{color:var(--text)}
 .key-input:focus{border-color:var(--purple)}
 .key-status{font-size:9px;margin-top:4px;letter-spacing:.5px}
 .key-status.ok{color:var(--green)}.key-status.no{color:var(--faint)}
-.rev-year-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;align-items:start}
-.rev-ym-block{background:var(--surf2);border-radius:5px;padding:7px}
+.rev-year-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;align-items:stretch}
+.rev-ym-block{background:var(--surf2);border-radius:5px;padding:7px;display:flex;flex-direction:column}
 .rev-ym-hdr{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px}
 .rev-ym-hdr span:first-child{font-size:9px;font-family:var(--mono);font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text)}
 .rev-ym-dow{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;margin-bottom:1px}
 .rev-ym-dow span{font-size:6px;font-family:var(--mono);color:var(--faint);text-align:center}
-.rev-ym-daygrid{display:grid;grid-template-columns:repeat(7,1fr);gap:1px}
+.rev-ym-daygrid{display:grid;grid-template-columns:repeat(7,1fr);grid-template-rows:repeat(6,1fr);gap:1px;flex:1}
 .rev-ym-day{min-height:14px;border-radius:2px;background:var(--surf);display:flex;align-items:center;justify-content:center;font-size:7px;font-family:var(--mono);color:var(--faint);border:1px solid transparent;cursor:default}
 .rev-ym-day.has-rev{background:rgba(0,229,170,.15);border-color:rgba(0,229,170,.25);color:var(--green);font-weight:700}
 .rev-ym-day.empty{background:transparent;border-color:transparent}
@@ -889,7 +889,7 @@ function renderDash(){
                 return`<div class="rev-ym-block"><div class="rev-ym-hdr"><span>${MNS[idx]}</span>${mTot?`<span style="color:var(--green);font-size:9px;font-family:var(--mono)">${f$(mTot)}</span>`:''}</div><div class="rev-ym-dow">${DOW.map(dw=>`<span>${dw[0]}</span>`).join('')}</div><div class="rev-ym-daygrid">${cells}</div></div>`;
               }).join('');
               h+='</div>';
-              return h;
+              return '<div class="rev-cal-wrap">'+h+'</div>';
             }
             return'<div class="rev-cal-wrap">'+calMonths.map(ym=>{
               const[yr,mo]=ym.split('-').map(Number);
