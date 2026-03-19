@@ -215,7 +215,7 @@ td{padding:8px 10px;vertical-align:middle}
 .bar-fill{height:100%;border-radius:3px;transition:width .5s}
 
 /* ── REVENUE CALENDAR ── */
-.rev-cal-wrap{max-height:380px;overflow-y:auto;padding-right:2px}
+.rev-cal-wrap{height:380px;overflow-y:auto;padding-right:2px}
 .rev-cal-month{margin-bottom:18px}
 .rev-cal-mhdr{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
 .rev-cal-mname{font-size:12px;font-weight:700;font-family:var(--mono);color:var(--text);letter-spacing:.5px;text-transform:uppercase}
@@ -223,10 +223,10 @@ td{padding:8px 10px;vertical-align:middle}
 .rev-cal-dow{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:2px}
 .rev-cal-dow span{font-size:8px;font-family:var(--mono);color:var(--faint);text-align:center;letter-spacing:.5px;text-transform:uppercase;padding:2px 0}
 .rev-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
-.rev-cal-day{min-height:44px;background:var(--surf2);border-radius:5px;padding:4px 5px;display:flex;flex-direction:column;gap:2px;border:1px solid transparent;transition:border-color .12s}
+.rev-cal-day{aspect-ratio:1;background:var(--surf2);border-radius:5px;padding:4px 5px;display:flex;flex-direction:column;gap:2px;border:1px solid transparent;transition:border-color .12s;overflow:hidden}
 .rev-cal-day:hover{border-color:var(--border2)}
 .rev-cal-day.has-rev{background:rgba(0,229,170,.06);border-color:rgba(0,229,170,.15)}
-.rev-cal-day.empty-cell{background:transparent;border-color:transparent;min-height:44px}
+.rev-cal-day.empty-cell{background:transparent;border-color:transparent}
 .rev-cal-day.other-month{opacity:.25}
 .rev-cal-dnum{font-size:9px;font-family:var(--mono);color:var(--dim);line-height:1}
 .rev-cal-drev{font-size:9px;font-family:var(--mono);color:var(--green);font-weight:700;line-height:1.2;margin-top:auto}
