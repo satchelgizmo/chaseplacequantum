@@ -296,6 +296,70 @@ thead th.sh:hover{color:var(--text)}
 .rev-yr-mos{display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(4,1fr);gap:2px;flex:1;min-height:0}
 .rev-yr-mo{background:var(--surf);border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:7px;font-family:var(--mono);color:var(--faint)}
 .rev-yr-mo.has-rev{background:rgba(0,229,170,.15);color:var(--green);font-weight:700}
+/* ── FULL CALENDAR PAGE ── */
+.fsc-container{display:flex;flex-direction:column}
+.fsc-topbar{display:flex;align-items:center;justify-content:center;gap:10px;padding:10px 20px;border-bottom:1px solid var(--border);background:var(--surf);flex-shrink:0}
+.fsc-month-title{font-size:17px;font-weight:700;font-family:var(--mono);letter-spacing:.5px;min-width:190px;text-align:center}
+.fsc-nav-btn{background:none;border:1px solid var(--border2);color:var(--text);padding:5px 14px;border-radius:var(--r2);cursor:pointer;font-size:13px;line-height:1.2;transition:all .12s;font-family:var(--ui);font-weight:600}
+.fsc-nav-btn:hover{background:var(--surf2)}
+.fsc-nav-btn.today-btn{background:var(--gold);color:var(--bg);border-color:var(--gold);font-weight:700}
+.fsc-nav-btn.year-btn{border-color:var(--green);color:var(--green)}
+.fsc-nav-btn.year-btn:hover{background:rgba(0,229,170,.1)}
+.fsc-nav-btn.year-btn.active{background:var(--green);color:var(--bg);font-weight:700}
+.fsc-stats-bar{display:flex;border-bottom:1px solid var(--border);background:var(--surf);flex-shrink:0}
+.fsc-stat{flex:1;padding:10px 16px;border-right:1px solid var(--border)}
+.fsc-stat:last-child{border-right:none}
+.fsc-stat-lbl{font-size:8px;font-family:var(--mono);color:var(--dim);letter-spacing:1.2px;text-transform:uppercase;margin-bottom:4px}
+.fsc-stat-val{font-size:18px;font-weight:700;font-family:var(--mono)}
+.fsc-stat-val.g{color:var(--green)}
+.fsc-stat-val.r{color:var(--red)}
+.fsc-dow-row{display:grid;grid-template-columns:repeat(7,1fr);border-bottom:1px solid var(--border);background:var(--surf2);flex-shrink:0}
+.fsc-dow-hdr{text-align:center;padding:7px 4px;font-size:9px;font-family:var(--mono);color:var(--dim);font-weight:700;letter-spacing:1px}
+.fsc-cal-grid{display:grid;grid-template-columns:repeat(7,1fr)}
+.fsc-day{min-height:100px;border-right:1px solid var(--border);border-bottom:1px solid var(--border);padding:6px 8px;cursor:pointer;transition:background .1s;display:flex;flex-direction:column}
+.fsc-day:hover{background:var(--surf2)}
+.fsc-day.today-day{background:rgba(0,212,255,.05)}
+.fsc-day.empty-day{cursor:default;background:transparent;pointer-events:none}
+.fsc-day:nth-child(7n){border-right:none}
+.fsc-dnum{font-size:12px;font-family:var(--mono);color:var(--faint);line-height:1;margin-bottom:3px}
+.fsc-day.today-day .fsc-dnum{color:var(--gold);font-weight:700}
+.fsc-damt{font-size:11px;font-family:var(--mono);font-weight:700;line-height:1.4}
+.fsc-damt.sale{color:var(--green)}
+.fsc-damt.buy{color:var(--red)}
+/* Year overview 4-col grid */
+.fsc-yr-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;padding:20px}
+.fsc-ym-card{background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:12px;cursor:pointer;transition:border-color .12s}
+.fsc-ym-card:hover{border-color:var(--border2);background:var(--surf2)}
+.fsc-ym-mhdr{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}
+.fsc-ym-mname{font-size:14px;font-weight:700;font-family:var(--mono)}
+.fsc-ym-total{font-size:10px;font-family:var(--mono);color:var(--green);font-weight:700}
+.fsc-ym-dow{display:grid;grid-template-columns:repeat(7,1fr);margin-bottom:2px}
+.fsc-ym-dow span{font-size:6px;font-family:var(--mono);color:var(--faint);text-align:center}
+.fsc-ym-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:1px}
+.fsc-ym-d{border-radius:2px;aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-size:6.5px;font-family:var(--mono);color:var(--faint);min-height:11px}
+.fsc-ym-d.has-sale{background:rgba(0,229,170,.18);color:var(--green);font-weight:700}
+.fsc-ym-d.has-buy{background:rgba(255,74,104,.1);color:var(--red)}
+.fsc-ym-d.has-both{background:rgba(0,212,255,.12);color:var(--gold)}
+.fsc-ym-d.empty{opacity:0}
+.fsc-ym-bal{margin-top:8px;padding-top:6px;border-top:1px solid var(--border);font-size:8px;font-family:var(--mono);color:var(--dim);letter-spacing:1px;text-transform:uppercase}
+/* Mini dashboard calendar */
+.mini-cal-wrap{background:var(--surf);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+.mini-cal-hdr{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border-bottom:1px solid var(--border)}
+.mini-cal-title{font-size:12px;font-weight:700;font-family:var(--mono)}
+.mini-cal-nav{display:flex;gap:4px;align-items:center}
+.mini-cal-nbtn{background:none;border:1px solid var(--border);color:var(--dim);padding:2px 7px;border-radius:4px;cursor:pointer;font-size:11px;line-height:1.4}
+.mini-cal-nbtn:hover{color:var(--text);background:var(--surf2)}
+.mini-cal-dow{display:grid;grid-template-columns:repeat(7,1fr);padding:4px 6px 2px}
+.mini-cal-dow span{font-size:7px;font-family:var(--mono);color:var(--faint);text-align:center}
+.mini-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;padding:4px 6px 8px}
+.mini-cal-day{min-height:30px;border-radius:3px;padding:2px 3px;display:flex;flex-direction:column;cursor:pointer;transition:background .1s}
+.mini-cal-day:hover{background:var(--surf3)}
+.mini-cal-day.has-data{background:rgba(0,229,170,.06);border:1px solid rgba(0,229,170,.12)}
+.mini-cal-day.today{border:1px solid var(--gold)!important}
+.mini-cal-day.empty-d{pointer-events:none;background:transparent}
+.mini-cal-dnum{font-size:8px;font-family:var(--mono);color:var(--faint);line-height:1}
+.mini-cal-day.today .mini-cal-dnum{color:var(--gold);font-weight:700}
+.mini-cal-damt{font-size:7px;font-family:var(--mono);color:var(--green);font-weight:700;line-height:1.2;margin-top:1px}
 </style>
 </head>
 <body>
@@ -312,6 +376,7 @@ thead th.sh:hover{color:var(--text)}
       <div class="ni" id="ni-sells" role="button" tabindex="0" onclick="nav('sells')" onkeydown="if(event.key==='Enter'||event.key===' '){nav('sells')}"><span class="ic">💰</span><span>Sales &amp; P&amp;L</span></div>
       <div class="ni" id="ni-listings" role="button" tabindex="0" onclick="nav('listings')" onkeydown="if(event.key==='Enter'||event.key===' '){nav('listings')}"><span class="ic">&#x1F3F7;</span><span>Active Listings</span></div>
       <div class="ni" id="ni-imp" role="button" tabindex="0" onclick="nav('imp')" onkeydown="if(event.key==='Enter'||event.key===' '){nav('imp')}"><span class="ic">📥</span><span>Import</span></div>
+      <div class="ni" id="ni-cal" role="button" tabindex="0" onclick="nav('cal')" onkeydown="if(event.key==='Enter'||event.key===' '){nav('cal')}"><span class="ic">📅</span><span>Calendar</span></div>
     </div>
     <div class="side-foot">
       <div class="sf-row"><div class="sf-lbl">Net P&amp;L</div><div class="sf-val" id="sf-pnl">—</div></div>
@@ -797,6 +862,7 @@ function render(){
   else if(page==='listings') m.innerHTML=renderListings();
   else if(page==='imp')   m.innerHTML=renderImport();
   else if(page==='card')  m.innerHTML=renderCardDetail(currentCardPid);
+  else if(page==='cal')   m.innerHTML=renderCal();
   updateSidebar();
   // Restore focus to search input if it was focused
   if(savedId){const el=document.getElementById(savedId);if(el){el.focus();try{if(savedSel0!==null)el.setSelectionRange(savedSel0,savedSel1);}catch(e){}}}
@@ -830,10 +896,6 @@ function renderDash(){
   const monthly={};
   const daily={};
   for(const s of sales){const ss=getS(s.id);const raw=ss.date||'';const amt=ss.price*(ss.qty||1);const pd=_parseDate(raw);if(pd&&pd.mo){const ym=`${pd.yr}-${String(pd.mo).padStart(2,'0')}`;monthly[ym]=(monthly[ym]||0)+amt;const dk=`${pd.yr}-${String(pd.mo).padStart(2,'0')}-${String(pd.dy).padStart(2,'0')}`;daily[dk]=(daily[dk]||0)+amt;}else if(raw){const m=raw.slice(0,7);if(m)monthly[m]=(monthly[m]||0)+amt;}}
-  const months=Object.keys(monthly).sort().slice(-12);
-  const maxM=Math.max(...months.map(m=>monthly[m]),1);
-  // Build calendar months (newest first, all months that have data)
-  const calMonths=Object.keys(monthly).filter(k=>/^\d{4}-\d{2}$/.test(k)).sort().reverse();
   const plrev={};
   for(const s of sales){const ss=getS(s.id);const pl=ss.player;if(!pl||pl.length<3)continue;plrev[pl]=(plrev[pl]||0)+ss.price*(ss.qty||1);}
   const topPl=Object.entries(plrev).sort((a,b)=>b[1]-a[1]).slice(0,8);
@@ -852,80 +914,39 @@ function renderDash(){
       <div class="sc"><div class="sc-lbl">Link Rate</div><div class="sc-val">${Math.round(linked/Math.max(sales.length,1)*100)}%</div><div class="sc-sub">${linked}/${sales.length}</div></div>
       <div class="sc"><div class="sc-lbl">Total ROI</div><div class="sc-val ${pnl>=0?'g':'r'}">${roi}</div><div class="sc-sub">net ÷ cost sold</div></div>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:20px">
+    ${(()=>{
+      const now_mc=new Date();
+      if(!_calYear)_calYear=now_mc.getFullYear();
+      if(!_calMonth)_calMonth=now_mc.getMonth()+1;
+      const mcYr=_calYear,mcMo=_calMonth;
+      const mcYm=`${mcYr}-${String(mcMo).padStart(2,'0')}`;
+      const mcLabel=new Date(mcYr,mcMo-1,1).toLocaleString('default',{month:'long',year:'numeric'});
+      const mcFirstDow=new Date(mcYr,mcMo-1,1).getDay();
+      const mcDim=new Date(mcYr,mcMo,0).getDate();
+      const mcIncome=monthly[mcYm]||0;
+      const mcPrevMo=mcMo===1?12:mcMo-1,mcPrevYr=mcMo===1?mcYr-1:mcYr;
+      const mcNextMo=mcMo===12?1:mcMo+1,mcNextYr=mcMo===12?mcYr+1:mcYr;
+      const todayStr=`${now_mc.getFullYear()}-${String(now_mc.getMonth()+1).padStart(2,'0')}-${String(now_mc.getDate()).padStart(2,'0')}`;
+      let mcCells='';
+      for(let i=0;i<mcFirstDow;i++)mcCells+=`<div class="mini-cal-day empty-d"></div>`;
+      for(let d=1;d<=mcDim;d++){const k=`${mcYm}-${String(d).padStart(2,'0')}`;const sAmt=daily[k]||0;const isToday=k===todayStr;mcCells+=`<div class="mini-cal-day${isToday?' today':sAmt>0?' has-data':''}" onclick="showCalDay('${k}','${mcLabel.toUpperCase()}')"><span class="mini-cal-dnum">${d}</span>${sAmt>0?`<span class="mini-cal-damt">${f$(sAmt)}</span>`:''}</div>`;}
+      return`<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:20px">
       <div>
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-          <div style="font-size:13px;font-weight:700">Monthly Revenue</div>
-          <div class="rev-view-toggle">
-            <button class="${_revenueView==='bar'?'on':''}" onclick="_revenueView='bar';localStorage.setItem('cb_revenue_view','bar');render()" title="Bar view">▬</button>
-            <button class="${_revenueView==='calendar'?'on':''}" onclick="_revenueView='calendar';localStorage.setItem('cb_revenue_view','calendar');render()" title="Calendar view">📅</button>
-          </div>
+          <div style="font-size:13px;font-weight:700">Monthly Calendar</div>
+          <button class="btn sm ghost" onclick="nav('cal')" style="font-size:11px">Full Calendar →</button>
         </div>
-        <div style="background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:14px">
-          ${(()=>{
-            if(!calMonths.length)return'<div style="color:var(--faint);font-size:11px;font-family:var(--mono)">No sales data yet.</div>';
-            const DOW=['Su','Mo','Tu','We','Th','Fr','Sa'];
-            const MNS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-            // Month detail view
-            const allYrs=[...new Set(calMonths.map(ym=>ym.split('-')[0]))].sort();
-            if(_revCalMonth){
-              const[yr,mo]=_revCalMonth.split('-').map(Number);
-              const monthTotal=monthly[_revCalMonth]||0;
-              const label=new Date(yr,mo-1,1).toLocaleString('default',{month:'long',year:'numeric'});
-              const firstDow=new Date(yr,mo-1,1).getDay();
-              const daysInMonth=new Date(yr,mo,0).getDate();
-              let cells='';
-              for(let i=0;i<firstDow;i++)cells+='<div class="rev-cal-day empty-cell"></div>';
-              for(let d=1;d<=daysInMonth;d++){
-                const key=`${yr}-${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-                const rev=daily[key]||0;
-                cells+=`<div class="rev-cal-day${rev>0?' has-rev':''}"><span class="rev-cal-dnum">${d}</span>${rev>0?`<span class="rev-cal-drev">${f$(rev)}</span>`:''}</div>`;
-              }
-              return`<div><div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><button onclick="_revCalMonth=null;render()" style="background:none;border:1px solid var(--border);color:var(--dim);padding:2px 8px;border-radius:4px;cursor:pointer;font-size:11px;font-family:var(--mono)">← ${String(yr)}</button><span style="font-size:12px;font-weight:700;font-family:var(--mono);color:var(--text)">${label}</span><span style="font-size:11px;font-family:var(--mono);color:var(--green);margin-left:auto">${f$(monthTotal)}</span></div><div class="rev-cal-dow">${DOW.map(d=>`<span>${d}</span>`).join('')}</div><div class="rev-cal-grid">${cells}</div></div>`;
-            }
-            // Years view (all-years overview)
-            if(_revYearsView&&allYrs.length>1){
-              let h='<div style="margin-bottom:10px"><span style="font-size:13px;font-weight:700;font-family:var(--mono)">All Years</span></div><div class="rev-yrs-grid">';
-              h+=allYrs.map(yr=>{
-                const y12=MNS.map((_,i)=>`${yr}-${String(i+1).padStart(2,'0')}`);
-                const yTotal=y12.reduce((a,ym)=>a+(monthly[ym]||0),0);
-                const moBlocks=y12.map((ym,i)=>{const hasSales=!!(monthly[ym]);return`<div class="rev-yr-mo${hasSales?' has-rev':''}" title="${MNS[i]}${hasSales?' '+f$(monthly[ym]):''}">${MNS[i][0]}</div>`;}).join('');
-                return`<div class="rev-yr-tile" onclick="_revYearsView=false;_revYear='${yr}';render()"><div style="font-size:11px;font-weight:700;font-family:var(--mono);color:var(--text);line-height:1;margin-bottom:2px">${yr}</div><div style="font-size:10px;font-family:var(--mono);color:var(--green);font-weight:700;margin-bottom:6px">${yTotal?f$(yTotal):'—'}</div><div class="rev-yr-mos">${moBlocks}</div></div>`;
-              }).join('');
-              h+='</div>';
-              return'<div class="rev-cal-wrap">'+h+'</div>';
-            }
-            // Year overview
-            const selYr=(_revYear&&allYrs.includes(_revYear))?_revYear:allYrs[allYrs.length-1];
-            const yi=allYrs.indexOf(selYr);
-            const prevYr=yi>0?allYrs[yi-1]:null;
-            const nextYr=yi<allYrs.length-1?allYrs[yi+1]:null;
-            const y12=MNS.map((_,i)=>`${selYr}-${String(i+1).padStart(2,'0')}`);
-            const yTotal=y12.reduce((a,ym)=>a+(monthly[ym]||0),0);
-            const navBtn=(yr,lbl)=>yr
-              ?`<button onclick="_revYear='${yr}';render()" style="background:none;border:1px solid var(--border);color:var(--text);padding:2px 8px;border-radius:4px;cursor:pointer;font-size:12px;font-family:var(--mono)">${lbl}</button>`
-              :`<button style="background:none;border:1px solid var(--border);color:var(--faint);padding:2px 8px;border-radius:4px;cursor:default;font-size:12px;font-family:var(--mono)" disabled>${lbl}</button>`;
-            const allYrsBtn=allYrs.length>1?`<button onclick="_revYearsView=true;render()" style="background:none;border:1px solid var(--border);color:var(--dim);padding:2px 8px;border-radius:4px;cursor:pointer;font-size:11px;font-family:var(--mono)">All Yrs</button>`:'';
-            let h=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><div style="display:flex;gap:4px;align-items:center">${allYrsBtn}${navBtn(prevYr,'◀')}</div><span style="font-size:13px;font-weight:700;font-family:var(--mono)">${selYr} <span style="color:var(--green);font-size:11px">${f$(yTotal)}</span></span>${navBtn(nextYr,'▶')}</div><div class="rev-year-grid">`;
-            h+=y12.map((ym,idx)=>{
-              const mo=idx+1;
-              const mTot=monthly[ym]||0;
-              const firstDow=new Date(parseInt(selYr),mo-1,1).getDay();
-              const dim=new Date(parseInt(selYr),mo,0).getDate();
-              let cells='';
-              for(let i=0;i<firstDow;i++)cells+='<div class="rev-ym-day empty"></div>';
-              for(let d=1;d<=dim;d++){
-                const k=`${selYr}-${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-                const rv=daily[k]||0;
-                cells+=`<div class="rev-ym-day${rv>0?' has-rev':''}" title="${rv>0?f$(rv):d}">${d}</div>`;
-              }
-              const padEnd=42-(firstDow+dim);
-              for(let i=0;i<padEnd;i++)cells+='<div class="rev-ym-day empty"></div>';
-              return`<div class="rev-ym-block" style="cursor:pointer" onclick="_revCalMonth='${ym}';render()" title="View ${MNS[idx]} detail"><div class="rev-ym-hdr"><span>${MNS[idx]}</span>${mTot?`<span style="color:var(--green);font-size:9px;font-family:var(--mono)">${f$(mTot)}</span>`:''}</div><div class="rev-ym-dow">${DOW.map(dw=>`<span>${dw[0]}</span>`).join('')}</div><div class="rev-ym-daygrid">${cells}</div></div>`;
-            }).join('');
-            h+='</div>';
-            return '<div class="rev-cal-wrap">'+h+'</div>';
-          })()}
+        <div class="mini-cal-wrap">
+          <div class="mini-cal-hdr">
+            <div class="mini-cal-nav">
+              <button class="mini-cal-nbtn" onclick="_calMonth=${mcPrevMo};_calYear=${mcPrevYr};render()">◀</button>
+              <span class="mini-cal-title">${mcLabel}</span>
+              <button class="mini-cal-nbtn" onclick="_calMonth=${mcNextMo};_calYear=${mcNextYr};render()">▶</button>
+            </div>
+            ${mcIncome?`<span style="font-size:11px;font-family:var(--mono);color:var(--green);font-weight:700">${f$(mcIncome)}</span>`:''}
+          </div>
+          <div class="mini-cal-dow">${['S','M','T','W','T','F','S'].map(d=>`<span>${d}</span>`).join('')}</div>
+          <div class="mini-cal-grid">${mcCells}</div>
         </div>
       </div>
       <div><div style="font-size:13px;font-weight:700;margin-bottom:10px">Top Players by Revenue</div>
@@ -933,7 +954,8 @@ function renderDash(){
           ${topPl.length>=2?topPl.map(([pl,rv])=>`<div class="bar-wrap"><div class="bar-lbl"><span>${esc(pl)}</span><span style="color:var(--gold)">${f$(rv)}</span></div><div class="bar-track"><div class="bar-fill" style="width:${(rv/maxPl*100).toFixed(1)}%;background:var(--gold)"></div></div></div>`).join(''):`<div style="color:var(--faint);font-size:11px;font-family:var(--mono)">Add player names to sales to see revenue by player.</div>`}
         </div>
       </div>
-    </div>
+    </div>`;
+    })()}
     <div style="font-size:13px;font-weight:700;margin-bottom:10px">Recent Sales</div>
     <div style="background:var(--surf);border:1px solid var(--border);border-radius:var(--r);overflow:hidden">
       <table><thead><tr><th></th><th>TITLE</th><th>DATE</th><th>PRICE</th><th>MATCH</th></tr></thead>
@@ -947,6 +969,81 @@ function renderDash(){
         </tr>`;}).join('')}</tbody></table>
     </div>
   </div>`;
+}
+
+// ─────────────────────────────────────────────
+// FULL CALENDAR TAB
+// ─────────────────────────────────────────────
+function showCalDay(dk,monthLabel){
+  const parts=dk.split('-');const yr=parseInt(parts[0]),mo=parseInt(parts[1]),dy=parseInt(parts[2]);
+  const daySales=sales.filter(s=>{const ss=getS(s.id);const pd=_parseDP(ss.date||'');return pd&&pd.yr===yr&&pd.mo===mo&&pd.dy===dy;});
+  const dayBuys=purchases.filter(p=>{const pp=getP(p.id);const pd=_parseDP(pp.date||'');return pd&&pd.yr===yr&&pd.mo===mo&&pd.dy===dy;});
+  let html=`<div class="pn-head"><div style="flex:1"><div style="font-size:9px;font-family:var(--mono);color:var(--dim);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:4px">${monthLabel}</div><div style="font-size:32px;font-weight:700;font-family:var(--mono);line-height:1">${dy}</div></div><span class="pn-close" onclick="closePanel()">✕</span></div><div class="pn-body">`;
+  if(daySales.length===0&&dayBuys.length===0){
+    html+=`<div style="text-align:center;color:var(--faint);font-size:12px;font-family:var(--mono);padding:40px 0">No transactions this day</div>`;
+  }else{
+    if(daySales.length>0){
+      html+=`<div style="font-size:9px;font-family:var(--mono);color:var(--dim);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px">Sales</div>`;
+      html+=daySales.map(s=>{const ss=getS(s.id);const amt=ss.price*(ss.qty||1);return`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)"><div style="font-size:12px;font-weight:600;line-height:1.3">${esc(ss.title)}</div><div style="font-size:13px;font-family:var(--mono);color:var(--green);font-weight:700;margin-left:12px;flex-shrink:0">${f$(amt)}</div></div>`;}).join('');
+    }
+    if(dayBuys.length>0){
+      html+=`<div style="font-size:9px;font-family:var(--mono);color:var(--dim);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px;${daySales.length>0?'margin-top:16px':''}">Purchases</div>`;
+      html+=dayBuys.map(p=>{const pp=getP(p.id);return`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)"><div style="font-size:12px;font-weight:600;line-height:1.3">${esc(pp.name)}</div><div style="font-size:13px;font-family:var(--mono);color:var(--red);font-weight:700;margin-left:12px;flex-shrink:0">-${f$(pp.cost)}</div></div>`;}).join('');
+    }
+  }
+  html+=`</div>`;
+  openPanel(html);
+}
+function renderCal(){
+  const sByDay={},sByMo={},bByDay={},bByMo={};
+  for(const s of sales){const ss=getS(s.id);const amt=ss.price*(ss.qty||1);const pd=_parseDP(ss.date||'');if(pd&&pd.mo){const ym=`${pd.yr}-${String(pd.mo).padStart(2,'0')}`;const dk=`${ym}-${String(pd.dy).padStart(2,'0')}`;sByDay[dk]=(sByDay[dk]||0)+amt;sByMo[ym]=(sByMo[ym]||0)+amt;}}
+  for(const p of purchases){const pp=getP(p.id);const pd=_parseDP(pp.date||'');if(pd&&pd.mo){const ym=`${pd.yr}-${String(pd.mo).padStart(2,'0')}`;const dk=`${ym}-${String(pd.dy).padStart(2,'0')}`;bByDay[dk]=(bByDay[dk]||0)+pp.cost;bByMo[ym]=(bByMo[ym]||0)+pp.cost;}}
+  const DOW=['SUN','MON','TUE','WED','THU','FRI','SAT'];
+  const MNS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const MNL=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const now=new Date();
+  const todayYr=now.getFullYear(),todayMo=now.getMonth()+1,todayDy=now.getDate();
+  const todayKey=`${todayYr}-${String(todayMo).padStart(2,'0')}-${String(todayDy).padStart(2,'0')}`;
+  if(!_calYear)_calYear=todayYr;
+  if(!_calMonth)_calMonth=todayMo;
+  const yr=_calYear,mo=_calMonth;
+  const ym=`${yr}-${String(mo).padStart(2,'0')}`;
+  const moIncome=sByMo[ym]||0,moOut=bByMo[ym]||0,moNet=moIncome-moOut;
+  const prevMo=mo===1?12:mo-1,prevYr=mo===1?yr-1:yr;
+  const nextMo=mo===12?1:mo+1,nextYr=mo===12?yr+1:yr;
+  if(_calYearView){
+    // Year overview: 4 mini cals per row
+    const y12=MNS.map((_,i)=>`${yr}-${String(i+1).padStart(2,'0')}`);
+    const yInc=y12.reduce((a,m2)=>a+(sByMo[m2]||0),0);
+    const yOut=y12.reduce((a,m2)=>a+(bByMo[m2]||0),0);
+    const yNet=yInc-yOut;
+    const cards=y12.map((ym2,idx)=>{
+      const m2=idx+1;
+      const mInc=sByMo[ym2]||0;
+      const firstDow=new Date(yr,m2-1,1).getDay();
+      const dim=new Date(yr,m2,0).getDate();
+      let cells='';
+      for(let i=0;i<firstDow;i++)cells+=`<div class="fsc-ym-d empty"></div>`;
+      for(let d=1;d<=dim;d++){const k=`${ym2}-${String(d).padStart(2,'0')}`;const hasSale=!!(sByDay[k]);const hasBuy=!!(bByDay[k]);const cls=hasSale&&hasBuy?'has-both':hasSale?'has-sale':hasBuy?'has-buy':'';cells+=`<div class="fsc-ym-d${cls?' '+cls:''}">${d}</div>`;}
+      const padEnd=42-(firstDow+dim);
+      for(let i=0;i<padEnd;i++)cells+=`<div class="fsc-ym-d empty"></div>`;
+      return`<div class="fsc-ym-card" onclick="_calYearView=false;_calMonth=${m2};_calYear=${yr};render()"><div class="fsc-ym-mhdr"><span class="fsc-ym-mname">${MNS[idx]}</span>${mInc?`<span class="fsc-ym-total">+${f$(mInc)}</span>`:''}</div><div class="fsc-ym-dow">${['S','M','T','W','T','F','S'].map(d=>`<span>${d}</span>`).join('')}</div><div class="fsc-ym-grid">${cells}</div><div class="fsc-ym-bal">Balance <span style="color:var(--text);font-weight:700">—</span></div></div>`;
+    }).join('');
+    return`<div class="topbar"><div class="pg-title">Calendar</div></div><div style="padding:0"><div class="fsc-container"><div class="fsc-topbar"><button class="fsc-nav-btn" onclick="_calYear=${yr-1};render()">‹</button><span class="fsc-month-title">${yr}</span><button class="fsc-nav-btn" onclick="_calYear=${yr+1};render()">›</button><button class="fsc-nav-btn today-btn" onclick="_calYear=${todayYr};_calMonth=${todayMo};_calYearView=false;render()">Today</button><button class="fsc-nav-btn year-btn active" onclick="_calYearView=false;render()">📅 Month</button></div><div class="fsc-stats-bar"><div class="fsc-stat"><div class="fsc-stat-lbl">${yr} Income</div><div class="fsc-stat-val g">${f$(yInc)}</div></div><div class="fsc-stat"><div class="fsc-stat-lbl">Total Out</div><div class="fsc-stat-val r">${f$(yOut)}</div></div><div class="fsc-stat"><div class="fsc-stat-lbl">Net</div><div class="fsc-stat-val ${yNet>=0?'g':'r'}">${f$(yNet)}</div></div><div class="fsc-stat"><div class="fsc-stat-lbl">Dec 31 Balance</div><div class="fsc-stat-val">—</div></div></div><div class="fsc-yr-grid">${cards}</div></div></div>`;
+  }
+  // Month view
+  const firstDow=new Date(yr,mo-1,1).getDay();
+  const dim=new Date(yr,mo,0).getDate();
+  const monthLabel=`${MNL[mo-1].toUpperCase()} ${yr}`;
+  let cells='';
+  for(let i=0;i<firstDow;i++)cells+=`<div class="fsc-day empty-day"></div>`;
+  for(let d=1;d<=dim;d++){
+    const k=`${ym}-${String(d).padStart(2,'0')}`;
+    const sAmt=sByDay[k]||0,bAmt=bByDay[k]||0;
+    const isToday=k===todayKey;
+    cells+=`<div class="fsc-day${isToday?' today-day':''}" onclick="showCalDay('${k}','${monthLabel}')"><span class="fsc-dnum">${d}</span>${sAmt>0?`<span class="fsc-damt sale">${f$(sAmt)}</span>`:''}${bAmt>0?`<span class="fsc-damt buy">-${f$(bAmt)}</span>`:''}</div>`;
+  }
+  return`<div class="topbar"><div class="pg-title">Calendar</div></div><div style="padding:0"><div class="fsc-container"><div class="fsc-topbar"><button class="fsc-nav-btn" onclick="_calMonth=${prevMo};_calYear=${prevYr};render()">‹</button><span class="fsc-month-title">${MNL[mo-1]} ${yr}</span><button class="fsc-nav-btn" onclick="_calMonth=${nextMo};_calYear=${nextYr};render()">›</button><button class="fsc-nav-btn today-btn" onclick="_calYear=${todayYr};_calMonth=${todayMo};_calYearView=false;render()">Today</button><button class="fsc-nav-btn year-btn" onclick="_calYearView=true;render()">📅 Year</button></div><div class="fsc-stats-bar"><div class="fsc-stat"><div class="fsc-stat-lbl">Month Income</div><div class="fsc-stat-val g">${f$(moIncome)}</div></div><div class="fsc-stat"><div class="fsc-stat-lbl">Month Out</div><div class="fsc-stat-val r">${f$(moOut)}</div></div><div class="fsc-stat"><div class="fsc-stat-lbl">Month Net</div><div class="fsc-stat-val ${moNet>=0?'g':'r'}">${f$(moNet)}</div></div><div class="fsc-stat"><div class="fsc-stat-lbl">End of Month</div><div class="fsc-stat-val">—</div></div></div><div class="fsc-dow-row">${DOW.map(d=>`<div class="fsc-dow-hdr">${d}</div>`).join('')}</div><div class="fsc-cal-grid">${cells}</div></div></div>`;
 }
 
 // ─────────────────────────────────────────────
@@ -2581,6 +2678,11 @@ let _sellsView = localStorage.getItem('cb_sells_view') || 'table';
 let _revYear = null;
 let _revCalMonth = null; // null = year/years overview; 'YYYY-MM' = month detail
 let _revYearsView = false; // true = all-years overview
+let _calYear = null;   // full calendar tab current year
+let _calMonth = null;  // full calendar tab current month (1-12)
+let _calYearView = false; // true = year overview on cal tab
+// Global date parser used by calendar functions
+function _parseDP(d){if(!d)return null;const _MN={Jan:1,Feb:2,Mar:3,Apr:4,May:5,Jun:6,Jul:7,Aug:8,Sep:9,Oct:10,Nov:11,Dec:12};let m;if((m=d.match(/^([A-Za-z]{3})-(\d{1,2})-(\d{2,4})$/))!==null){const yr=m[3].length===2?2000+parseInt(m[3]):parseInt(m[3]);return{yr,mo:_MN[m[1]]||0,dy:parseInt(m[2])};}if((m=d.match(/^([A-Za-z]{3})\s+(\d{1,2}),\s*(\d{4})$/))!==null){return{yr:parseInt(m[3]),mo:_MN[m[1]]||0,dy:parseInt(m[2])};}return null;}
 let _ebayStoreUrl = localStorage.getItem('cb_ebay_store_url') || '';
 let _ebayFetching = false;
 
