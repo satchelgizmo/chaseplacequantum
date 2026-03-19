@@ -214,6 +214,26 @@ td{padding:8px 10px;vertical-align:middle}
 .bar-track{height:5px;background:var(--surf2);border-radius:3px;overflow:hidden}
 .bar-fill{height:100%;border-radius:3px;transition:width .5s}
 
+/* ── REVENUE CALENDAR ── */
+.rev-cal-wrap{max-height:380px;overflow-y:auto;padding-right:2px}
+.rev-cal-month{margin-bottom:18px}
+.rev-cal-mhdr{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
+.rev-cal-mname{font-size:12px;font-weight:700;font-family:var(--mono);color:var(--text);letter-spacing:.5px;text-transform:uppercase}
+.rev-cal-mtotal{font-size:12px;font-family:var(--mono);color:var(--green);font-weight:700}
+.rev-cal-dow{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:2px}
+.rev-cal-dow span{font-size:8px;font-family:var(--mono);color:var(--faint);text-align:center;letter-spacing:.5px;text-transform:uppercase;padding:2px 0}
+.rev-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+.rev-cal-day{min-height:44px;background:var(--surf2);border-radius:5px;padding:4px 5px;display:flex;flex-direction:column;gap:2px;border:1px solid transparent;transition:border-color .12s}
+.rev-cal-day:hover{border-color:var(--border2)}
+.rev-cal-day.has-rev{background:rgba(0,229,170,.06);border-color:rgba(0,229,170,.15)}
+.rev-cal-day.empty-cell{background:transparent;border-color:transparent;min-height:44px}
+.rev-cal-day.other-month{opacity:.25}
+.rev-cal-dnum{font-size:9px;font-family:var(--mono);color:var(--dim);line-height:1}
+.rev-cal-drev{font-size:9px;font-family:var(--mono);color:var(--green);font-weight:700;line-height:1.2;margin-top:auto}
+.rev-view-toggle{display:flex;gap:2px;background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);padding:2px}
+.rev-view-toggle button{background:none;border:none;color:var(--dim);padding:3px 8px;border-radius:4px;cursor:pointer;font-size:12px;line-height:1;transition:all .1s}
+.rev-view-toggle button.on{background:var(--surf3);color:var(--green)}
+
 /* ── MISC ── */
 .spin{display:inline-block;width:14px;height:14px;border:2px solid var(--border2);border-top-color:var(--gold);border-radius:50%;animation:spin .6s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -789,10 +809,15 @@ function renderDash(){
   const unlinked=sales.length-linked;
   const soldCost=sales.reduce((a,s)=>{const lp=(saleEdits[s.id]?.linkedPid??s.linkedPid);return lp?a+getP(lp).cost:a;},0);
   const roi=soldCost>0?((pnl/soldCost)*100).toFixed(0)+'%':'—';
+  const _MN={Jan:1,Feb:2,Mar:3,Apr:4,May:5,Jun:6,Jul:7,Aug:8,Sep:9,Oct:10,Nov:11,Dec:12};
+  function _parseDate(d){if(!d)return null;let m;if((m=d.match(/^([A-Za-z]{3})-(\d{1,2})-(\d{2,4})$/))!==null){const yr=m[3].length===2?2000+parseInt(m[3]):parseInt(m[3]);return{yr,mo:_MN[m[1]]||0,dy:parseInt(m[2])};}if((m=d.match(/^([A-Za-z]{3})\s+(\d{1,2}),\s*(\d{4})$/))!==null){return{yr:parseInt(m[3]),mo:_MN[m[1]]||0,dy:parseInt(m[2])};}return null;}
   const monthly={};
-  for(const s of sales){const d=getS(s.id).date||'';const m=d.slice(0,7);if(m)monthly[m]=(monthly[m]||0)+getS(s.id).price*(getS(s.id).qty||1);}
+  const daily={};
+  for(const s of sales){const ss=getS(s.id);const raw=ss.date||'';const amt=ss.price*(ss.qty||1);const pd=_parseDate(raw);if(pd&&pd.mo){const ym=`${pd.yr}-${String(pd.mo).padStart(2,'0')}`;monthly[ym]=(monthly[ym]||0)+amt;const dk=`${pd.yr}-${String(pd.mo).padStart(2,'0')}-${String(pd.dy).padStart(2,'0')}`;daily[dk]=(daily[dk]||0)+amt;}else if(raw){const m=raw.slice(0,7);if(m)monthly[m]=(monthly[m]||0)+amt;}}
   const months=Object.keys(monthly).sort().slice(-12);
   const maxM=Math.max(...months.map(m=>monthly[m]),1);
+  // Build calendar months (newest first, all months that have data)
+  const calMonths=Object.keys(monthly).filter(k=>/^\d{4}-\d{2}$/.test(k)).sort().reverse();
   const plrev={};
   for(const s of sales){const ss=getS(s.id);const pl=ss.player;if(!pl||pl.length<3)continue;plrev[pl]=(plrev[pl]||0)+ss.price*(ss.qty||1);}
   const topPl=Object.entries(plrev).sort((a,b)=>b[1]-a[1]).slice(0,8);
@@ -812,9 +837,35 @@ function renderDash(){
       <div class="sc"><div class="sc-lbl">Total ROI</div><div class="sc-val ${pnl>=0?'g':'r'}">${roi}</div><div class="sc-sub">net ÷ cost sold</div></div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:20px">
-      <div><div style="font-size:13px;font-weight:700;margin-bottom:10px">Monthly Revenue</div>
+      <div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <div style="font-size:13px;font-weight:700">Monthly Revenue</div>
+          <div class="rev-view-toggle">
+            <button class="${_revenueView==='bar'?'on':''}" onclick="_revenueView='bar';localStorage.setItem('cb_revenue_view','bar');render()" title="Bar view">▬</button>
+            <button class="${_revenueView==='calendar'?'on':''}" onclick="_revenueView='calendar';localStorage.setItem('cb_revenue_view','calendar');render()" title="Calendar view">📅</button>
+          </div>
+        </div>
         <div style="background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:14px">
-          ${months.map(m=>`<div class="bar-wrap"><div class="bar-lbl"><span>${m}</span><span style="color:var(--green)">${f$(monthly[m])}</span></div><div class="bar-track"><div class="bar-fill" style="width:${(monthly[m]/maxM*100).toFixed(1)}%;background:var(--green)"></div></div></div>`).join('')}
+          ${_revenueView==='calendar'?(()=>{
+            if(!calMonths.length)return'<div style="color:var(--faint);font-size:11px;font-family:var(--mono)">No sales data yet.</div>';
+            const DOW=['Su','Mo','Tu','We','Th','Fr','Sa'];
+            return'<div class="rev-cal-wrap">'+calMonths.map(ym=>{
+              const[yr,mo]=ym.split('-').map(Number);
+              const monthTotal=monthly[ym]||0;
+              const label=new Date(yr,mo-1,1).toLocaleString('default',{month:'long',year:'numeric'});
+              const firstDow=new Date(yr,mo-1,1).getDay();
+              const daysInMonth=new Date(yr,mo,0).getDate();
+              let cells='';
+              for(let i=0;i<firstDow;i++)cells+='<div class="rev-cal-day empty-cell"></div>';
+              for(let d=1;d<=daysInMonth;d++){
+                const key=`${yr}-${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+                const rev=daily[key]||0;
+                cells+=`<div class="rev-cal-day${rev>0?' has-rev':''}"><span class="rev-cal-dnum">${d}</span>${rev>0?`<span class="rev-cal-drev">${f$(rev)}</span>`:''}</div>`;
+              }
+              return`<div class="rev-cal-month"><div class="rev-cal-mhdr"><span class="rev-cal-mname">${label}</span><span class="rev-cal-mtotal">${f$(monthTotal)}</span></div><div class="rev-cal-dow">${DOW.map(d=>`<span>${d}</span>`).join('')}</div><div class="rev-cal-grid">${cells}</div></div>`;
+            }).join('')+'</div>';
+          })()
+          :months.map(m=>`<div class="bar-wrap"><div class="bar-lbl"><span>${m}</span><span style="color:var(--green)">${f$(monthly[m])}</span></div><div class="bar-track"><div class="bar-fill" style="width:${(monthly[m]/maxM*100).toFixed(1)}%;background:var(--green)"></div></div></div>`).join('')}
         </div>
       </div>
       <div><div style="font-size:13px;font-weight:700;margin-bottom:10px">Top Players by Revenue</div>
@@ -2382,6 +2433,7 @@ Rules:
 // ─────────────────────────────────────────────
 let _listingsQ = '';
 let _listingsView = localStorage.getItem('cb_listings_view') || 'table';
+let _revenueView = localStorage.getItem('cb_revenue_view') || 'bar';
 let _ebayStoreUrl = localStorage.getItem('cb_ebay_store_url') || '';
 let _ebayFetching = false;
 
