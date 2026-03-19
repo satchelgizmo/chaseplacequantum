@@ -99,6 +99,21 @@ td{padding:8px 10px;vertical-align:middle}
 .pt.rc{border-color:rgba(46,204,138,.3);color:var(--green)}
 .pt.grade{border-color:rgba(224,82,82,.4);color:var(--red)}
 .pt.var{border-color:rgba(142,162,184,.2);color:var(--dim)}
+
+/* ── LISTINGS GRID VIEW ── */
+.listings-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-top:4px}
+.lg-card{background:var(--surf);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;transition:border-color .12s,box-shadow .12s;display:flex;flex-direction:column}
+.lg-card:hover{border-color:var(--border2);box-shadow:0 4px 16px rgba(0,0,0,.3)}
+.lg-card-img{width:100%;aspect-ratio:3/4;object-fit:cover;background:var(--surf2);display:block}
+.lg-card-img-ph{width:100%;aspect-ratio:3/4;background:var(--surf2);display:flex;align-items:center;justify-content:center;font-size:28px}
+.lg-card-body{padding:8px 10px;flex:1;display:flex;flex-direction:column;gap:4px}
+.lg-card-title{font-size:11px;font-weight:600;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;color:var(--text)}
+.lg-card-price{font-size:14px;font-weight:700;color:var(--green);font-family:var(--mono)}
+.lg-card-meta{font-size:10px;color:var(--dim);font-family:var(--mono);display:flex;gap:8px;flex-wrap:wrap}
+.lg-card-foot{padding:6px 10px 8px;border-top:1px solid var(--border);display:flex;gap:5px}
+.view-toggle{display:flex;gap:2px;background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);padding:2px}
+.view-toggle button{background:none;border:none;color:var(--dim);padding:4px 8px;border-radius:5px;cursor:pointer;font-size:13px;line-height:1;transition:all .1s}
+.view-toggle button.on{background:var(--surf3);color:var(--gold)}
 .pt[data-edit]:hover,.pt[onclick]:hover{filter:brightness(1.35);border-color:currentColor;cursor:pointer;transition:filter .1s}
 .pt-del{background:none;border:none;cursor:pointer;color:inherit;opacity:0;padding:0 0 0 3px;font-size:11px;line-height:1;transition:opacity .1s}
 .pt:hover .pt-del{opacity:.55}
@@ -2202,6 +2217,9 @@ Rules:
 // ACTIVE LISTINGS PAGE
 // ─────────────────────────────────────────────
 let _listingsQ = '';
+let _listingsView = localStorage.getItem('cb_listings_view') || 'table';
+let _ebayStoreUrl = localStorage.getItem('cb_ebay_store_url') || '';
+let _ebayFetching = false;
 
 function _matchListingToPurchase(title) {
   const sp = soldPids();
@@ -2306,6 +2324,110 @@ function clearListings() {
   localStorage.removeItem('cb_listings');
   localStorage.removeItem('cb_listings_ts');
   toast('Listings cleared');
+  render();
+}
+
+function _extractEbayUsername(url) {
+  var u = (url || '').trim();
+  var m;
+  m = u.match(/ebay\.com\/str\/([^/?#&\s]+)/i);
+  if (m) return m[1];
+  m = u.match(/ebay\.com\/usr\/([^/?#&\s]+)/i);
+  if (m) return m[1];
+  m = u.match(/ebay\.com\/myworld\/([^/?#&\s]+)/i);
+  if (m) return m[1];
+  // plain username (no slashes, no dots)
+  if (u && u.indexOf('.') < 0 && u.indexOf('/') < 0) return u;
+  return null;
+}
+
+function _parseEbaySearchHtml(html) {
+  var results = [];
+  try {
+    var parser = new DOMParser();
+    var doc = parser.parseFromString(html, 'text/html');
+    var items = doc.querySelectorAll('.s-item');
+    items.forEach(function(item) {
+      var link = item.querySelector('a.s-item__link');
+      if (!link) return;
+      var href = link.getAttribute('href') || '';
+      var idMatch = href.match(/\/itm\/(\d+)/);
+      if (!idMatch) return;
+      var itemId = idMatch[1];
+
+      var titleEl = item.querySelector('.s-item__title');
+      var title = titleEl ? titleEl.textContent.trim() : '';
+      if (!title || title.toLowerCase() === 'shop on ebay') return;
+
+      var priceEl = item.querySelector('.s-item__price');
+      var priceText = priceEl ? priceEl.textContent.trim() : '';
+      var price = parseFloat(priceText.replace(/[^0-9.]/g, '')) || 0;
+
+      var imgEl = item.querySelector('img');
+      var imgUrl = '';
+      if (imgEl) {
+        imgUrl = imgEl.getAttribute('src') || imgEl.getAttribute('data-src') || '';
+        // eBay uses low-res thumbs; upscale
+        imgUrl = imgUrl.replace(/s-l\d+\./, 's-l500.');
+      }
+
+      var condEl = item.querySelector('.SECONDARY_INFO, .s-item__subtitle');
+      var condition = condEl ? condEl.textContent.trim() : '';
+
+      var qtyEl = item.querySelector('.s-item__quantity');
+      var qty = 1;
+      if (qtyEl) { var qm = qtyEl.textContent.match(/(\d+)/); if (qm) qty = parseInt(qm[1]) || 1; }
+
+      results.push({ itemId: itemId, title: title, price: price, qty: qty, watchers: 0, views: 0, endDate: '', condition: condition, imgUrl: imgUrl, matchedPid: _matchListingToPurchase(title) });
+    });
+  } catch(e) {}
+  return results;
+}
+
+async function fetchEbayStoreListings() {
+  var inp = document.getElementById('ebay-store-url-input');
+  var url = inp ? inp.value.trim() : _ebayStoreUrl;
+  if (!url) { toast('Enter your eBay store URL first'); return; }
+
+  var username = _extractEbayUsername(url);
+  if (!username) { toast('Could not parse eBay username from that URL'); return; }
+
+  _ebayStoreUrl = url;
+  localStorage.setItem('cb_ebay_store_url', url);
+  _ebayFetching = true;
+  render();
+  toast('Fetching listings for \'' + username + '\'…');
+
+  // Fetch all pages (up to 3) via CORS proxy
+  var allResults = [];
+  for (var page = 1; page <= 3; page++) {
+    var searchUrl = 'https://www.ebay.com/sch/i.html?_ssn=' + encodeURIComponent(username)
+      + '&_pgn=' + page + '&_ipg=240&LH_ItemCondition=1000&_sop=10&store_cat=0&store_name=' + encodeURIComponent(username);
+    var proxyUrl = 'https://api.allorigins.win/get?url=' + encodeURIComponent(searchUrl);
+    try {
+      var resp = await fetch(proxyUrl, { signal: AbortSignal.timeout ? AbortSignal.timeout(15000) : undefined });
+      if (!resp.ok) break;
+      var data = await resp.json();
+      var parsed = _parseEbaySearchHtml(data.contents || '');
+      if (!parsed.length) break;
+      allResults = allResults.concat(parsed);
+      if (parsed.length < 100) break; // last page
+    } catch(e) { break; }
+  }
+
+  _ebayFetching = false;
+  if (!allResults.length) {
+    toast('No listings found — check the store URL or try again');
+    render();
+    return;
+  }
+  // Deduplicate
+  var seen = {}, deduped = [];
+  allResults.forEach(function(r) { if (!seen[r.itemId]) { seen[r.itemId] = true; deduped.push(r); } });
+  activeListings = deduped;
+  activeListingsTs = new Date().toLocaleString();
+  persistListings();
+  toast('Loaded ' + deduped.length + ' listing' + (deduped.length === 1 ? '' : 's') + ' from eBay');
   render();
 }
 
@@ -2443,35 +2565,44 @@ function renderListings() {
     if (activeListings[i].matchedPid) matchedCount++;
   }
 
-  var emptyState = '<div style="max-width:540px;margin:0 auto;padding-top:24px">'
-    + '<div style="font-size:14px;font-weight:700;margin-bottom:8px">Import your eBay Active Listings</div>'
-    + '<div style="font-size:12px;color:var(--dim);font-family:var(--mono);line-height:1.8;margin-bottom:16px">'
-    + '1. Go to <strong style="color:var(--text)">eBay Seller Hub &#x2192; Active Listings</strong><br>'
-    + '2. Click <strong style="color:var(--text)">Download active listings</strong> (top right)<br>'
-    + '3. Open the <code style="color:var(--gold)">.csv</code> in a text editor, select all, copy<br>'
-    + '4. Paste below and click Import'
+  // ── URL fetch area (always visible) ──
+  var urlArea = '<div style="background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:14px">'
+    + '<div style="font-size:12px;font-weight:700;margin-bottom:8px">eBay Store</div>'
+    + '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'
+    + '<div class="sw" style="flex:1;min-width:240px"><span class="si">&#x1F6D2;</span>'
+    + '<input id="ebay-store-url-input" value="' + esc(_ebayStoreUrl) + '" placeholder="https://www.ebay.com/str/yourstore  or  username"'
+    + ' style="padding-left:30px" onkeydown="if(event.key===\'Enter\')fetchEbayStoreListings()">'
     + '</div>'
-    + '<textarea id="listings-csv-ta" style="width:100%;height:160px;background:var(--surf2);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:11px;padding:10px;border-radius:var(--r2);outline:none;resize:vertical" placeholder="Paste eBay Seller Hub CSV here..."></textarea>'
-    + '<div style="margin-top:10px">'
-    + '<button class="btn pri" onclick="importListingsCSV()">&#x1F4CB; Import CSV</button>'
-    + '</div></div>';
-
-  if (!activeListings.length) {
-    return '<div class="topbar"><div class="pg-title">Active Listings <span class="pg-sub">no listings imported yet</span></div></div>'
-      + '<div class="content">' + emptyState + '</div>';
-  }
-
-  var updateArea = '<div id="listings-update-area" style="display:none;background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:14px">'
-    + '<div style="font-size:12px;color:var(--dim);font-family:var(--mono);margin-bottom:8px">Paste fresh CSV from eBay Seller Hub &#x2192; Active Listings &#x2192; Download active listings</div>'
-    + '<textarea id="listings-csv-ta" style="width:100%;height:120px;background:var(--surf2);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:11px;padding:10px;border-radius:var(--r2);outline:none;resize:vertical" placeholder="Paste CSV here..."></textarea>'
-    + '<button class="btn pri" style="margin-top:8px" onclick="importListingsCSV()">&#x1F4CB; Import</button>'
+    + '<button class="btn pri" onclick="fetchEbayStoreListings()" ' + (_ebayFetching ? 'disabled' : '') + '>'
+    + (_ebayFetching ? '&#x23F3; Fetching…' : '&#x1F504; Load Listings') + '</button>'
+    + '</div>'
+    + '<div style="font-size:10px;color:var(--faint);font-family:var(--mono);margin-top:6px">Paste your eBay store URL or seller username &mdash; listings are fetched live from eBay</div>'
     + '</div>';
 
+  // ── CSV fallback (collapsible) ──
+  var csvArea = '<div id="listings-csv-area" style="display:none;background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:14px">'
+    + '<div style="font-size:11px;color:var(--dim);font-family:var(--mono);margin-bottom:8px">Or paste CSV from eBay Seller Hub &rarr; Active Listings &rarr; Download active listings</div>'
+    + '<textarea id="listings-csv-ta" style="width:100%;height:120px;background:var(--surf2);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:11px;padding:10px;border-radius:var(--r2);outline:none;resize:vertical" placeholder="Paste CSV here..."></textarea>'
+    + '<button class="btn pri" style="margin-top:8px" onclick="importListingsCSV()">&#x1F4CB; Import CSV</button>'
+    + '</div>';
+
+  if (!activeListings.length) {
+    return '<div class="topbar"><div class="pg-title">Active Listings <span class="pg-sub">no listings loaded yet</span></div></div>'
+      + '<div class="content">'
+      + urlArea
+      + '<div style="text-align:center;margin:8px 0 4px">'
+      + '<button class="btn ghost" style="font-size:11px" onclick="var a=document.getElementById(\'listings-csv-area\');a.style.display=a.style.display===\'none\'?\'block\':\'none\'">&#x1F4CB; Import from CSV instead</button>'
+      + '</div>'
+      + csvArea
+      + '</div>';
+  }
+
+  // ── build table rows ──
   var rows = '';
   for (var i = 0; i < items.length; i++) {
     var l = items[i];
     var pp = l.matchedPid ? getP(l.matchedPid) : null;
-    if (pp && !pp.id) pp = null; // matchedPid pointed to a deleted purchase
+    if (pp && !pp.id) pp = null;
     var netEst = pp ? netProfit(l.price, l.qty || 1, pp.cost) : null;
     var wCls = l.watchers >= 5 ? 'g' : l.watchers >= 1 ? 'o' : '';
     var matchCell = (pp
@@ -2500,11 +2631,56 @@ function renderListings() {
   }
   if (!rows) rows = '<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--faint);font-family:var(--mono)">No listings match filter</td></tr>';
 
+  // ── build grid cards ──
+  var cards = '';
+  for (var i = 0; i < items.length; i++) {
+    var l = items[i];
+    var pp = l.matchedPid ? getP(l.matchedPid) : null;
+    if (pp && !pp.id) pp = null;
+    var netEst = pp ? netProfit(l.price, l.qty || 1, pp.cost) : null;
+    var imgSrc = l.imgUrl || (pp ? pp.img : '');
+    var imgTag = imgSrc
+      ? '<img class="lg-card-img" src="' + esc(imgSrc) + '" onerror="this.parentNode.innerHTML=\'<div class=lg-card-img-ph>&#x1F0CF;</div>\'">'
+      : '<div class="lg-card-img-ph">&#x1F0CF;</div>';
+    var watchStr = l.watchers ? '<span>' + l.watchers + ' watch</span>' : '';
+    var netStr = netEst !== null ? '<span style="color:' + (netEst >= 0 ? 'var(--green)' : 'var(--red)') + '">' + f$(netEst) + ' net</span>' : '';
+    cards += '<a class="lg-card" href="https://www.ebay.com/itm/' + esc(l.itemId) + '" target="_blank" style="text-decoration:none">'
+      + imgTag
+      + '<div class="lg-card-body">'
+      + '<div class="lg-card-title">' + esc(l.title) + '</div>'
+      + '<div class="lg-card-price">' + f$(l.price) + (l.qty > 1 ? ' <span style="font-size:10px;color:var(--dim)">x' + l.qty + '</span>' : '') + '</div>'
+      + (watchStr || netStr || l.condition ? '<div class="lg-card-meta">' + (l.condition ? '<span>' + esc(l.condition) + '</span>' : '') + watchStr + netStr + '</div>' : '')
+      + '</div>'
+      + '<div class="lg-card-foot">'
+      + '<button class="btn xs" onclick="event.preventDefault();event.stopPropagation();saveListingToInventory(\'' + esc(l.itemId) + '\')" title="Add to inventory" style="font-size:9px">+ Inv</button>'
+      + '<button class="btn xs ghost" onclick="event.preventDefault();event.stopPropagation();openRelinkListing(\'' + esc(l.itemId) + '\')" title="Link to inventory card">&#x1F517;</button>'
+      + '</div>'
+      + '</a>';
+  }
+  if (!cards) cards = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--faint);font-family:var(--mono)">No listings match filter</div>';
+
+  var viewToggle = '<div class="view-toggle">'
+    + '<button class="' + (_listingsView === 'table' ? 'on' : '') + '" onclick="_listingsView=\'table\';localStorage.setItem(\'cb_listings_view\',\'table\');render()" title="Table view">&#x2630;</button>'
+    + '<button class="' + (_listingsView === 'grid' ? 'on' : '') + '" onclick="_listingsView=\'grid\';localStorage.setItem(\'cb_listings_view\',\'grid\');render()" title="Grid view">&#x2B1C;</button>'
+    + '</div>';
+
+  var listingContent = _listingsView === 'grid'
+    ? '<div class="listings-grid">' + cards + '</div>'
+    : '<div class="tw"><table>'
+      + '<thead><tr><th></th><th>TITLE</th><th>ITEM #</th><th>PRICE</th><th>WATCHERS</th><th>VIEWS</th><th>ENDS</th><th>INV MATCH</th><th>NET EST</th></tr></thead>'
+      + '<tbody>' + rows + '</tbody>'
+      + '</table></div>';
+
   return '<div class="topbar"><div class="pg-title">Active Listings <span class="pg-sub">'
     + activeListings.length + ' live &middot; ' + f$(totalVal) + ' listed'
     + (activeListingsTs ? ' &middot; updated ' + activeListingsTs : '')
     + '</span></div></div>'
     + '<div class="content">'
+    + urlArea
+    + '<div style="text-align:right;margin:-8px 0 10px">'
+    + '<button class="btn ghost" style="font-size:11px" onclick="var a=document.getElementById(\'listings-csv-area\');a.style.display=a.style.display===\'none\'?\'block\':\'none\'">&#x1F4CB; CSV import</button>'
+    + '</div>'
+    + csvArea
     + '<div class="sg" style="margin-bottom:18px">'
     + '<div class="sc"><div class="sc-lbl">ACTIVE</div><div class="sc-val b">' + activeListings.length + '</div><div class="sc-sub">listings live</div></div>'
     + '<div class="sc"><div class="sc-lbl">LISTED VALUE</div><div class="sc-val g">' + f$(totalVal) + '</div><div class="sc-sub">total asking</div></div>'
@@ -2513,14 +2689,10 @@ function renderListings() {
     + '</div>'
     + '<div class="fb" style="margin-bottom:14px">'
     + '<div class="sw"><span class="si">&#x1F50D;</span><input id="search-listings" value="' + esc(_listingsQ) + '" placeholder="Search listings..." oninput="_listingsQ=this.value;render()"></div>'
-    + '<button class="btn" onclick="var a=document.getElementById(\'listings-update-area\');if(a)a.style.display=a.style.display===\'none\'?\'block\':\'none\'">&#x2B06; Update</button>'
+    + viewToggle
     + '<button class="btn red" onclick="if(confirm(\'Clear all active listings?\'))clearListings()">&#x2715; Clear</button>'
     + '</div>'
-    + updateArea
-    + '<div class="tw"><table>'
-    + '<thead><tr><th></th><th>TITLE</th><th>ITEM #</th><th>PRICE</th><th>WATCHERS</th><th>VIEWS</th><th>ENDS</th><th>INV MATCH</th><th>NET EST</th></tr></thead>'
-    + '<tbody>' + rows + '</tbody>'
-    + '</table></div>'
+    + listingContent
     + '</div>';
 }
 
