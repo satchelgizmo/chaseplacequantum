@@ -101,7 +101,7 @@ td{padding:8px 10px;vertical-align:middle}
 .pt.var{border-color:rgba(142,162,184,.2);color:var(--dim)}
 
 /* ── LISTINGS GRID VIEW ── */
-.listings-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-top:4px}
+.listings-grid,.cards-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-top:4px}
 .lg-card{background:var(--surf);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;transition:border-color .12s,box-shadow .12s;display:flex;flex-direction:column}
 .lg-card:hover{border-color:var(--border2);box-shadow:0 4px 16px rgba(0,0,0,.3)}
 .lg-card-img{width:100%;aspect-ratio:3/4;object-fit:cover;background:var(--surf2);display:block}
@@ -925,9 +925,39 @@ function renderInv(){
         <option value="no" ${f.mkt==='no'?'selected':''}>Unvalued</option>
       </select>
       <button id="inv-export-btn" class="btn pri" style="display:${selCount?'':'none'}" onclick="exportEbayCSV()">📥 Export eBay CSV (${selCount} selected)</button>
+      <div class="view-toggle">
+        <button class="${_invView==='table'?'on':''}" onclick="_invView='table';localStorage.setItem('cb_inv_view','table');render()" title="Table view">&#x2630;</button>
+        <button class="${_invView==='grid'?'on':''}" onclick="_invView='grid';localStorage.setItem('cb_inv_view','grid');render()" title="Grid view">&#x2B1C;</button>
+      </div>
     </div>
     ${selCount>0?`<div style="font-size:11px;color:var(--dim);font-family:var(--mono);margin-bottom:6px">${selCount} card${selCount===1?'':'s'} selected across all pages</div>`:''}
-    <div class="tw"><table aria-label="Inventory cards">
+    ${_invView==='grid'
+      ?`<div class="cards-grid">${page_items.length===0
+          ?`<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--faint);font-family:var(--mono)">No cards found</div>`
+          :page_items.map(p=>{
+            const vl=valueLookups[p.id];
+            const mktDiff=vl?.avgPrice?(vl.avgPrice-p.cost):null;
+            const isListed=activeListings.some(function(l){return l.matchedPid===p.id;});
+            const imgTag=p.img?`<img class="lg-card-img" src="${esc(p.img)}" onerror="this.parentNode.innerHTML='<div class=lg-card-img-ph>&#x1F0CF;</div>'">`:`<div class="lg-card-img-ph">&#x1F0CF;</div>`;
+            return`<div class="lg-card" onclick="showCardPage('${p.id}')" style="cursor:pointer">
+              ${imgTag}
+              <div class="lg-card-body">
+                <div class="lg-card-title">${esc(p.name)}${isListed?'<span style="display:inline-block;font-size:8px;font-family:var(--mono);background:rgba(46,204,138,.15);color:var(--green);border:1px solid rgba(46,204,138,.35);border-radius:3px;padding:1px 4px;margin-left:4px;vertical-align:middle">LISTED</span>':''}</div>
+                <div class="lg-card-price">${f$(p.cost)}</div>
+                <div class="lg-card-meta">
+                  ${typeBadge(p.type,p._typeMismatch)}
+                  ${vl?`<span style="color:${mktDiff>=0?'var(--green)':'var(--red)'}">${f$(vl.avgPrice)} mkt</span>`:''}
+                </div>
+                ${p.player?`<div style="font-size:10px;color:var(--dim);font-family:var(--mono);margin-top:2px">${esc(p.player)}</div>`:''}
+              </div>
+              <div class="lg-card-foot" onclick="event.stopPropagation()">
+                <button class="btn xs" onclick="showCardPage('${p.id}')">✏</button>
+                <button class="btn xs" onclick="lookupCard('${p.id}')">💡</button>
+                <button class="btn xs" onclick="buildListing('${p.id}')">📝</button>
+              </div>
+            </div>`;}).join('')}
+        </div>`
+      :`<div class="tw"><table aria-label="Inventory cards">
       <thead><tr>
         <th style="width:32px;padding:8px 6px"><input type="checkbox" id="inv-cb-all" title="Select all on page" onchange="toggleInvSelectAll(this.checked)" style="cursor:pointer;accent-color:var(--gold)"></th>
         <th></th>
@@ -969,7 +999,7 @@ function renderInv(){
           </td>
         </tr>`;}).join('')}
       </tbody>
-    </table></div>
+    </table></div>`}
     ${renderPag(total,pn,'inv')}
   </div>`;
 }
@@ -1004,8 +1034,35 @@ function renderBuys(){
         ${['Soccer','Pokémon','NFL','MLB','Marvel','NBA','Yu-Gi-Oh'].map(t=>`<option value="${t}" ${f.type===t?'selected':''}>${t}</option>`).join('')}
       </select>
       <button class="btn sm" onclick="openAddPurchase()">+ Add</button>
+      <div class="view-toggle">
+        <button class="${_buysView==='table'?'on':''}" onclick="_buysView='table';localStorage.setItem('cb_buys_view','table');render()" title="Table view">&#x2630;</button>
+        <button class="${_buysView==='grid'?'on':''}" onclick="_buysView='grid';localStorage.setItem('cb_buys_view','grid');render()" title="Grid view">&#x2B1C;</button>
+      </div>
     </div>
-    <div class="tw"><table aria-label="All purchases">
+    ${_buysView==='grid'
+      ?`<div class="cards-grid">${page_items.length===0
+          ?`<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--faint);font-family:var(--mono)">No cards found</div>`
+          :page_items.map(p=>{
+            const isSold=sp.has(p.id);
+            const ss=salesForPid(p.id);
+            const rev=ss.reduce((a,s)=>a+getS(s.id).price*(getS(s.id).qty||1),0);
+            const totalFees=ss.reduce((a,s)=>a+ebayFee(getS(s.id).price,getS(s.id).qty||1),0);
+            const netPnl=rev-p.cost-totalFees;
+            const imgTag=p.img?`<img class="lg-card-img" src="${esc(p.img)}" onerror="this.parentNode.innerHTML='<div class=lg-card-img-ph>&#x1F0CF;</div>'">`:`<div class="lg-card-img-ph">&#x1F0CF;</div>`;
+            return`<div class="lg-card" onclick="showCardPage('${p.id}')" style="cursor:pointer">
+              ${imgTag}
+              <div class="lg-card-body">
+                <div class="lg-card-title">${esc(p.name)}</div>
+                <div class="lg-card-price">${f$(p.cost)}</div>
+                <div class="lg-card-meta">
+                  ${typeBadge(p.type,p._typeMismatch)}
+                  ${isSold?`<span class="sb sold" style="font-size:9px">SOLD</span>`:`<span class="sb stock" style="font-size:9px">IN STOCK</span>`}
+                </div>
+                ${isSold?`<div style="font-size:11px;font-family:var(--mono);color:${netPnl>=0?'var(--green)':'var(--red)'};margin-top:2px">${f$(netPnl)} net</div>`:''}
+              </div>
+            </div>`;}).join('')}
+        </div>`
+      :`<div class="tw"><table aria-label="All purchases">
       <thead><tr><th></th>
         <th onclick="setSort('buys','name')" class="sh">CARD${sortIcon('buys','name')}</th>
         <th onclick="setSort('buys','player')" class="sh">PARSED${sortIcon('buys','player')}</th>
@@ -1032,7 +1089,7 @@ function renderBuys(){
           <td>${isSold?`<span class="pr ${netPnl>=0?'g':'r'}">${f$(netPnl)}</span><div style="font-size:9px;color:var(--faint);font-family:var(--mono)">after fees</div>`:`<span class="pr d">—</span>`}</td>
         </tr>`;}).join('')}
       </tbody>
-    </table></div>
+    </table></div>`}
     ${renderPag(total,pn,'buys')}
   </div>`;
 }
@@ -1376,8 +1433,33 @@ function renderSells(){
         <option value="yes" ${f.linked==='yes'?'selected':''}>Linked only</option>
         <option value="no" ${f.linked==='no'?'selected':''}>Unlinked only</option>
       </select>
+      <div class="view-toggle">
+        <button class="${_sellsView==='table'?'on':''}" onclick="_sellsView='table';localStorage.setItem('cb_sells_view','table');render()" title="Table view">&#x2630;</button>
+        <button class="${_sellsView==='grid'?'on':''}" onclick="_sellsView='grid';localStorage.setItem('cb_sells_view','grid');render()" title="Grid view">&#x2B1C;</button>
+      </div>
     </div>
-    <div class="tw"><table aria-label="Sales records">
+    ${_sellsView==='grid'
+      ?`<div class="cards-grid">${page_items.length===0
+          ?`<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--faint);font-family:var(--mono)">No sales found</div>`
+          :page_items.map(ss=>{
+            const lp=ss.linkedPid?getP(ss.linkedPid):null;
+            const np=lp?netProfit(ss.price,ss.qty||1,lp.cost):null;
+            const imgSrc=lp?.img||'';
+            const imgTag=imgSrc?`<img class="lg-card-img" src="${esc(imgSrc)}" onerror="this.parentNode.innerHTML='<div class=lg-card-img-ph>&#x1F0CF;</div>'">`:`<div class="lg-card-img-ph">&#x1F0CF;</div>`;
+            return`<div class="lg-card" onclick="showSale('${ss.id}')" style="cursor:pointer">
+              ${imgTag}
+              <div class="lg-card-body">
+                <div class="lg-card-title">${esc(ss.title)}</div>
+                <div class="lg-card-price">${f$(ss.price*(ss.qty||1))}</div>
+                <div class="lg-card-meta">
+                  ${typeBadge(ss.type)}
+                  ${lp?`<span class="sb linked" style="font-size:9px">✓ linked</span>`:`<span class="sb unlinked" style="font-size:9px;cursor:pointer" onclick="event.stopPropagation();openRelinkPanel('${ss.id}')">🔗 link</span>`}
+                </div>
+                ${np!==null?`<div style="font-size:11px;font-family:var(--mono);color:${np>=0?'var(--green)':'var(--red)'};margin-top:2px">${f$(np)} net</div>`:''}
+              </div>
+            </div>`;}).join('')}
+        </div>`
+      :`<div class="tw"><table aria-label="Sales records">
       <thead><tr><th></th>
         <th onclick="setSort('sells','title')" class="sh">TITLE${sortIcon('sells','title')}</th>
         <th onclick="setSort('sells','player')" class="sh">PARSED${sortIcon('sells','player')}</th>
@@ -1408,7 +1490,7 @@ function renderSells(){
           <td>${(()=>{if(!lp)return'<span class=\'pr d\'>—</span>';const np=netProfit(ss.price,ss.qty||1,lp.cost);const fee=ebayFee(ss.price,ss.qty||1);return`<span class="pr ${np>=0?'g':'r'}">${f$(np)}</span><div style="font-size:9px;font-family:var(--mono);color:var(--faint)">fee ${f$(fee)}</div>`;})()}</td>
         </tr>`;}).join('')}
       </tbody>
-    </table></div>
+    </table></div>`}
     ${renderPag(total,pn,'sells')}
   </div>`;
 }
@@ -2433,6 +2515,9 @@ Rules:
 // ─────────────────────────────────────────────
 let _listingsQ = '';
 let _listingsView = localStorage.getItem('cb_listings_view') || 'table';
+let _invView = localStorage.getItem('cb_inv_view') || 'table';
+let _buysView = localStorage.getItem('cb_buys_view') || 'table';
+let _sellsView = localStorage.getItem('cb_sells_view') || 'table';
 let _revenueView = localStorage.getItem('cb_revenue_view') || 'bar';
 let _ebayStoreUrl = localStorage.getItem('cb_ebay_store_url') || '';
 let _ebayFetching = false;
