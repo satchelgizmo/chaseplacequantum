@@ -848,52 +848,16 @@ function renderDash(){
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:20px">
       <div>
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-          <div style="font-size:13px;font-weight:700">${_revenueView==='year'?'Yearly Revenue':'Monthly Revenue'}</div>
-          <div class="rev-view-toggle">
-            <button class="${_revenueView==='calendar'?'on':''}" onclick="_revenueView='calendar';localStorage.setItem('cb_revenue_view','calendar');render()" title="Monthly view">Mo</button>
-            <button class="${_revenueView==='year'?'on':''}" onclick="_revenueView='year';localStorage.setItem('cb_revenue_view','year');render()" title="Full year view">Yr</button>
-          </div>
-        </div>
+        <div style="font-size:13px;font-weight:700;margin-bottom:10px">Revenue Calendar</div>
         <div style="background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:14px">
           ${(()=>{
             if(!calMonths.length)return'<div style="color:var(--faint);font-size:11px;font-family:var(--mono)">No sales data yet.</div>';
             const DOW=['Su','Mo','Tu','We','Th','Fr','Sa'];
-            if(_revenueView==='year'){
-              const allYrs=[...new Set(calMonths.map(ym=>ym.split('-')[0]))].sort();
-              const selYr=(_revYear&&allYrs.includes(_revYear))?_revYear:allYrs[allYrs.length-1];
-              const yi=allYrs.indexOf(selYr);
-              const prevYr=yi>0?allYrs[yi-1]:null;
-              const nextYr=yi<allYrs.length-1?allYrs[yi+1]:null;
-              const MNS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-              const y12=MNS.map((_,i)=>`${selYr}-${String(i+1).padStart(2,'0')}`);
-              const yTotal=y12.reduce((a,ym)=>a+(monthly[ym]||0),0);
-              const navBtn=(yr,lbl)=>yr
-                ?`<button onclick="_revYear='${yr}';render()" style="background:none;border:1px solid var(--border);color:var(--text);padding:2px 8px;border-radius:4px;cursor:pointer;font-size:12px;font-family:var(--mono)">${lbl}</button>`
-                :`<button style="background:none;border:1px solid var(--border);color:var(--faint);padding:2px 8px;border-radius:4px;cursor:default;font-size:12px;font-family:var(--mono)" disabled>${lbl}</button>`;
-              let h=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">${navBtn(prevYr,'◀')}<span style="font-size:13px;font-weight:700;font-family:var(--mono)">${selYr} <span style="color:var(--green);font-size:11px">${f$(yTotal)}</span></span>${navBtn(nextYr,'▶')}</div><div class="rev-year-grid">`;
-              h+=y12.map((ym,idx)=>{
-                const mo=idx+1;
-                const mTot=monthly[ym]||0;
-                const firstDow=new Date(parseInt(selYr),mo-1,1).getDay();
-                const dim=new Date(parseInt(selYr),mo,0).getDate();
-                let cells='';
-                for(let i=0;i<firstDow;i++)cells+='<div class="rev-ym-day empty"></div>';
-                for(let d=1;d<=dim;d++){
-                  const k=`${selYr}-${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-                  const rv=daily[k]||0;
-                  cells+=`<div class="rev-ym-day${rv>0?' has-rev':''}" title="${rv>0?f$(rv):d}">${d}</div>`;
-                }
-                const padEnd=42-(firstDow+dim);
-                for(let i=0;i<padEnd;i++)cells+='<div class="rev-ym-day empty"></div>';
-                return`<div class="rev-ym-block"><div class="rev-ym-hdr"><span>${MNS[idx]}</span>${mTot?`<span style="color:var(--green);font-size:9px;font-family:var(--mono)">${f$(mTot)}</span>`:''}</div><div class="rev-ym-dow">${DOW.map(dw=>`<span>${dw[0]}</span>`).join('')}</div><div class="rev-ym-daygrid">${cells}</div></div>`;
-              }).join('');
-              h+='</div>';
-              return '<div class="rev-cal-wrap">'+h+'</div>';
-            }
-            return'<div class="rev-cal-wrap">'+calMonths.map(ym=>{
-              const[yr,mo]=ym.split('-').map(Number);
-              const monthTotal=monthly[ym]||0;
+            const MNS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            // Month detail view
+            if(_revCalMonth){
+              const[yr,mo]=_revCalMonth.split('-').map(Number);
+              const monthTotal=monthly[_revCalMonth]||0;
               const label=new Date(yr,mo-1,1).toLocaleString('default',{month:'long',year:'numeric'});
               const firstDow=new Date(yr,mo-1,1).getDay();
               const daysInMonth=new Date(yr,mo,0).getDate();
@@ -904,8 +868,38 @@ function renderDash(){
                 const rev=daily[key]||0;
                 cells+=`<div class="rev-cal-day${rev>0?' has-rev':''}"><span class="rev-cal-dnum">${d}</span>${rev>0?`<span class="rev-cal-drev">${f$(rev)}</span>`:''}</div>`;
               }
-              return`<div class="rev-cal-month"><div class="rev-cal-mhdr"><span class="rev-cal-mname">${label}</span><span class="rev-cal-mtotal">${f$(monthTotal)}</span></div><div class="rev-cal-dow">${DOW.map(d=>`<span>${d}</span>`).join('')}</div><div class="rev-cal-grid">${cells}</div></div>`;
-            }).join('')+'</div>';
+              return`<div><div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><button onclick="_revCalMonth=null;render()" style="background:none;border:1px solid var(--border);color:var(--dim);padding:2px 8px;border-radius:4px;cursor:pointer;font-size:11px;font-family:var(--mono)">← ${String(yr)}</button><span style="font-size:12px;font-weight:700;font-family:var(--mono);color:var(--text)">${label}</span><span style="font-size:11px;font-family:var(--mono);color:var(--green);margin-left:auto">${f$(monthTotal)}</span></div><div class="rev-cal-dow">${DOW.map(d=>`<span>${d}</span>`).join('')}</div><div class="rev-cal-grid">${cells}</div></div>`;
+            }
+            // Year overview
+            const allYrs=[...new Set(calMonths.map(ym=>ym.split('-')[0]))].sort();
+            const selYr=(_revYear&&allYrs.includes(_revYear))?_revYear:allYrs[allYrs.length-1];
+            const yi=allYrs.indexOf(selYr);
+            const prevYr=yi>0?allYrs[yi-1]:null;
+            const nextYr=yi<allYrs.length-1?allYrs[yi+1]:null;
+            const y12=MNS.map((_,i)=>`${selYr}-${String(i+1).padStart(2,'0')}`);
+            const yTotal=y12.reduce((a,ym)=>a+(monthly[ym]||0),0);
+            const navBtn=(yr,lbl)=>yr
+              ?`<button onclick="_revYear='${yr}';render()" style="background:none;border:1px solid var(--border);color:var(--text);padding:2px 8px;border-radius:4px;cursor:pointer;font-size:12px;font-family:var(--mono)">${lbl}</button>`
+              :`<button style="background:none;border:1px solid var(--border);color:var(--faint);padding:2px 8px;border-radius:4px;cursor:default;font-size:12px;font-family:var(--mono)" disabled>${lbl}</button>`;
+            let h=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">${navBtn(prevYr,'◀')}<span style="font-size:13px;font-weight:700;font-family:var(--mono)">${selYr} <span style="color:var(--green);font-size:11px">${f$(yTotal)}</span></span>${navBtn(nextYr,'▶')}</div><div class="rev-year-grid">`;
+            h+=y12.map((ym,idx)=>{
+              const mo=idx+1;
+              const mTot=monthly[ym]||0;
+              const firstDow=new Date(parseInt(selYr),mo-1,1).getDay();
+              const dim=new Date(parseInt(selYr),mo,0).getDate();
+              let cells='';
+              for(let i=0;i<firstDow;i++)cells+='<div class="rev-ym-day empty"></div>';
+              for(let d=1;d<=dim;d++){
+                const k=`${selYr}-${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+                const rv=daily[k]||0;
+                cells+=`<div class="rev-ym-day${rv>0?' has-rev':''}" title="${rv>0?f$(rv):d}">${d}</div>`;
+              }
+              const padEnd=42-(firstDow+dim);
+              for(let i=0;i<padEnd;i++)cells+='<div class="rev-ym-day empty"></div>';
+              return`<div class="rev-ym-block" style="cursor:pointer" onclick="_revCalMonth='${ym}';render()" title="View ${MNS[idx]} detail"><div class="rev-ym-hdr"><span>${MNS[idx]}</span>${mTot?`<span style="color:var(--green);font-size:9px;font-family:var(--mono)">${f$(mTot)}</span>`:''}</div><div class="rev-ym-dow">${DOW.map(dw=>`<span>${dw[0]}</span>`).join('')}</div><div class="rev-ym-daygrid">${cells}</div></div>`;
+            }).join('');
+            h+='</div>';
+            return '<div class="rev-cal-wrap">'+h+'</div>';
           })()}
         </div>
       </div>
@@ -2562,8 +2556,8 @@ let _listingsView = localStorage.getItem('cb_listings_view') || 'table';
 let _invView = localStorage.getItem('cb_inv_view') || 'table';
 let _buysView = localStorage.getItem('cb_buys_view') || 'table';
 let _sellsView = localStorage.getItem('cb_sells_view') || 'table';
-let _revenueView = (['calendar','year'].includes(localStorage.getItem('cb_revenue_view')) ? localStorage.getItem('cb_revenue_view') : 'calendar');
 let _revYear = null;
+let _revCalMonth = null; // null = year overview; 'YYYY-MM' = month detail
 let _ebayStoreUrl = localStorage.getItem('cb_ebay_store_url') || '';
 let _ebayFetching = false;
 
