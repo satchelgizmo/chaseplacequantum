@@ -40,9 +40,12 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);min-height:100
 .sf-val.g{color:var(--green)}.sf-val.r{color:var(--red)}.sf-val.o{color:var(--gold)}
 
 /* ── TOPBAR ── */
-.topbar{padding:14px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;background:var(--surf);position:sticky;top:0;z-index:20}
+.topbar{padding:14px 24px;border-bottom:1px solid var(--border2);display:flex;align-items:center;gap:12px;background:var(--surf2);position:sticky;top:0;z-index:20;box-shadow:0 2px 12px rgba(0,0,0,.4)}
 .pg-title{font-size:17px;font-weight:700;flex:1}
-.pg-sub{font-size:12px;color:var(--dim);font-family:var(--mono);margin-left:6px;font-weight:400}
+.pg-sub{font-size:13px;color:var(--text);font-family:var(--mono);margin-left:8px;font-weight:400;opacity:.85}
+.pg-sub .stat-num{color:var(--gold);font-weight:600}
+.pg-sub .stat-money{color:var(--green);font-weight:600}
+.pg-sub .stat-sep{color:var(--faint);margin:0 5px}
 
 /* ── CONTENT ── */
 .content{padding:20px 24px;flex:1}
@@ -110,9 +113,9 @@ td{padding:8px 10px;vertical-align:middle}
 .lg-card-img{width:100%;aspect-ratio:3/4;object-fit:cover;background:var(--surf2);display:block}
 .lg-card-img-ph{width:100%;aspect-ratio:3/4;background:var(--surf2);display:flex;align-items:center;justify-content:center;font-size:28px}
 .lg-card-body{padding:8px 10px;flex:1;display:flex;flex-direction:column;gap:4px}
-.lg-card-title{font-size:11px;font-weight:600;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;color:var(--text)}
-.lg-card-price{font-size:14px;font-weight:700;color:var(--green);font-family:var(--mono)}
-.lg-card-meta{font-size:10px;color:var(--dim);font-family:var(--mono);display:flex;gap:8px;flex-wrap:wrap}
+.lg-card-title{font-size:12px;font-weight:600;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;color:var(--text)}
+.lg-card-price{font-size:15px;font-weight:700;color:var(--green);font-family:var(--mono);letter-spacing:-.3px}
+.lg-card-meta{font-size:10.5px;color:var(--dim);font-family:var(--mono);display:flex;gap:8px;flex-wrap:wrap}
 .lg-card-foot{padding:6px 10px 8px;border-top:1px solid var(--border);display:flex;gap:5px}
 .view-toggle{display:flex;gap:2px;background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);padding:2px}
 .view-toggle button{background:none;border:none;color:var(--dim);padding:4px 8px;border-radius:5px;cursor:pointer;font-size:13px;line-height:1;transition:all .1s}
@@ -394,6 +397,9 @@ thead th.sh:hover{color:var(--text)}
       <div style="margin-top:8px">
         <button class="btn sm" style="width:100%" onclick="exportBackup()">📤 Export Backup</button>
       </div>
+      <div style="margin-top:6px">
+        <button class="btn sm red" style="width:100%;opacity:.7" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='.7'" onclick="confirmClearData1()">🗑 Clear All Data</button>
+      </div>
     </div>
   </nav>
   <div class="main" id="main"></div>
@@ -506,11 +512,13 @@ function exportBackup() {
     valueLookups: valueLookups,
     activeListings: activeListings,
   };
+  const nowIso = new Date().toISOString();
+  localStorage.setItem('cb_last_backup_ts', nowIso);
   const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `cardbiz-backup-${new Date().toISOString().slice(0,10)}.json`;
+  a.download = `cardbiz-backup-${nowIso.slice(0,10)}.json`;
   a.click();
   URL.revokeObjectURL(url);
   toast('Backup exported ✓');
@@ -535,6 +543,74 @@ function importBackup(file) {
   };
   reader.readAsText(file);
 }
+
+// ── CLEAR ALL DATA ──────────────────────────────────────────
+function _fmtBackupDate(iso) {
+  if (!iso) return '<span style="color:var(--red)">No backup on record — export one now before clearing!</span>';
+  const d = new Date(iso);
+  return '<span style="color:var(--orange)">' + d.toLocaleDateString('en-US',{weekday:'short',month:'long',day:'numeric',year:'numeric'}) + ' at ' + d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}) + '</span>';
+}
+function confirmClearData1() {
+  const backupHtml = _fmtBackupDate(localStorage.getItem('cb_last_backup_ts'));
+  openPanel(`<div class="pn-head"><div class="pn-title" style="color:var(--red)">&#x26A0;&#xFE0F; Clear All Data</div><button class="pn-close btn ghost sm" onclick="closePanel()">&#x2715;</button></div>
+  <div style="padding:20px 24px">
+    <div style="background:rgba(255,74,104,.08);border:1px solid rgba(255,74,104,.35);border-radius:8px;padding:16px;margin-bottom:18px">
+      <div style="font-size:13.5px;font-weight:700;color:var(--red);margin-bottom:10px">This will permanently delete:</div>
+      <ul style="font-size:12.5px;color:var(--text);font-family:var(--mono);line-height:2;list-style:disc;padding-left:18px">
+        <li>All purchase edits &amp; custom data</li>
+        <li>All sale edits &amp; P&amp;L matches</li>
+        <li>All market value lookups</li>
+        <li>All active listing data</li>
+        <li>All view preferences &amp; settings</li>
+      </ul>
+    </div>
+    <div style="font-size:12px;font-family:var(--mono);color:var(--dim);background:var(--surf3);border:1px solid var(--border);border-radius:6px;padding:10px 14px;margin-bottom:20px">
+      &#x1F4BE; Last backup: ${backupHtml}
+    </div>
+    <div style="display:flex;gap:10px">
+      <button class="btn ghost" onclick="closePanel()" style="flex:1">Cancel — Keep My Data</button>
+      <button class="btn red" onclick="confirmClearData2()" style="flex:1;font-weight:700">I Understand — Continue ›</button>
+    </div>
+  </div>`);
+}
+function confirmClearData2() {
+  const backupHtml = _fmtBackupDate(localStorage.getItem('cb_last_backup_ts'));
+  openPanel(`<div class="pn-head"><div class="pn-title" style="color:var(--red)">&#x1F6A8; Final Confirmation</div><button class="pn-close btn ghost sm" onclick="closePanel()">&#x2715;</button></div>
+  <div style="padding:20px 24px">
+    <div style="background:rgba(255,74,104,.12);border:2px solid rgba(255,74,104,.55);border-radius:8px;padding:18px;margin-bottom:18px;text-align:center">
+      <div style="font-size:32px;margin-bottom:8px">&#x1F6A8;</div>
+      <div style="font-size:15px;font-weight:800;color:var(--red);letter-spacing:.5px;text-transform:uppercase;margin-bottom:8px">Point of No Return</div>
+      <div style="font-size:12px;font-family:var(--mono);color:var(--dim)">&#x1F4BE; Last backup: ${backupHtml}</div>
+    </div>
+    <div style="font-size:13px;color:var(--text);margin-bottom:10px">Type <strong style="color:var(--red);font-family:var(--mono);font-size:15px">CLEAR</strong> below to confirm permanent deletion:</div>
+    <input id="clear-confirm-input" type="text" autocomplete="off" placeholder="Type CLEAR here…" style="width:100%;background:var(--surf2);border:2px solid var(--border2);color:var(--text);padding:11px 14px;border-radius:6px;font-family:var(--mono);font-size:15px;margin-bottom:16px;outline:none;transition:border .15s" oninput="var ok=this.value==='CLEAR';this.style.borderColor=ok?'var(--red)':'var(--border2)';var b=document.getElementById('clear-confirm-btn');b.disabled=!ok;b.style.opacity=ok?'1':'.35'">
+    <div style="display:flex;gap:10px">
+      <button class="btn ghost" onclick="closePanel()" style="flex:1">Cancel — Keep My Data</button>
+      <button id="clear-confirm-btn" class="btn red" onclick="executeDataClear()" disabled style="flex:1;font-weight:700;opacity:.35;transition:opacity .2s">&#x1F5D1; Delete Everything</button>
+    </div>
+  </div>`);
+}
+function executeDataClear() {
+  ['cb_purchaseEdits','cb_saleEdits','cb_lookups','cb_listings','cb_listings_ts',
+   'cb_inv_view','cb_buys_view','cb_sells_view','cb_listings_view',
+   'cb_page_size','cb_last_backup_ts'].forEach(k=>localStorage.removeItem(k));
+  purchaseEdits = {};
+  saleEdits = {};
+  valueLookups = {};
+  activeListings = [];
+  activeListingsTs = null;
+  _pageSize = 50;
+  _invView = 'table';
+  _buysView = 'table';
+  _sellsView = 'table';
+  _listingsView = 'table';
+  pgNum = {};
+  filt = {inv:{q:'',type:'',status:'',mkt:''},buys:{q:'',type:''},sells:{q:'',type:'',linked:''},pnl:{q:''},imp:{q:''}};
+  closePanel();
+  nav('dash');
+  toast('All data cleared. Starting fresh.', 4000);
+}
+
 // API key
 function getApiKey() { return localStorage.getItem('cb_apikey')||''; }
 function saveApiKey(v) {
@@ -612,7 +688,9 @@ let filt = {
   pnl:   {q:''},
   imp:   {q:''},
 };
-const PS = 50;
+let _pageSize = parseInt(localStorage.getItem('cb_page_size')||'50');
+function setPageSize(n){_pageSize=n;localStorage.setItem('cb_page_size',n);pgNum={};render();}
+const PS = _pageSize; // legacy alias — always use _pageSize
 let invSelected = new Set();
 let _invPageIds = [];
 
@@ -871,18 +949,21 @@ function render(){
   // Restore focus to search input if it was focused
   if(savedId){const el=document.getElementById(savedId);if(el){el.focus();try{if(savedSel0!==null)el.setSelectionRange(savedSel0,savedSel1);}catch(e){}}}
 }
+function pageSizeBar(){
+  return`<div style="display:flex;align-items:center;gap:5px;font-size:11px;font-family:var(--mono);color:var(--dim)"><span>Per page:</span>${[50,100,150,250].map(n=>`<button class="pb${_pageSize===n?' on':''}" style="${_pageSize===n?'border-color:var(--gold);color:var(--gold);background:var(--surf3)':''}" onclick="setPageSize(${n})">${n}</button>`).join('')}</div>`;
+}
 function renderPag(total,cur,key){
-  const tp=Math.ceil(total/PS);
-  if(tp<=1)return'';
-  const s=cur*PS+1,e=Math.min((cur+1)*PS,total);
+  const tp=Math.ceil(total/_pageSize);
+  if(tp<=1)return pageSizeBar();
+  const s=cur*_pageSize+1,e=Math.min((cur+1)*_pageSize,total);
   const range=[];
   for(let i=0;i<tp;i++){if(i===0||i===tp-1||Math.abs(i-cur)<=2)range.push(i);else if(range[range.length-1]!=='...')range.push('...');}
   const btns=range.map(i=>i==='...'?`<span style="color:var(--faint)">…</span>`:`<button class="pb ${i===cur?'on':''}" onclick="goPage('${key}',${i})">${i+1}</button>`).join('');
-  return `<div class="pag"><span>${s}–${e} of ${total}</span>
+  return `<div class="pag" style="flex-wrap:wrap;gap:8px">${pageSizeBar()}<div style="display:flex;align-items:center;gap:6px;margin-left:auto"><span>${s}–${e} of ${total}</span>
     <button class="pb" onclick="goPage('${key}',${cur-1})" ${cur===0?'disabled':''}>‹</button>
     ${btns}
     <button class="pb" onclick="goPage('${key}',${cur+1})" ${cur>=tp-1?'disabled':''}>›</button>
-  </div>`;
+  </div></div>`;
 }
 
 // ─────────────────────────────────────────────
@@ -1063,14 +1144,14 @@ function renderInv(){
   if(f.mkt==='no')  items=items.filter(p=>!valueLookups[p.id]);
   items=applySortP(items,'inv');
   const pn=pgNum.inv||0,total=items.length;
-  const page_items=items.slice(pn*PS,(pn+1)*PS);
+  const page_items=items.slice(pn*_pageSize,(pn+1)*_pageSize);
   _invPageIds=page_items.map(p=>p.id);
   const inv_cost=items.reduce((a,p)=>a+p.cost,0);
   const inv_mkt=items.reduce((a,p)=>a+(valueLookups[p.id]?.avgPrice||0),0);
   const selCount=invSelected.size;
   return`
   <div class="topbar">
-    <div class="pg-title">Inventory <span class="pg-sub">${total} in stock · ${f$(inv_cost)} cost · ${inv_mkt?f$(inv_mkt)+' est. market':''}</span></div>
+    <div class="pg-title">Inventory <span class="pg-sub"><span class="stat-num">${total.toLocaleString()}</span> in stock<span class="stat-sep">·</span><span class="stat-money">${f$(inv_cost)}</span> cost${inv_mkt?`<span class="stat-sep">·</span><span style="color:var(--blue);font-weight:600">${f$(inv_mkt)}</span> est. market`:''}</span></div>
     <button class="btn pri" onclick="openAddPurchase()">+ Add Card</button>
   </div>
   <div class="content">
@@ -1117,7 +1198,7 @@ function renderInv(){
                   ${typeBadge(p.type,p._typeMismatch)}
                   ${vl?`<span style="color:${mktDiff>=0?'var(--green)':'var(--red)'}">${f$(vl.avgPrice)} mkt</span>`:''}
                 </div>
-                ${p.player?`<div style="font-size:10px;color:var(--dim);font-family:var(--mono);margin-top:2px">${esc(p.player)}</div>`:''}
+                ${p.player?`<div style="font-size:11.5px;color:var(--text);font-family:var(--mono);font-weight:600;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(p.player)}">${esc(p.player)}</div>`:''}
                 ${parsedTags(p,true)}
               </div>
               <div class="lg-card-foot" onclick="event.stopPropagation()">
@@ -1156,7 +1237,7 @@ function renderInv(){
           <td><div class="cn">${esc(p.name)}${activeListings.some(function(l){return l.matchedPid===p.id;})?'<span style="display:inline-block;font-size:8px;font-family:var(--mono);background:rgba(46,204,138,.15);color:var(--green);border:1px solid rgba(46,204,138,.35);border-radius:3px;padding:1px 5px;vertical-align:middle;margin-left:4px">LISTED</span>':''}</div><div class="cm">${esc(p.seller)} · ${esc(p.orderNum)}</div>
             ${p.is_lot?`<div class="cm" style="color:var(--orange);cursor:pointer" onclick="event.stopPropagation();showCardPage('${p.id}')" title="Click to see lot breakdown">Lot ×${p.lotQty} · raw ${f$(p.costRaw)}</div>`:''}
           </td>
-          <td>${p.player?`<span class="pr d" style="font-family:var(--mono);font-size:11px">${esc(p.player)}</span>${parsedTags(p,true)}`:`<span style="color:var(--faint);font-size:11px;font-family:var(--mono);cursor:pointer" onclick="showCardPage('${p.id}')" title="Click to set player name">— set player</span>`}</td>
+          <td>${p.player?`<span style="font-family:var(--mono);font-size:12px;font-weight:600;color:var(--text)">${esc(p.player)}</span>${parsedTags(p,true)}`:`<span style="color:var(--faint);font-size:11px;font-family:var(--mono);cursor:pointer" onclick="showCardPage('${p.id}')" title="Click to set player name">— set player</span>`}</td>
           <td>${typeBadge(p.type,p._typeMismatch)}</td>
           <td><span class="pr d">${esc(p.date)}</span></td>
           <td><span class="pr o" style="font-weight:700">${f$(p.cost)}</span></td>
@@ -1191,10 +1272,10 @@ function renderBuys(){
   if(f.type) items=items.filter(p=>p.type===f.type);
   items=applySortP(items,'buys');
   const pn=pgNum.buys||0,total=items.length;
-  const page_items=items.slice(pn*PS,(pn+1)*PS);
+  const page_items=items.slice(pn*_pageSize,(pn+1)*_pageSize);
   const hasApiKey=!!getApiKey();
   return`
-  <div class="topbar"><div class="pg-title">Purchases <span class="pg-sub">${total.toLocaleString()} total · ${f$(items.reduce((a,p)=>a+p.cost,0))}</span></div>
+  <div class="topbar"><div class="pg-title">Purchases <span class="pg-sub"><span class="stat-num">${total.toLocaleString()}</span> total<span class="stat-sep">·</span><span class="stat-money">${f$(items.reduce((a,p)=>a+p.cost,0))}</span> cost</span></div>
     <button class="btn sm ghost" onclick="nav('imp')">↗ Import CSV</button>
   </div>
   <div class="content">
@@ -1253,7 +1334,7 @@ function renderBuys(){
         return`<tr onclick="showCardPage('${p.id}')" style="cursor:pointer">
           <td class="cic">${thumb(p.img)}</td>
           <td><div class="cn">${esc(p.name)}</div><div class="cm">${esc(p.date)} · ${esc(p.seller)}</div></td>
-          <td>${p.player?`<span class="pr d" style="font-family:var(--mono);font-size:11px">${esc(p.player)}</span>`:''} ${parsedTags(p,true)}</td>
+          <td>${p.player?`<span style="font-family:var(--mono);font-size:12px;font-weight:600;color:var(--text)">${esc(p.player)}</span>`:''} ${parsedTags(p,true)}</td>
           <td>${typeBadge(p.type,p._typeMismatch)}</td>
           <td><span class="pr d">${esc(p.date)}</span></td>
           <td><span class="pr o">${f$(p.cost)}</span></td>
@@ -1578,7 +1659,7 @@ function renderSells(){
   if(f.linked==='no')  items=items.filter(s=>!s.linkedPid);
   items=applySortS(items,'sells');
   const pn=pgNum.sells||0,total=items.length;
-  const page_items=items.slice(pn*PS,(pn+1)*PS);
+  const page_items=items.slice(pn*_pageSize,(pn+1)*_pageSize);
   const allSales=sales.map(s=>getS(s.id));
   const linked=allSales.filter(s=>s.linkedPid);
   const linkRate=allSales.length?Math.round(linked.length/allSales.length*100):0;
@@ -1587,7 +1668,7 @@ function renderSells(){
     <button class="btn ${sellsTab==='pnl'?'pri':'ghost'}" onclick="sellsTab='pnl';render()">P&amp;L Flips (matched only)</button>
   </div>`;
   return`
-  <div class="topbar"><div class="pg-title">Sales &amp; P&amp;L <span class="pg-sub">${total} orders · ${f$(items.reduce((a,s)=>a+s.price*(s.qty||1),0))} revenue</span></div><button class="btn pri" onclick="openAddSale()">+ Add Sale</button></div>
+  <div class="topbar"><div class="pg-title">Sales &amp; P&amp;L <span class="pg-sub"><span class="stat-num">${total.toLocaleString()}</span> orders<span class="stat-sep">·</span><span class="stat-money">${f$(items.reduce((a,s)=>a+s.price*(s.qty||1),0))}</span> revenue</span></div><button class="btn pri" onclick="openAddSale()">+ Add Sale</button></div>
   <div class="content">
     <div class="sg" style="margin-bottom:16px">
       <div class="sc"><div class="sc-lbl">Linked</div><div class="sc-val">${linked.length}</div><div class="sc-sub">${linkRate}% link rate</div></div>
@@ -1648,7 +1729,7 @@ function renderSells(){
         return`<tr onclick="showSale('${ss.id}')" style="cursor:pointer">
           <td class="cic">${thumb(lp?.img||'')}</td>
           <td><div class="cn">${esc(ss.title)}</div><div class="cm">#${esc(ss.recordNum)}</div></td>
-          <td>${ss.player?`<span class="pr d" style="font-family:var(--mono);font-size:11px">${esc(ss.player)}</span>`:''} ${parsedTags(ss,true)}</td>
+          <td>${ss.player?`<span style="font-family:var(--mono);font-size:12px;font-weight:600;color:var(--text)">${esc(ss.player)}</span>`:''} ${parsedTags(ss,true)}</td>
           <td>${typeBadge(ss.type)}</td>
           <td><span class="pr d">${esc(ss.date)}</span></td>
           <td><span class="pr g">${f$(ss.price)}</span><div style="font-size:9px;font-family:var(--mono);color:var(--faint)">×${ss.qty||1}</div></td>
