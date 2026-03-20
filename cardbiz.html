@@ -1124,8 +1124,10 @@ function renderInv(){
               </div>
               <div class="lg-card-foot" onclick="event.stopPropagation()">
                 <button class="btn xs" onclick="showCardPage('${p.id}')">✏</button>
-                <button class="btn xs" onclick="lookupCard('${p.id}')">💡</button>
+                <a class="btn xs" href="https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(p.name)}&_sop=13" target="_blank" style="text-decoration:none" title="Search eBay">🔗</a>
                 <button class="btn xs" onclick="buildListing('${p.id}')">📝</button>
+                <button class="btn xs" onclick="copyCardDetails('${p.id}')" title="Copy card details">📋</button>
+                <button class="btn xs red" onclick="deletePurchase('${p.id}')" title="Remove card">🗑</button>
               </div>
             </div>`;}).join('')}
         </div>`
@@ -1165,8 +1167,9 @@ function renderInv(){
           <td>${mktHtml}</td>
           <td onclick="event.stopPropagation()" style="white-space:nowrap">
             <button class="btn xs" onclick="showCardPage('${p.id}')">✏ Edit</button>
-            <button class="btn xs" style="margin-left:3px" onclick="lookupCard('${p.id}')">💡</button>
+            <a class="btn xs" href="https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(p.name)}&_sop=13" target="_blank" style="text-decoration:none;margin-left:3px" title="Search eBay">🔗 eBay</a>
             <button class="btn xs" style="margin-left:3px" onclick="buildListing('${p.id}')">📝</button>
+            <button class="btn xs" style="margin-left:3px" onclick="copyCardDetails('${p.id}')" title="Copy card details">📋</button>
             <button class="btn xs red" style="margin-left:3px" onclick="deletePurchase('${p.id}')">🗑</button>
           </td>
         </tr>`;}).join('')}
@@ -1968,6 +1971,26 @@ function saveFinFields(pid){
   render();
 }
 
+function copyCardDetails(pid){
+  const p=getP(pid);
+  const parts=[p.name];
+  if(p.player)parts.push('Player: '+p.player);
+  if(p.year)parts.push('Year: '+p.year);
+  if(p.set)parts.push('Set: '+p.set);
+  if(p.variation)parts.push('Variation: '+p.variation);
+  if(p.grade)parts.push('Grade: '+p.grade);
+  if(p.serial)parts.push('Serial: '+p.serial);
+  if(p.cost)parts.push('Cost: '+f$(p.cost));
+  if(p.type)parts.push('Type: '+p.type);
+  const text=parts.join('\n');
+  navigator.clipboard.writeText(text).then(()=>toast('Card details copied!')).catch(()=>{
+    const ta=document.createElement('textarea');
+    ta.value=text;ta.style.position='fixed';ta.style.opacity='0';
+    document.body.appendChild(ta);ta.select();document.execCommand('copy');
+    document.body.removeChild(ta);toast('Card details copied!');
+  });
+}
+
 function deletePurchase(pid){
   const p=getP(pid);
   if(!confirm('Remove "'+p.name.slice(0,60)+'" from inventory?\nThis cannot be undone.'))return;
@@ -2149,9 +2172,9 @@ function renderCardDetail(pid){
   // Actions
   info+='<div class="ps"><div class="ps-title">Actions</div>'
     +'<div style="display:flex;gap:8px;flex-wrap:wrap">'
-    +'<button class="btn pri" onclick="lookupCard(\''+pid+'\')">💡 Value Lookup</button>'
+    +'<a href="https://www.ebay.com/sch/i.html?_nkw='+encodeURIComponent(p.name)+'&_sop=13" target="_blank" class="btn pri" style="text-decoration:none">🔗 eBay</a>'
     +'<button class="btn" onclick="buildListing(\''+pid+'\')">📝 Build Listing</button>'
-    +(p.itemId?'<a href="https://www.ebay.com/itm/'+esc(p.itemId)+'" target="_blank" class="btn" style="text-decoration:none">🔗 eBay</a>':'')
+    +'<button class="btn" onclick="copyCardDetails(\''+pid+'\')">📋 Copy Details</button>'
     +'<button class="btn red" onclick="deletePurchase(\''+pid+'\')">🗑 Remove Card</button>'
     +'</div></div>';
 
