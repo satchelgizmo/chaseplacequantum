@@ -1415,33 +1415,99 @@ function parseCardTitle(title) {
   const sets=[['Prizm','Prizm'],['Chrome','Chrome'],['Optic','Optic'],['Mosaic','Mosaic'],['Obsidian','Obsidian'],['National Treasures','National Treasures'],['Contenders','Contenders'],['Select','Select'],['Revolution','Revolution'],['Immaculate','Immaculate'],['Finest','Finest'],['Sapphire','Sapphire'],['Heritage','Heritage'],['Stadium Club','Stadium Club'],['Inception','Inception'],['Certified','Certified'],['Elements','Elements'],['Spectra','Spectra']];
   for(const [kw,sn] of sets){if(t.toLowerCase().includes(kw.toLowerCase())){out.set=sn;break;}}
 
+  // Competition/league detection
+  const comps=[['UEFA Champions League','UCL'],['Champions League','UCL'],['UEFA','UEFA'],['UCL','UCL'],['Premier League','PL'],['EPL','PL'],['La Liga','La Liga'],['Bundesliga','Bundesliga'],['MLS','MLS'],['NWSL','NWSL'],['CWC','CWC'],['Serie A','Serie A'],['Ligue 1','Ligue 1'],['Eredivisie','Eredivisie']];
+  for(const [kw,cn] of comps){if(t.toLowerCase().includes(kw.toLowerCase())){out.comp=cn;break;}}
+
   // Variation/parallel detection — order matters (more specific first)
   const vars=[
+    // Soccer-specific parallels (Topps Chrome/Finest)
+    [/\bSoccer\s+Brush\s+SP\b/i,'Soccer Brush SP'],[/\bSoccer\s+Brush\b/i,'Soccer Brush'],
+    [/\bBrush\s+SP\b/i,'Brush SP'],[/\bBrush\b/i,'Brush'],
+    [/\bNeon\s+Green\s+Refractor\b/i,'Neon Green Refractor'],[/\bNeon\s+Green\b/i,'Neon Green'],
+    [/\bSepia\s+Refractor\b/i,'Sepia Refractor'],[/\bPink\s+Refractor\b/i,'Pink Refractor'],
+    [/\bOrange\s+Refractor\b/i,'Orange Refractor'],[/\bGreen\s+Refractor\b/i,'Green Refractor'],
+    [/\bBlue\s+Refractor\b/i,'Blue Refractor'],[/\bAtomic\s+Refractor\b/i,'Atomic Refractor'],
+    [/\bPulsar\s+Refractor\b/i,'Pulsar Refractor'],[/\bWave\s+Refractor\b/i,'Wave Refractor'],
+    [/\bX-?Fractor\b/i,'X-Fractor'],[/\bCracked\s+Ice\b/i,'Cracked Ice'],
+    [/\bAtomic\b/i,'Atomic'],[/\bInferno\b/i,'Inferno'],[/\bNeon\b/i,'Neon'],
+    // Multi-word parallels
     [/\bBlack\s+Finite\b/i,'Black Finite'],[/\bBlack\s+Gold\b/i,'Black Gold'],
     [/\bGold\s+Vinyl\b/i,'Gold Vinyl'],[/\bGold\s+Prizm\b/i,'Gold Prizm'],[/\bGold\s+Refractor\b/i,'Gold Refractor'],
     [/\bSilver\s+Prizm\b/i,'Silver Prizm'],[/\bRainbow\s+Prizm\b/i,'Rainbow Prizm'],
     [/\bRed\s+Wave\b/i,'Red Wave'],[/\bRed\s+Scope\b/i,'Red Scope'],[/\bRed\s+Ice\b/i,'Red Ice'],[/\bRed\s+Prizm\b/i,'Red Prizm'],
     [/\bBlue\s+Wave\b/i,'Blue Wave'],[/\bBlue\s+Prizm\b/i,'Blue Prizm'],
     [/\bHolo\s+Gold\b/i,'Holo Gold'],[/\bHolo\s+Silver\b/i,'Holo Silver'],
-    [/\bSuperFractor\b/i,'Superfractor'],[/\bRefractor\b/i,'Refractor'],
-    [/\bSapphire\b/i,'Sapphire'],[/\bAqua\b/i,'Aqua'],[/\bOrange\b/i,'Orange'],
-    [/\bPurple\b/i,'Purple'],[/\bGreen\b/i,'Green'],[/\bPink\b/i,'Pink'],
-    [/\bCamo\b/i,'Camo'],[/\bWhite\s+Sparkle\b/i,'White Sparkle'],[/\bSparkle\b/i,'Sparkle'],
-    [/\bXRC\b/i,'XRC'],[/\bHolo\b/i,'Holo'],[/\bGold\b/i,'Gold'],[/\bSilver\b/i,'Silver'],
+    [/\bWhite\s+Sparkle\b/i,'White Sparkle'],[/\bFull\s+Art\b/i,'Full Art'],[/\bIllustration\s+Rare\b/i,'Illustration Rare'],
+    // Single-word parallels (order: specific → generic)
+    [/\bSuperFractor\b/i,'Superfractor'],[/\bBlack\s+Refractor\b/i,'Black Refractor'],[/\bRefractor\b/i,'Refractor'],
+    [/\bSapphire\b/i,'Sapphire'],[/\bAqua\b/i,'Aqua'],
+    [/\bCamo\b/i,'Camo'],[/\bSparkle\b/i,'Sparkle'],[/\bXRC\b/i,'XRC'],[/\bHolo\b/i,'Holo'],
+    [/\bOrange\b/i,'Orange'],[/\bPurple\b/i,'Purple'],[/\bGreen\b/i,'Green'],[/\bPink\b/i,'Pink'],
+    [/\bGold\b/i,'Gold'],[/\bSilver\b/i,'Silver'],
     [/\bPrizm\b/i,'Base Prizm'],[/\bSIR\b/,'Special Illustration Rare'],[/\bSAR\b/,'Special Art Rare'],
-    [/\bFull\s+Art\b/i,'Full Art'],[/\bIllustration\s+Rare\b/i,'Illustration Rare'],
     [/\bex\b/,'ex'],[/\bVmax\b/i,'VMAX'],[/\bVstar\b/i,'VSTAR'],
   ];
   for(const [rx,vn] of vars){if(rx.test(t)){out.variation=vn;break;}}
 
   // Sport/type detection
-  if(/\b(Premier League|La Liga|Bundesliga|MLS|NWSL|FIFA|soccer|football club)\b/i.test(t)||/\b(CWC|UCL|EPL|PL|MLS)\b/.test(t)) out.type='Soccer';
+  if(/\b(Premier League|La Liga|Bundesliga|MLS|NWSL|FIFA|soccer|football club)\b/i.test(t)||/\b(CWC|UCL|EPL|PL|MLS|UEFA)\b/.test(t)) out.type='Soccer';
   else if(/\b(Pokemon|Pokémon|TCG|Pikachu|Charizard|Mewtwo|Destined Rivals|Scarlet|Violet|Paldea)\b/i.test(t)) out.type='Pokémon';
   else if(/\b(NFL|football|quarterback|touchdown|Super Bowl|NFC|AFC)\b/i.test(t)&&!/soccer/i.test(t)) out.type='NFL';
   else if(/\b(MLB|baseball|pitcher|batting|World Series|ALDS|NLCS)\b/i.test(t)) out.type='MLB';
   else if(/\b(NBA|basketball|dunk|three-point|Finals)\b/i.test(t)) out.type='NBA';
   else if(/\b(Marvel|Spider-Man|Iron Man|Avengers|X-Men|Captain)\b/i.test(t)) out.type='Marvel';
   else if(/\b(Yu-Gi-Oh|Yugioh|Duel Monsters)\b/i.test(t)) out.type='Yu-Gi-Oh';
+
+  // ── Player name extraction ──────────────────────────────────────────────
+  // Strategy: strip all known non-player tokens, then collect Title Case word sequences
+  let rem = t;
+  // Remove year
+  rem = rem.replace(/\b(?:19|20)\d{2}(?:-\d{2,4})?\b/g, ' ');
+  // Remove serial/numbered patterns
+  rem = rem.replace(/#?\d+\s*\/\s*\d+/g, ' ').replace(/\/\s*\d+\b/g, ' ');
+  // Remove grade info
+  rem = rem.replace(/\b(?:PSA|BGS|SGC|CGC|BVG)\s*\d+(?:\.\d+)?\b/gi, ' ');
+  // Remove brand names
+  rem = rem.replace(/\b(?:Topps|Panini|Upper\s*Deck|Donruss|Bowman|Fleer|Score)\b/gi, ' ');
+  // Remove set names
+  rem = rem.replace(/\b(?:Prizm|Chrome|Optic|Mosaic|Obsidian|National\s*Treasures|Contenders|Revolution|Immaculate|Finest|Heritage|Stadium\s*Club|Inception|Certified|Elements|Spectra|Select)\b/gi, ' ');
+  // Remove competition/league keywords
+  rem = rem.replace(/\b(?:UEFA|UCL|EPL|PL|MLS|NWSL|CWC|Premier\s*League|La\s*Liga|Bundesliga|Serie\s*A|Ligue\s*1|Eredivisie|Champions\s*League|FIFA)\b/gi, ' ');
+  // Remove variation/parallel keywords (broad sweep including color words used in parallels)
+  rem = rem.replace(/\b(?:Soccer\s*Brush\s*SP|Soccer\s*Brush|Brush\s*SP|Brush|Neon\s*Green\s*Refractor|Neon\s*Green|Sepia\s*Refractor|Pink\s*Refractor|Orange\s*Refractor|Green\s*Refractor|Blue\s*Refractor|Atomic\s*Refractor|Pulsar\s*Refractor|Wave\s*Refractor|X-?Fractor|Cracked\s*Ice|Black\s*Finite|Black\s*Gold|Gold\s*Vinyl|Gold\s*Prizm|Gold\s*Refractor|Silver\s*Prizm|Rainbow\s*Prizm|Red\s*Wave|Red\s*Scope|Red\s*Ice|Red\s*Prizm|Blue\s*Wave|Blue\s*Prizm|Holo\s*Gold|Holo\s*Silver|White\s*Sparkle|Full\s*Art|Illustration\s*Rare|SuperFractor|Superfractor|Black\s*Refractor|Refractor|Sapphire|Sparkle|XRC|Holo|Aqua|Camo|Atomic|Inferno|Neon|Orange|Purple|Green|Pink|Gold|Silver|Black|Blue|Red|White|Rainbow)\b/gi, ' ');
+  // Remove auto/RC/lot/SP/SSP flags
+  rem = rem.replace(/\b(?:Auto|Autograph|Signed|RC|Rookie\s*Card|Rookie|Lot|Bundle|Collection|SP|SSP|Short\s*Print)\b/gi, ' ');
+  // Remove sport/type keywords
+  rem = rem.replace(/\b(?:Soccer|Football|Basketball|Baseball|NFL|NBA|MLB|Pokemon|Pok[eé]mon|TCG)\b/gi, ' ');
+  // Remove standalone ALL-CAPS subset/card-number codes (e.g. CC, UCC, CA-KI, TA-GC)
+  // Matches 2–6 uppercase letters, optionally followed by hyphen + uppercase letters/digits
+  rem = rem.replace(/\b[A-Z]{2,6}(?:-[A-Z0-9]{1,4})?\b/g, ' ');
+  // Strip remaining punctuation/numbers, collapse whitespace
+  rem = rem.replace(/[^a-zA-ZÀ-ÿ\s'-]/g, ' ').replace(/\s+/g, ' ').trim();
+
+  // Collect Title Case words: starts with uppercase, has ≥1 lowercase letter, length ≥ 2
+  // This matches "Giorgio", "Chiellini", "Granit", "Xhaka" but not "CC", "SP", "UEFA"
+  const nameTokens = rem.split(/\s+/).filter(w => /^[A-ZÀ-Ÿ][a-zà-ÿ]/.test(w) && w.length >= 2);
+  // Take first 2 words as player name (covers the vast majority of "First Last" formats)
+  // First word alone is valid for single-name players (Pelé, Ronaldinho, etc.)
+  if (nameTokens.length >= 2) {
+    out.player = nameTokens.slice(0, 2).join(' ');
+  } else if (nameTokens.length === 1) {
+    out.player = nameTokens[0];
+  }
+
+  // ── Standardize card name: "Player Variation /Serial Year Set" ──────────
+  if (out.player) {
+    const parts = [out.player];
+    if (out.variation) parts.push(out.variation);
+    if (out.is_auto && !/auto/i.test(out.variation)) parts.push('Auto');
+    if (out.is_rc) parts.push('RC');
+    if (out.serial) parts.push(`/${out.serial}`);
+    if (out.year) parts.push(out.year);
+    if (out.set) parts.push(out.set);
+    out.name = parts.join(' ');
+  }
 
   return out;
 }
@@ -1600,7 +1666,7 @@ function runImportParse() {
     const costRaw = priceM ? parseFloat(priceM[1].replace(',','')) : 0;
     const cleanTitle = priceM ? line.slice(0, line.lastIndexOf(priceM[0])).trim() : line;
     const parsed = parseCardTitle(cleanTitle);
-    return { _id:'IMP'+i, ...parsed, name:cleanTitle, cost:costRaw, costRaw, img:'', seller:'', orderNum:'', date:new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}), _confirmed:false };
+    return { _id:'IMP'+i, ...parsed, name:parsed.player ? parsed.name : cleanTitle, cost:costRaw, costRaw, img:'', seller:'', orderNum:'', date:new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}), _confirmed:false };
   });
   // Re-render the import page to show results
   document.getElementById('import-results').innerHTML = _importRows.length ? renderImportResults() : '<div style="color:var(--faint);font-size:12px;font-family:var(--mono)">No valid lines found</div>';
