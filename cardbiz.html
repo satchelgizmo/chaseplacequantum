@@ -1107,6 +1107,7 @@ function renderInv(){
                   ${vl?`<span style="color:${mktDiff>=0?'var(--green)':'var(--red)'}">${f$(vl.avgPrice)} mkt</span>`:''}
                 </div>
                 ${p.player?`<div style="font-size:10px;color:var(--dim);font-family:var(--mono);margin-top:2px">${esc(p.player)}</div>`:''}
+                ${parsedTags(p,true)}
               </div>
               <div class="lg-card-foot" onclick="event.stopPropagation()">
                 <button class="btn xs" onclick="showCardPage('${p.id}')">✏</button>
@@ -1217,6 +1218,7 @@ function renderBuys(){
                   ${isSold?`<span class="sb sold" style="font-size:9px">SOLD</span>`:`<span class="sb stock" style="font-size:9px">IN STOCK</span>`}
                 </div>
                 ${isSold?`<div style="font-size:11px;font-family:var(--mono);color:${netPnl>=0?'var(--green)':'var(--red)'};margin-top:2px">${f$(netPnl)} net</div>`:''}
+                ${parsedTags(p,true)}
               </div>
             </div>`;}).join('')}
         </div>`
