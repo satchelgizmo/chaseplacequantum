@@ -368,6 +368,7 @@ thead th.sh:hover{color:var(--text)}
 .mini-cal-day.today .mini-cal-dnum{color:var(--gold);font-weight:700}
 .mini-cal-damt{font-size:7px;font-family:var(--mono);color:var(--green);font-weight:700;line-height:1.2;margin-top:1px}
 </style>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 </head>
 <body>
 <div class="shell">
@@ -1263,6 +1264,8 @@ function renderInv(){
 // ─────────────────────────────────────────────
 let _purchaseCsvState = ''; // 'pending' | 'done' | ''
 let _buysCsvRows = [];
+let _salesCsvRows = [];
+let _importTab = 'purchases'; // 'purchases' | 'sales'
 
 function renderBuys(){
   const sp=soldPids();
@@ -1385,10 +1388,13 @@ function _csvCols(header) {
   };
 }
 
-function parseBuysCSV() {
-  var ta = document.getElementById('buys-csv-ta');
-  if (!ta || !ta.value.trim()) { toast('Paste CSV data first'); return; }
-  var text = ta.value.trim();
+function parseBuysCSV(text) {
+  if (!text) {
+    var ta = document.getElementById('imp-paste-purchases');
+    if (!ta || !ta.value.trim()) { toast('Paste CSV data first'); return; }
+    text = ta.value.trim();
+  }
+  text = text.trim();
   var lines = text.split(/\r?\n/).filter(function(l){ return l.trim(); });
   if (lines.length < 2) { toast('Need a header row and at least one data row'); return; }
 
@@ -1411,12 +1417,7 @@ function parseBuysCSV() {
   if (iName < 0) {
     toast('No title column found');
     var revEl2 = document.getElementById('buys-csv-review');
-    if (revEl2) {
-      revEl2.style.display = 'block';
-      revEl2.innerHTML = '<div class="alert err"><strong>Could not find a title column.</strong><br>Expected one of: <code>title</code>, <code>name</code>, <code>description</code>, <code>item</code>, <code>card</code>.<br>Your columns: <code>' + esc(header.join(', ')) + '</code><br><br>Rename your title column to <code>title</code> and try again.</div>';
-      var inpEl2 = document.getElementById('buys-csv-input-section');
-      if (inpEl2) inpEl2.style.display = 'none';
-    }
+    if (revEl2) revEl2.innerHTML = '<div class="alert err"><strong>Could not find a title column.</strong><br>Expected one of: <code>title</code>, <code>name</code>, <code>description</code>, <code>item</code>, <code>card</code>.<br>Your columns: <code>' + esc(header.join(', ')) + '</code><br><br>Rename your title column to <code>title</code> and try again.</div>';
     return;
   }
 
@@ -1469,11 +1470,7 @@ function parseBuysCSV() {
 
   if (!_buysCsvRows.length) { toast('No valid rows found'); return; }
 
-  var inpEl = document.getElementById('buys-csv-input-section');
-  var revEl = document.getElementById('buys-csv-review');
-  if (inpEl) inpEl.style.display = 'none';
-  if (revEl) { revEl.style.display = 'block'; revEl.innerHTML = _renderBuysCsvReview(); }
-
+  render(); // re-render import page to show review
   // Auto-trigger AI parse if API key present
   if (getApiKey()) parseBuysCsvWithAI();
   else toast('Parsed ' + _buysCsvRows.length + ' rows — review below');
@@ -1494,7 +1491,7 @@ function _renderBuysCsvReview() {
     + '<span id="buys-csv-confirmed-ct" style="font-size:11px;font-family:var(--mono);color:var(--dim)">' + confirmed + ' confirmed</span>'
     + (hasApiKey ? '<button class="btn sm" id="buys-ai-btn" onclick="parseBuysCsvWithAI()">&#x2728; AI Parse Titles</button>' : '')
     + '<button class="btn pri sm" style="margin-left:auto" onclick="confirmAllBuysCsv()">&#x2713; Import ' + _buysCsvRows.length + ' cards</button>'
-    + '<button class="btn ghost sm" onclick="toggleBuysCsvArea();render()">&#x2715; Cancel</button>'
+    + '<button class="btn ghost sm" onclick="_buysCsvRows=[];render()">&#x2715; Cancel</button>'
     + '</div>'
     + '<div id="buys-csv-rows" style="display:grid;gap:8px">';
   for (var i = 0; i < _buysCsvRows.length; i++) {
@@ -1565,7 +1562,7 @@ function confirmAllBuysCsv() {
     if (!_buysCsvRows[i]._confirmed) confirmBuysCsvRow(i);
   }
   toast('Added ' + _buysCsvRows.length + ' purchases');
-  toggleBuysCsvArea();
+  _buysCsvRows = [];
   render();
 }
 
@@ -3270,55 +3267,94 @@ function renderListings() {
 let _importRows = []; // parsed rows pending review
 
 function renderImport() {
-  const f = filt.imp;
   const apiKey = getApiKey();
+  const tab = _importTab;
+  const tabBtn = (t, label) => `<button class="btn ${tab===t?'pri':'ghost'} sm" onclick="_importTab='${t}';render()">${label}</button>`;
+  const dropZone = (type) => {
+    const accept = '.xlsx,.xls,.csv,.tsv';
+    return `<div style="border:2px dashed var(--border);border-radius:var(--r);padding:24px;text-align:center;cursor:pointer;transition:border-color .15s;background:var(--surf);margin-bottom:10px"
+      ondragover="event.preventDefault();this.style.borderColor='var(--acc)'"
+      ondragleave="this.style.borderColor='var(--border)'"
+      ondrop="_onImportDrop(event,'${type}');this.style.borderColor='var(--border)'"
+      onclick="document.getElementById('imp-file-${type}').click()">
+      <div style="font-size:24px;margin-bottom:6px">📂</div>
+      <div style="font-size:13px;font-weight:600;margin-bottom:3px">Drop file here or click to browse</div>
+      <div style="font-size:11px;color:var(--dim);font-family:var(--mono)">.xlsx · .xls · .csv · .tsv</div>
+      <input id="imp-file-${type}" type="file" accept="${accept}" style="display:none" onchange="_handleImportFileSelect(this,'${type}')">
+    </div>
+    <div style="text-align:center;font-size:10px;color:var(--faint);font-family:var(--mono);margin-bottom:10px;letter-spacing:.5px">— OR PASTE BELOW —</div>`;
+  };
+
+  let tabContent = '';
+  if (tab === 'purchases') {
+    if (_buysCsvRows.length) {
+      tabContent = `<div id="buys-csv-review">${_renderBuysCsvReview()}</div>`;
+    } else {
+      tabContent = `
+        ${dropZone('purchases')}
+        <textarea id="imp-paste-purchases" rows="8" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:10px;border-radius:var(--r2);font-size:11px;font-family:var(--mono);outline:none;resize:vertical;box-sizing:border-box"
+          placeholder="Paste CSV or eBay order export here…&#10;&#10;Accepts:&#10;· eBay order history CSV (any column order)&#10;· COMC / TCGPlayer order export&#10;· Custom CSV with: title, cost, date, seller columns"></textarea>
+        <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
+          <button class="btn pri sm" onclick="parseBuysCSV()">⚡ Parse</button>
+          <button class="btn ghost sm" onclick="document.getElementById('imp-paste-purchases').value=''">Clear</button>
+          <span style="font-size:10px;color:var(--faint);font-family:var(--mono);margin-left:4px">CSV with headers, or paste titles one per line</span>
+        </div>`;
+    }
+  } else {
+    if (_salesCsvRows.length) {
+      tabContent = `<div id="sales-csv-review">${_renderSalesCsvReview()}</div>`;
+    } else {
+      tabContent = `
+        ${dropZone('sales')}
+        <textarea id="imp-paste-sales" rows="8" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:10px;border-radius:var(--r2);font-size:11px;font-family:var(--mono);outline:none;resize:vertical;box-sizing:border-box"
+          placeholder="Paste eBay sold orders CSV here…&#10;&#10;Accepts:&#10;· eBay Seller Hub → Orders → Sold → Download&#10;· Any CSV with: title, price/sold for, date, order number columns"></textarea>
+        <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
+          <button class="btn pri sm" onclick="parseSalesCSV()">⚡ Parse</button>
+          <button class="btn ghost sm" onclick="document.getElementById('imp-paste-sales').value=''">Clear</button>
+          <span style="font-size:10px;color:var(--faint);font-family:var(--mono);margin-left:4px">eBay sold orders or CSV with price &amp; date columns</span>
+        </div>`;
+    }
+  }
+
   return`
-  <div class="topbar"><div class="pg-title">Import <span class="pg-sub">paste eBay order data or title list</span></div></div>
+  <div class="topbar"><div class="pg-title">Import</div></div>
   <div class="content">
-    ${!apiKey?`<div class="alert warn" style="margin-bottom:16px">⚠ Enter your Anthropic API key in the sidebar to enable AI parsing and image scanning.</div>`:''}
+    ${!apiKey?`<div class="alert warn" style="margin-bottom:16px">⚠ Enter your Anthropic API key in the sidebar to enable AI title parsing.</div>`:''}
 
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:20px">
-      <!-- PASTE IMPORT -->
-      <div>
-        <div style="font-size:13px;font-weight:700;margin-bottom:8px">Paste Card Titles / eBay Data</div>
-        <div style="font-size:11px;color:var(--dim);font-family:var(--mono);margin-bottom:8px">One card per line. Accepts raw eBay order export, item titles, or CSV rows with price.</div>
-        <textarea id="import-text" rows="8" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:10px;border-radius:var(--r2);font-size:11px;font-family:var(--mono);outline:none;resize:vertical" placeholder="2024-25 Panini Prizm Premier League Mohamed Salah Gold Prizm /10 RC
-PSA 10 2023 Topps Chrome Refractor #101 Lionel Messi
-Lot: 5x 2025 Topps Chrome Soccer Base cards $12.50"></textarea>
-        <div style="margin-top:8px;display:flex;gap:8px">
-          <button class="btn pri sm" onclick="runImportParse()">⚡ Parse Titles</button>
-          <button class="btn ghost sm" onclick="document.getElementById('import-text').value=''">Clear</button>
-        </div>
-      </div>
+    <!-- TABS -->
+    <div style="display:flex;gap:8px;margin-bottom:18px">
+      ${tabBtn('purchases','🛒 Purchase History')}
+      ${tabBtn('sales','💰 Sales History')}
+    </div>
 
-      <!-- IMAGE SCAN (single card) -->
+    <!-- TAB CONTENT -->
+    <div style="margin-bottom:28px">
+      ${tabContent}
+    </div>
+
+    <!-- TOOLS -->
+    <div style="padding-top:18px;border-top:1px solid var(--border);display:grid;grid-template-columns:1fr 1fr;gap:18px">
+      <!-- IMAGE SCAN -->
       <div>
-        <div style="font-size:13px;font-weight:700;margin-bottom:8px">Scan a Card Image</div>
+        <div style="font-size:12px;font-weight:700;margin-bottom:6px;color:var(--dim)">Scan a Card Image</div>
         <div style="font-size:11px;color:var(--dim);font-family:var(--mono);margin-bottom:8px">Paste an image URL to auto-extract card details using AI vision.</div>
-        <input id="scan-url" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:var(--r2);font-size:11px;font-family:var(--mono);outline:none;margin-bottom:8px" placeholder="https://i.ebayimg.com/…">
+        <input id="scan-url" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:var(--r2);font-size:11px;font-family:var(--mono);outline:none;margin-bottom:8px;box-sizing:border-box" placeholder="https://i.ebayimg.com/…">
         <div style="margin-bottom:8px">
-          <img id="scan-preview" src="" style="max-width:100%;max-height:160px;border-radius:6px;display:none;object-fit:contain">
+          <img id="scan-preview" src="" style="max-width:100%;max-height:140px;border-radius:6px;display:none;object-fit:contain">
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn sm" style="background:rgba(164,126,245,.1);border-color:rgba(164,126,245,.3);color:var(--purple)" onclick="previewScanImage()">👁 Preview</button>
-          <button class="btn sm" style="background:rgba(164,126,245,.1);border-color:rgba(164,126,245,.3);color:var(--purple)" onclick="runStandaloneScan()">🔍 Scan & Parse</button>
+          <button class="btn sm" style="background:rgba(164,126,245,.1);border-color:rgba(164,126,245,.3);color:var(--purple)" onclick="runStandaloneScan()">🔍 Scan &amp; Parse</button>
         </div>
         <div id="scan-result" style="margin-top:10px"></div>
       </div>
-    </div>
 
-    <!-- BACKUP RESTORE -->
-    <div style="margin-bottom:20px">
-      <div style="font-size:13px;font-weight:700;margin-bottom:8px">Restore Backup</div>
-      <div style="font-size:11px;color:var(--dim);font-family:var(--mono);margin-bottom:8px">Import a previously exported cardbiz backup JSON file to restore all edits, market values, and listings.</div>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <!-- BACKUP RESTORE -->
+      <div>
+        <div style="font-size:12px;font-weight:700;margin-bottom:6px;color:var(--dim)">Restore Backup</div>
+        <div style="font-size:11px;color:var(--dim);font-family:var(--mono);margin-bottom:8px">Import a previously exported cardbiz backup JSON file to restore all edits, market values, and listings.</div>
         <label class="btn sm" style="cursor:pointer">📂 Choose Backup File<input type="file" accept=".json" style="display:none" onchange="importBackup(this.files[0])"></label>
       </div>
-    </div>
-
-    <!-- PARSED RESULTS -->
-    <div id="import-results">
-      ${_importRows.length ? renderImportResults() : `<div class="empty"><div class="ei">📥</div><div>Paste card titles above and click Parse to begin</div></div>`}
     </div>
   </div>`;
 }
@@ -3445,6 +3481,239 @@ function confirmImportRow(i) {
 
 function confirmAllImport() {
   _importRows.forEach((_,i) => { if(!_importRows[i]._confirmed) confirmImportRow(i); });
+}
+
+// ─────────────────────────────────────────────
+// FILE DROP / EXCEL IMPORT HELPERS
+// ─────────────────────────────────────────────
+function _onImportDrop(ev, type) {
+  ev.preventDefault();
+  var files = ev.dataTransfer && ev.dataTransfer.files;
+  if (files && files.length) _handleImportFile(files[0], type);
+}
+
+function _handleImportFileSelect(inputEl, type) {
+  var file = inputEl && inputEl.files && inputEl.files[0];
+  if (file) _handleImportFile(file, type);
+  inputEl.value = ''; // reset so same file can be re-dropped
+}
+
+function _handleImportFile(file, type) {
+  if (!file) return;
+  var name = file.name.toLowerCase();
+  var isExcel = name.endsWith('.xlsx') || name.endsWith('.xls');
+  var isText  = name.endsWith('.csv') || name.endsWith('.tsv') || name.endsWith('.txt');
+  if (!isExcel && !isText) { toast('Please drop a .xlsx, .xls, .csv, or .tsv file'); return; }
+
+  toast('Reading ' + file.name + '…');
+  var reader = new FileReader();
+
+  if (isExcel) {
+    reader.onload = function(e) {
+      try {
+        if (typeof XLSX === 'undefined') { toast('Excel library not loaded — try CSV instead'); return; }
+        var wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+        var ws = wb.Sheets[wb.SheetNames[0]];
+        var csv = XLSX.utils.sheet_to_csv(ws);
+        _dispatchImportText(csv, type);
+      } catch(err) { toast('Could not read Excel file: ' + err.message); }
+    };
+    reader.readAsArrayBuffer(file);
+  } else {
+    reader.onload = function(e) { _dispatchImportText(e.target.result, type); };
+    reader.readAsText(file);
+  }
+}
+
+function _dispatchImportText(text, type) {
+  if (type === 'purchases') {
+    parseBuysCSV(text);
+  } else {
+    parseSalesCSV(text);
+  }
+}
+
+// ─────────────────────────────────────────────
+// SALES HISTORY IMPORT
+// ─────────────────────────────────────────────
+function parseSalesCSV(text) {
+  if (!text) {
+    var ta = document.getElementById('imp-paste-sales');
+    if (!ta || !ta.value.trim()) { toast('Paste CSV data first'); return; }
+    text = ta.value.trim();
+  }
+  text = text.trim();
+  var lines = text.split(/\r?\n/).filter(function(l){ return l.trim(); });
+  if (lines.length < 2) { toast('Need a header row and at least one data row'); return; }
+
+  var header = _csvSplitRow(lines[0]).map(function(h){ return h.toLowerCase().replace(/['"]/g,'').trim(); });
+  var col = _csvCols(header);
+
+  // eBay sold orders column aliases
+  var iTitle   = col(['title','itemtitle','item title','name','card','description','item name']);
+  var iPrice   = col(['soldfor','saleamount','saleprice','totalprice','itemprice','price','amount','soldprice','salesprice']);
+  var iDate    = col(['saledate','orderdate','date','solddate','transactiondate','created date']);
+  var iOrderNum= col(['ordernumber','orderid','ordernum','order#','transactionid','transaction id','order id']);
+  var iQty     = col(['quantity','qty','quantitysold']);
+  var iBuyer   = col(['buyer','buyerusername','buyername','buyerid']);
+  var iItemNum = col(['itemnumber','itemid','item number','item id','listingid']);
+  var iRecNum  = col(['record#','recordnumber','record number','recordnum','salesrecordnumber','salesrecord']);
+  var iType    = col(['type','sport','category']);
+  var iPlayer  = col(['player','subject','athlete']);
+  var iYear    = col(['year']);
+  var iSet     = col(['set','series']);
+  var iGrade   = col(['grade','grading']);
+
+  if (iTitle < 0) {
+    toast('No title column found');
+    var revEl = document.getElementById('sales-csv-review');
+    if (revEl) revEl.innerHTML = '<div class="alert err"><strong>Could not find a title column.</strong><br>Expected: <code>title</code>, <code>item title</code>, <code>name</code>, or <code>description</code>.<br>Your columns: <code>' + esc(header.join(', ')) + '</code></div>';
+    return;
+  }
+
+  _salesCsvRows = [];
+  for (var r = 1; r < lines.length; r++) {
+    var cells = _csvSplitRow(lines[r]);
+    var title = (cells[iTitle] || '').trim();
+    if (!title) continue;
+    title = title.replace(/\s*\|\s*Quantity:\s*\d+.*/i, '').replace(/^\d+\s+x\s+/i, '').trim();
+
+    var priceRaw = parseFloat((iPrice >= 0 ? cells[iPrice] : '').replace(/[^0-9.]/g,'')) || 0;
+    var csvDate  = (iDate   >= 0 ? cells[iDate]   : '').trim();
+    var orderNum = (iOrderNum >= 0 ? cells[iOrderNum] : '').trim();
+    var qty      = parseInt((iQty >= 0 ? cells[iQty] : '1')) || 1;
+    var buyer    = (iBuyer  >= 0 ? cells[iBuyer]  : '').trim();
+    var itemNum  = (iItemNum>= 0 ? cells[iItemNum]: '').trim();
+    var recNum   = (iRecNum >= 0 ? cells[iRecNum] : '').trim();
+
+    var parsed = parseCardTitle(title);
+    var player = (iPlayer >= 0 ? cells[iPlayer] : '').trim() || parsed.player;
+    var type   = (iType   >= 0 ? cells[iType]   : '').trim() || parsed.type;
+    var year   = (iYear   >= 0 ? cells[iYear]   : '').trim() || parsed.year;
+    var set    = (iSet    >= 0 ? cells[iSet]    : '').trim() || parsed.set;
+    var grade  = (iGrade  >= 0 ? cells[iGrade]  : '').trim() || parsed.grade;
+
+    _salesCsvRows.push({
+      _id: 'SC' + r,
+      _confirmed: false,
+      title: title,
+      price: priceRaw,
+      date: csvDate,
+      qty: qty,
+      buyer: buyer,
+      orderNum: orderNum,
+      itemNum: itemNum,
+      recNum: recNum,
+      player: player,
+      type: type,
+      year: year,
+      set: set,
+      grade: grade,
+      serial: parsed.serial || '',
+      variation: parsed.variation || '',
+      is_auto: parsed.is_auto || false,
+    });
+  }
+
+  if (!_salesCsvRows.length) { toast('No valid rows found'); return; }
+  render();
+  toast('Parsed ' + _salesCsvRows.length + ' sales — review below');
+}
+
+function _renderSalesCsvReview() {
+  var pending   = _salesCsvRows.filter(function(r){ return !r._confirmed; }).length;
+  var confirmed = _salesCsvRows.length - pending;
+  var withPrice = _salesCsvRows.filter(function(r){ return r.price > 0; }).length;
+  var html = '<div style="font-size:12px;color:var(--dim);font-family:var(--mono);margin-bottom:8px">'
+    + 'Found ' + _salesCsvRows.length + ' rows · ' + withPrice + ' with price'
+    + '</div>'
+    + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">'
+    + '<div style="font-size:13px;font-weight:700">Review ' + _salesCsvRows.length + ' Sales</div>'
+    + '<span id="sales-csv-confirmed-ct" style="font-size:11px;font-family:var(--mono);color:var(--dim)">' + confirmed + ' confirmed</span>'
+    + '<button class="btn pri sm" style="margin-left:auto" onclick="confirmAllSalesCsv()">&#x2713; Import ' + _salesCsvRows.length + ' sales</button>'
+    + '<button class="btn ghost sm" onclick="_salesCsvRows=[];render()">&#x2715; Cancel</button>'
+    + '</div>'
+    + '<div style="display:grid;gap:6px">';
+  for (var i = 0; i < _salesCsvRows.length; i++) {
+    html += _renderSalesCsvRow(i);
+  }
+  html += '</div>';
+  return html;
+}
+
+function _renderSalesCsvRow(i) {
+  var r = _salesCsvRows[i];
+  var inp = function(field, label, w, type) {
+    var v = (r[field] !== undefined ? r[field] : '').toString();
+    return '<div style="min-width:' + (w||'80px') + '">'
+      + '<label style="font-size:9px;color:var(--faint);font-family:var(--mono);text-transform:uppercase;display:block;margin-bottom:2px">' + label + '</label>'
+      + '<input' + (type?' type="'+type+'"':'') + ' style="width:100%;background:var(--surf3);border:1px solid var(--border);color:var(--text);padding:3px 5px;border-radius:3px;font-size:11px;font-family:var(--mono);outline:none" '
+      + 'value="' + esc(v) + '" oninput="_salesCsvRows[' + i + '].' + field + '=(this.type===\'number\'?parseFloat(this.value)||0:this.value)">'
+      + '</div>';
+  };
+  return '<div id="sales-row-' + i + '" style="background:var(--surf);border:1px solid ' + (r._confirmed ? 'var(--green)' : 'var(--border)') + ';border-radius:var(--r);padding:10px;opacity:' + (r._confirmed ? '.55' : '1') + '">'
+    + '<div style="display:flex;gap:8px;align-items:flex-start">'
+    + '<div style="flex:1;min-width:0">'
+    + '<div style="font-size:11px;font-weight:600;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--dim)" title="' + esc(r.title) + '">' + esc(r.title.length > 80 ? r.title.slice(0,77)+'…' : r.title) + '</div>'
+    + '<div style="display:flex;gap:6px;flex-wrap:wrap">'
+    + inp('player','Player','120px')
+    + inp('type','Type','80px')
+    + inp('year','Year','60px')
+    + inp('set','Set','90px')
+    + inp('variation','Parallel','90px')
+    + inp('grade','Grade','60px')
+    + inp('price','Price $','70px','number')
+    + inp('qty','Qty','50px','number')
+    + inp('date','Date','90px')
+    + inp('buyer','Buyer','90px')
+    + '</div>'
+    + '</div>'
+    + '<div style="display:flex;flex-direction:column;gap:5px;flex-shrink:0;padding-top:20px">'
+    + (r._confirmed
+        ? '<span style="font-size:10px;color:var(--green);font-family:var(--mono)">&#x2714; added</span>'
+        : '<button class="btn xs" onclick="confirmSalesCsvRow(' + i + ')">+ Add</button>')
+    + '<button class="btn xs red" onclick="_salesCsvRows.splice(' + i + ',1);document.getElementById(\'sales-csv-review\').innerHTML=_renderSalesCsvReview()">&#x2715;</button>'
+    + '</div>'
+    + '</div></div>';
+}
+
+function confirmSalesCsvRow(i) {
+  var r = _salesCsvRows[i];
+  if (!r || r._confirmed) return;
+  var newId = 'MS' + Date.now().toString(36).slice(-5) + i;
+  sales.push({
+    id: newId,
+    title: r.title,
+    date: r.date || '',
+    price: parseFloat(r.price) || 0,
+    qty: parseInt(r.qty) || 1,
+    itemNum: r.itemNum || '',
+    recordNum: r.recNum || '',
+    type: r.type || '',
+    player: r.player || '',
+    year: r.year || '',
+    set: r.set || '',
+    variation: r.variation || '',
+    serial: r.serial || '',
+    grade: r.grade || '',
+    is_auto: !!r.is_auto,
+    linkedPid: null,
+    candidates: []
+  });
+  _salesCsvRows[i]._confirmed = true;
+  var rowEl = document.getElementById('sales-row-' + i);
+  if (rowEl) rowEl.outerHTML = _renderSalesCsvRow(i);
+  var ct = document.getElementById('sales-csv-confirmed-ct');
+  if (ct) ct.textContent = _salesCsvRows.filter(function(x){ return x._confirmed; }).length + ' confirmed';
+}
+
+function confirmAllSalesCsv() {
+  for (var i = 0; i < _salesCsvRows.length; i++) {
+    if (!_salesCsvRows[i]._confirmed) confirmSalesCsvRow(i);
+  }
+  toast('Added ' + _salesCsvRows.length + ' sales');
+  _salesCsvRows = [];
+  render();
 }
 
 // ─────────────────────────────────────────────
