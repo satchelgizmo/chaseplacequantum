@@ -298,6 +298,10 @@ let sortState = { inv: {col:'date',dir:-1}, buys: {col:'date',dir:-1}, sells: {c
 // persist market lookups: pid -> {avgPrice, lowPrice, highPrice, confidence, recentSales, ts}
 let valueLookups = JSON.parse(localStorage.getItem('cb_lookups')||'{}');
 function persistLookups() { try { localStorage.setItem('cb_lookups', JSON.stringify(valueLookups)); } catch(e){} }
+
+// Known variants registry — tracks every variant seen so new ones can be flagged
+let knownVariants = new Set(JSON.parse(localStorage.getItem('cb_known_variants')||'[]'));
+function persistKnownVariants() { try { localStorage.setItem('cb_known_variants', JSON.stringify([...knownVariants])); } catch(e){} }
 // API key
 function getApiKey() { return localStorage.getItem('cb_apikey')||''; }
 function saveApiKey(v) {
@@ -1388,7 +1392,7 @@ function showLookupResult(pid,r){
 // ─────────────────────────────────────────────
 function parseCardTitle(title) {
   const t = title || '';
-  const out = { name:t, player:'', year:'', brand:'', set:'', variation:'', serial:'', grade:'', is_auto:false, is_rc:false, is_lot:false, lotQty:1, type:'', comp:'' };
+  const out = { name:t, player:'', year:'', brand:'', set:'', variation:'', serial:'', grade:'', is_auto:false, is_rc:false, is_lot:false, lotQty:1, type:'', comp:'', series:'' };
 
   // Year: 4-digit starting with 19xx/20xx, optionally followed by -xx or -xxxx
   const yearM = t.match(/\b((?:19|20)\d{2})(?:-(\d{2,4}))?\b/);
@@ -1418,6 +1422,10 @@ function parseCardTitle(title) {
   // Competition/league detection
   const comps=[['UEFA Champions League','UCL'],['Champions League','UCL'],['UEFA','UEFA'],['UCL','UCL'],['Premier League','PL'],['EPL','PL'],['La Liga','La Liga'],['Bundesliga','Bundesliga'],['MLS','MLS'],['NWSL','NWSL'],['CWC','CWC'],['Serie A','Serie A'],['Ligue 1','Ligue 1'],['Eredivisie','Eredivisie']];
   for(const [kw,cn] of comps){if(t.toLowerCase().includes(kw.toLowerCase())){out.comp=cn;break;}}
+
+  // Series/edition detection (e.g. "Series 1", "1st Edition", "Base Set")
+  const seriesM = t.match(/\b(Series\s+\d+|1st\s+Edition|2nd\s+Edition|Base\s+Set|Unlimited|Shadowless)\b/i);
+  if(seriesM) out.series = seriesM[1];
 
   // Variation/parallel detection — order matters (more specific first)
   const vars=[
@@ -1450,6 +1458,16 @@ function parseCardTitle(title) {
   ];
   for(const [rx,vn] of vars){if(rx.test(t)){out.variation=vn;break;}}
 
+  // Flag new variants not previously seen
+  if(out.variation && typeof knownVariants !== 'undefined') {
+    if(!knownVariants.has(out.variation)) {
+      out._newVariant = true;
+      knownVariants.add(out.variation);
+      persistKnownVariants();
+      console.log(`[CardBiz] New variant detected: "${out.variation}" (title: "${t}")`);
+    }
+  }
+
   // Sport/type detection
   if(/\b(Premier League|La Liga|Bundesliga|MLS|NWSL|FIFA|soccer|football club)\b/i.test(t)||/\b(CWC|UCL|EPL|PL|MLS|UEFA)\b/.test(t)) out.type='Soccer';
   else if(/\b(Pokemon|Pokémon|TCG|Pikachu|Charizard|Mewtwo|Destined Rivals|Scarlet|Violet|Paldea)\b/i.test(t)) out.type='Pokémon';
@@ -1474,6 +1492,8 @@ function parseCardTitle(title) {
   rem = rem.replace(/\b(?:Prizm|Chrome|Optic|Mosaic|Obsidian|National\s*Treasures|Contenders|Revolution|Immaculate|Finest|Heritage|Stadium\s*Club|Inception|Certified|Elements|Spectra|Select)\b/gi, ' ');
   // Remove competition/league keywords
   rem = rem.replace(/\b(?:UEFA|UCL|EPL|PL|MLS|NWSL|CWC|Premier\s*League|La\s*Liga|Bundesliga|Serie\s*A|Ligue\s*1|Eredivisie|Champions\s*League|FIFA)\b/gi, ' ');
+  // Remove series/edition keywords
+  rem = rem.replace(/\b(?:Series\s+\d+|1st\s+Edition|2nd\s+Edition|Base\s+Set|Unlimited|Shadowless)\b/gi, ' ');
   // Remove variation/parallel keywords (broad sweep including color words used in parallels)
   rem = rem.replace(/\b(?:Soccer\s*Brush\s*SP|Soccer\s*Brush|Brush\s*SP|Brush|Neon\s*Green\s*Refractor|Neon\s*Green|Sepia\s*Refractor|Pink\s*Refractor|Orange\s*Refractor|Green\s*Refractor|Blue\s*Refractor|Atomic\s*Refractor|Pulsar\s*Refractor|Wave\s*Refractor|X-?Fractor|Cracked\s*Ice|Black\s*Finite|Black\s*Gold|Gold\s*Vinyl|Gold\s*Prizm|Gold\s*Refractor|Silver\s*Prizm|Rainbow\s*Prizm|Red\s*Wave|Red\s*Scope|Red\s*Ice|Red\s*Prizm|Blue\s*Wave|Blue\s*Prizm|Holo\s*Gold|Holo\s*Silver|White\s*Sparkle|Full\s*Art|Illustration\s*Rare|SuperFractor|Superfractor|Black\s*Refractor|Refractor|Sapphire|Sparkle|XRC|Holo|Aqua|Camo|Atomic|Inferno|Neon|Orange|Purple|Green|Pink|Gold|Silver|Black|Blue|Red|White|Rainbow)\b/gi, ' ');
   // Remove auto/RC/lot/SP/SSP flags
@@ -1506,6 +1526,8 @@ function parseCardTitle(title) {
     if (out.serial) parts.push(`/${out.serial}`);
     if (out.year) parts.push(out.year);
     if (out.set) parts.push(out.set);
+    if (out.comp) parts.push(out.comp);
+    if (out.series) parts.push(out.series);
     out.name = parts.join(' ');
   }
 
@@ -1580,7 +1602,7 @@ function renderImport() {
   const f = filt.imp;
   const apiKey = getApiKey();
   return`
-  <div class="topbar"><div class="pg-title">Import <span class="pg-sub">paste eBay order data or title list</span></div></div>
+  <div class="topbar"><div class="pg-title">Import <span class="pg-sub">paste eBay order data or title list</span></div><button class="btn ghost sm" style="margin-left:auto" onclick="showVariantLog()">🧬 Variant Registry (${knownVariants.size})</button></div>
   <div class="content">
     ${!apiKey?`<div class="alert warn" style="margin-bottom:16px">⚠ Enter your Anthropic API key in the sidebar to enable AI parsing and image scanning.</div>`:''}
 
@@ -1693,7 +1715,9 @@ function renderImportResults() {
               ${r.type?`<span class="tb ${(r.type||'').toLowerCase().replace(/[^a-z0-9-]/g,'')}">${esc(r.type)}</span>`:''}
               ${r.year?`<span class="pt year">${esc(r.year)}</span>`:''}
               ${r.set?`<span class="pt set">${esc(r.set)}</span>`:''}
-              ${r.variation?`<span class="pt var">${esc(r.variation)}</span>`:''}
+              ${r.comp?`<span class="pt" style="background:rgba(99,179,237,.12);color:#63b3ed;border:1px solid rgba(99,179,237,.25)">${esc(r.comp)}</span>`:''}
+              ${r.series?`<span class="pt" style="background:rgba(154,205,100,.1);color:#9acd64;border:1px solid rgba(154,205,100,.25)">${esc(r.series)}</span>`:''}
+              ${r.variation?`<span class="pt var">${esc(r.variation)}</span>${r._newVariant?`<span style="font-size:9px;font-weight:700;background:rgba(255,170,0,.15);color:#ffaa00;border:1px solid rgba(255,170,0,.3);border-radius:3px;padding:1px 4px;font-family:var(--mono)">NEW</span>`:''}`:''}
               ${r.serial?`<span class="pt serial">/${esc(r.serial)}</span>`:''}
               ${r.grade?`<span class="pt grade">${esc(r.grade)}</span>`:''}
               ${r.is_auto?`<span class="pt auto">AUTO</span>`:''}
@@ -1743,6 +1767,22 @@ function confirmImportRow(i) {
 
 function confirmAllImport() {
   _importRows.forEach((_,i) => { if(!_importRows[i]._confirmed) confirmImportRow(i); });
+}
+
+function showVariantLog() {
+  const sorted = [...knownVariants].sort();
+  openPanel(`
+    <div style="padding:20px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+        <div style="font-size:15px;font-weight:700">Variant Registry</div>
+        <span style="font-size:11px;font-family:var(--mono);color:var(--dim)">${sorted.length} known variants</span>
+        <button class="btn ghost sm" style="margin-left:auto;color:var(--red)" onclick="if(confirm('Reset the variant registry? All variants will be treated as NEW on next parse.')){knownVariants=new Set();persistKnownVariants();closePanel();renderPage();}">↺ Reset</button>
+      </div>
+      <div style="font-size:11px;color:var(--dim);margin-bottom:12px;font-family:var(--mono)">Variants are added automatically as cards are parsed. NEW variants are flagged in the import results and logged to the browser console.</div>
+      ${sorted.length===0
+        ? `<div style="color:var(--faint);font-size:12px;font-family:var(--mono)">No variants seen yet — parse some titles to populate the registry.</div>`
+        : `<div style="display:flex;flex-wrap:wrap;gap:5px">${sorted.map(v=>`<span class="pt var" style="cursor:default">${esc(v)}</span>`).join('')}</div>`}
+    </div>`);
 }
 
 // ─────────────────────────────────────────────
