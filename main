@@ -646,7 +646,7 @@ function renderBuys(){
         return`<tr onclick="showPurchase('${p.id}')" style="cursor:pointer">
           <td class="cic">${thumb(p.img)}</td>
           <td><div class="cn">${esc(p.name)}</div><div class="cm">${esc(p.date)} · ${esc(p.seller)}</div></td>
-          <td>${parsedTags(p)}</td>
+          <td><span class="pr d" style="font-family:var(--mono);font-size:11px">${esc(p.player||'—')}</span>${parsedTags(p)}</td>
           <td>${typeBadge(p.type)}</td>
           <td><span class="pr d">${esc(p.date)}</span></td>
           <td><span class="pr o">${f$(p.cost)}</span></td>
@@ -704,7 +704,7 @@ function renderSells(){
         return`<tr onclick="showSale('${ss.id}')" style="cursor:pointer">
           <td class="cic">${thumb(lp?.img||'')}</td>
           <td><div class="cn">${esc(ss.title)}</div><div class="cm">#${esc(ss.recordNum)}</div></td>
-          <td>${parsedTags(ss)}</td>
+          <td><span class="pr d" style="font-family:var(--mono);font-size:11px">${esc(ss.player||'—')}</span>${parsedTags(ss)}</td>
           <td>${typeBadge(ss.type)}</td>
           <td><span class="pr d">${esc(ss.date)}</span></td>
           <td><span class="pr g">${f$(ss.price)}</span><div style="font-size:9px;font-family:var(--mono);color:var(--faint)">×${ss.qty||1}</div></td>
@@ -774,7 +774,7 @@ function renderPnl(){
         return`<tr onclick="showSale('${ss.id}')" style="cursor:pointer">
           <td class="cic">${thumb(pp.img)}</td>
           <td><div class="cn">${esc(pp.name)}</div><div class="cm">→ ${esc(ss.title)}</div><div class="cm">${esc(pp.date)} · sold ${esc(ss.date)}</div></td>
-          <td>${parsedTags(pp)}</td>
+          <td><span class="pr d" style="font-family:var(--mono);font-size:11px">${esc(pp.player||'—')}</span>${parsedTags(pp)}</td>
           <td><span class="pr o">${f$(pp.cost)}</span></td>
           <td><span class="pr g">${f$(rev)}</span></td>
           <td><span class="pr ${netPnl>=0?'g':'r'}" style="font-weight:700">${f$(netPnl)}</span><div style="font-size:9px;color:var(--faint);font-family:var(--mono)">fee ${f$(fee)}</div></td>
