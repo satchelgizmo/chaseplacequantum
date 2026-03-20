@@ -327,21 +327,22 @@ thead th.sh:hover{color:var(--text)}
 .fsc-damt.sale{color:var(--green)}
 .fsc-damt.buy{color:var(--red)}
 /* Year overview 4-col grid */
-.fsc-yr-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;padding:20px}
-.fsc-ym-card{background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:12px;cursor:pointer;transition:border-color .12s}
+.fsc-yr-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:14px}
+.fsc-ym-card{background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:8px;cursor:pointer;transition:border-color .12s;min-width:0}
 .fsc-ym-card:hover{border-color:var(--border2);background:var(--surf2)}
-.fsc-ym-mhdr{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}
-.fsc-ym-mname{font-size:14px;font-weight:700;font-family:var(--mono)}
-.fsc-ym-total{font-size:10px;font-family:var(--mono);color:var(--green);font-weight:700}
-.fsc-ym-dow{display:grid;grid-template-columns:repeat(7,1fr);margin-bottom:2px}
-.fsc-ym-dow span{font-size:6px;font-family:var(--mono);color:var(--faint);text-align:center}
+.fsc-ym-mhdr{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px}
+.fsc-ym-mname{font-size:12px;font-weight:700;font-family:var(--mono)}
+.fsc-ym-total{font-size:9px;font-family:var(--mono);color:var(--green);font-weight:700}
+.fsc-ym-dow{display:grid;grid-template-columns:repeat(7,1fr);margin-bottom:1px}
+.fsc-ym-dow span{font-size:7px;font-family:var(--mono);color:var(--faint);text-align:center;padding:1px 0}
 .fsc-ym-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:1px}
-.fsc-ym-d{border-radius:2px;aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-size:6.5px;font-family:var(--mono);color:var(--faint);min-height:11px}
+.fsc-ym-d{border-radius:2px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:2px 1px;height:32px;overflow:hidden;font-size:8px;font-family:var(--mono);color:var(--faint)}
 .fsc-ym-d.has-sale{background:rgba(0,229,170,.18);color:var(--green);font-weight:700}
 .fsc-ym-d.has-buy{background:rgba(255,74,104,.1);color:var(--red)}
 .fsc-ym-d.has-both{background:rgba(0,212,255,.12);color:var(--gold)}
-.fsc-ym-d.empty{opacity:0}
-.fsc-ym-bal{margin-top:8px;padding-top:6px;border-top:1px solid var(--border);font-size:8px;font-family:var(--mono);color:var(--dim);letter-spacing:1px;text-transform:uppercase}
+.fsc-ym-d.empty{opacity:0;pointer-events:none}
+.fsc-ym-damt{font-size:6px;line-height:1.1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;display:block;text-align:center}
+.fsc-ym-bal{margin-top:6px;padding-top:4px;border-top:1px solid var(--border);font-size:7px;font-family:var(--mono);color:var(--dim);letter-spacing:1px;text-transform:uppercase}
 /* Mini dashboard calendar */
 .mini-cal-wrap{background:var(--surf);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
 .mini-cal-hdr{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border-bottom:1px solid var(--border)}
@@ -1024,7 +1025,7 @@ function renderCal(){
       const dim=new Date(yr,m2,0).getDate();
       let cells='';
       for(let i=0;i<firstDow;i++)cells+=`<div class="fsc-ym-d empty"></div>`;
-      for(let d=1;d<=dim;d++){const k=`${ym2}-${String(d).padStart(2,'0')}`;const hasSale=!!(sByDay[k]);const hasBuy=!!(bByDay[k]);const cls=hasSale&&hasBuy?'has-both':hasSale?'has-sale':hasBuy?'has-buy':'';cells+=`<div class="fsc-ym-d${cls?' '+cls:''}">${d}</div>`;}
+      for(let d=1;d<=dim;d++){const k=`${ym2}-${String(d).padStart(2,'0')}`;const sAmt=sByDay[k]||0;const bAmt=bByDay[k]||0;const hasSale=sAmt>0;const hasBuy=bAmt>0;const cls=hasSale&&hasBuy?'has-both':hasSale?'has-sale':hasBuy?'has-buy':'';const amtHtml=hasSale?`<span class="fsc-ym-damt">${f$(sAmt)}</span>`:hasBuy?`<span class="fsc-ym-damt">-${f$(bAmt)}</span>`:'';cells+=`<div class="fsc-ym-d${cls?' '+cls:''}">${d}${amtHtml}</div>`;}
       const padEnd=42-(firstDow+dim);
       for(let i=0;i<padEnd;i++)cells+=`<div class="fsc-ym-d empty"></div>`;
       return`<div class="fsc-ym-card" onclick="_calYearView=false;_calMonth=${m2};_calYear=${yr};render()"><div class="fsc-ym-mhdr"><span class="fsc-ym-mname">${MNS[idx]}</span>${mInc?`<span class="fsc-ym-total">+${f$(mInc)}</span>`:''}</div><div class="fsc-ym-dow">${['S','M','T','W','T','F','S'].map(d=>`<span>${d}</span>`).join('')}</div><div class="fsc-ym-grid">${cells}</div><div class="fsc-ym-bal">Balance <span style="color:var(--text);font-weight:700">—</span></div></div>`;
