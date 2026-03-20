@@ -1085,19 +1085,20 @@ function renderInv(){
         <option value="yes" ${f.mkt==='yes'?'selected':''}>Valued</option>
         <option value="no" ${f.mkt==='no'?'selected':''}>Unvalued</option>
       </select>
-      <button id="inv-export-btn" class="btn pri" style="display:${selCount?'':'none'}" onclick="exportEbayCSV()">📥 Export eBay CSV (${selCount} selected)</button>
+      ${selCount?`<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+        <span style="font-size:11px;font-family:var(--mono);color:var(--gold);white-space:nowrap">${selCount} selected</span>
+        <button class="btn xs" onclick="bulkBuildListings()">📝 Build Listing</button>
+        <button class="btn xs" onclick="bulkCopyDetails()">📋 Copy Details</button>
+        <button class="btn xs pri" onclick="exportEbayCSV()">📥 Export eBay CSV</button>
+        <button class="btn xs red" onclick="bulkDeleteSelected()">🗑 Delete</button>
+        <button class="btn xs" onclick="invSelected.clear();render()" title="Clear selection" style="padding:2px 6px">✕</button>
+      </div>`:''}
       <div class="view-toggle">
         <button class="${_invView==='table'?'on':''}" onclick="_invView='table';localStorage.setItem('cb_inv_view','table');render()" title="Table view">&#x2630;</button>
         <button class="${_invView==='grid'?'on':''}" onclick="_invView='grid';localStorage.setItem('cb_inv_view','grid');render()" title="Grid view">&#x2B1C;</button>
       </div>
     </div>
-    ${_invView==='grid'&&page_items.length>0?`<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:11px;font-family:var(--mono);color:var(--dim)">
-      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none">
-        <input type="checkbox" id="inv-gcb-all" style="cursor:pointer;accent-color:var(--gold)" ${_invPageIds.length>0&&_invPageIds.every(id=>invSelected.has(id))?'checked':''} onchange="toggleInvSelectAll(this.checked);render()">
-        Select page
-      </label>
-      ${selCount>0?`<span style="color:var(--gold)">${selCount} card${selCount===1?'':'s'} selected</span>`:''}
-    </div>`:(selCount>0?`<div style="font-size:11px;color:var(--gold);font-family:var(--mono);margin-bottom:6px">${selCount} card${selCount===1?'':'s'} selected across all pages</div>`:'')}
+    ${page_items.length>0?`<div style="font-size:11px;font-family:var(--mono);color:var(--faint);margin-bottom:8px">Hold <kbd style="background:var(--surf3);border:1px solid var(--border);border-radius:3px;padding:1px 5px;font-size:10px">Ctrl</kbd> and click to select cards</div>`:''}
     ${_invView==='grid'
       ?`<div class="cards-grid">${page_items.length===0
           ?`<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--faint);font-family:var(--mono)">No cards found</div>`
@@ -1107,10 +1108,7 @@ function renderInv(){
             const isListed=activeListings.some(function(l){return l.matchedPid===p.id;});
             const imgTag=p.img?`<img class="lg-card-img" src="${esc(p.img)}" onerror="this.parentNode.innerHTML='<div class=lg-card-img-ph>&#x1F0CF;</div>'">`:`<div class="lg-card-img-ph">&#x1F0CF;</div>`;
             const isSel=invSelected.has(p.id);
-            return`<div class="lg-card${isSel?' selected':''}" onclick="showCardPage('${p.id}')" style="cursor:pointer">
-              <div class="lg-card-cb" onclick="event.stopPropagation()">
-                <input type="checkbox" id="inv-gcb-${p.id}" ${isSel?'checked':''} onchange="toggleInvSelect('${p.id}',this.checked);render()">
-              </div>
+            return`<div class="lg-card${isSel?' selected':''}" onclick="if(event.ctrlKey||event.metaKey){event.preventDefault();toggleInvSelect('${p.id}');render();}else{showCardPage('${p.id}');}" style="cursor:pointer" title="${isSel?'Ctrl+click to deselect':'Ctrl+click to select'}">
               ${imgTag}
               <div class="lg-card-body">
                 <div class="lg-card-title">${esc(p.name)}${isListed?'<span style="display:inline-block;font-size:8px;font-family:var(--mono);background:rgba(46,204,138,.15);color:var(--green);border:1px solid rgba(46,204,138,.35);border-radius:3px;padding:1px 4px;margin-left:4px;vertical-align:middle">LISTED</span>':''}</div>
@@ -1133,7 +1131,6 @@ function renderInv(){
         </div>`
       :`<div class="tw"><table aria-label="Inventory cards">
       <thead><tr>
-        <th style="width:32px;padding:8px 6px"><input type="checkbox" id="inv-cb-all" title="Select all on page" onchange="toggleInvSelectAll(this.checked)" style="cursor:pointer;accent-color:var(--gold)"></th>
         <th></th>
         <th onclick="setSort('inv','name')" class="sh">CARD${sortIcon('inv','name')}</th>
         <th onclick="setSort('inv','player')" class="sh">PARSED${sortIcon('inv','player')}</th>
@@ -1144,7 +1141,7 @@ function renderInv(){
         <th>ACTIONS</th>
       </tr></thead>
       <tbody>${page_items.length===0
-        ?`<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--faint);font-family:var(--mono)">No cards found</td></tr>`
+        ?`<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--faint);font-family:var(--mono)">No cards found</td></tr>`
         :page_items.map(p=>{
           const vl=valueLookups[p.id];
           const mktDiff=vl?.avgPrice?(vl.avgPrice-p.cost):null;
@@ -1154,8 +1151,7 @@ function renderInv(){
           const mktBadgeClick=mktAge!==null&&mktAge>7?`onclick="event.stopPropagation();lookupCard('${p.id}')"` :'';
           const mktHtml=vl?`<div class="mkt ${mktDiff>=0?'up':'dn'}">${f$(vl.avgPrice)}</div><div class="mkt-badge ${mktBadgeClass}" ${mktBadgeClick}>${mktBadgeText}</div>`:`<span style="color:var(--faint);font-size:11px;font-family:var(--mono)">—</span>`;
           return`
-        <tr onclick="showCardPage('${p.id}')" style="cursor:pointer" class="${invSelected.has(p.id)?'highlight':''}">
-          <td style="padding:5px 6px" onclick="event.stopPropagation()"><input type="checkbox" id="inv-cb-${p.id}" ${invSelected.has(p.id)?'checked':''} onchange="toggleInvSelect('${p.id}',this.checked)" style="cursor:pointer;accent-color:var(--gold)"></td>
+        <tr onclick="if(event.ctrlKey||event.metaKey){event.preventDefault();toggleInvSelect('${p.id}');render();}else{showCardPage('${p.id}');}" style="cursor:pointer" class="${invSelected.has(p.id)?'highlight':''}">
           <td class="cic">${thumb(p.img)}</td>
           <td><div class="cn">${esc(p.name)}${activeListings.some(function(l){return l.matchedPid===p.id;})?'<span style="display:inline-block;font-size:8px;font-family:var(--mono);background:rgba(46,204,138,.15);color:var(--green);border:1px solid rgba(46,204,138,.35);border-radius:3px;padding:1px 5px;vertical-align:middle;margin-left:4px">LISTED</span>':''}</div><div class="cm">${esc(p.seller)} · ${esc(p.orderNum)}</div>
             ${p.is_lot?`<div class="cm" style="color:var(--orange);cursor:pointer" onclick="event.stopPropagation();showCardPage('${p.id}')" title="Click to see lot breakdown">Lot ×${p.lotQty} · raw ${f$(p.costRaw)}</div>`:''}
@@ -3373,29 +3369,11 @@ function confirmAllImport() {
 // ─────────────────────────────────────────────
 // INVENTORY SELECTION + EBAY CSV EXPORT
 // ─────────────────────────────────────────────
-function toggleInvSelect(pid, checked) {
-  if(checked) invSelected.add(pid); else invSelected.delete(pid);
-  _updateInvSelUI();
-}
-function toggleInvSelectAll(checked) {
-  if(checked) _invPageIds.forEach(id=>invSelected.add(id));
-  else _invPageIds.forEach(id=>invSelected.delete(id));
-  _updateInvSelUI();
+function toggleInvSelect(pid) {
+  if(invSelected.has(pid)) invSelected.delete(pid); else invSelected.add(pid);
 }
 function _updateInvSelUI() {
-  _invPageIds.forEach(id=>{
-    const cb=document.getElementById('inv-cb-'+id);
-    if(cb) cb.checked=invSelected.has(id);
-    const row=cb?.closest('tr');
-    if(row) row.className=invSelected.has(id)?'highlight':'';
-  });
-  const allCb=document.getElementById('inv-cb-all');
-  if(allCb) allCb.checked=_invPageIds.length>0&&_invPageIds.every(id=>invSelected.has(id));
-  const btn=document.getElementById('inv-export-btn');
-  if(btn){
-    btn.style.display=invSelected.size?'':'none';
-    btn.textContent=`\u{1F4E5} Export eBay CSV (${invSelected.size})`;
-  }
+  // Selection state is reflected via render(); this is a no-op kept for compatibility
 }
 function _ebayTitle(p) {
   const pts=[];
@@ -3467,6 +3445,56 @@ function exportSingleCardCSV(pid) {
   invSelected.add(pid);
   exportEbayCSV();
   invSelected.clear();
+}
+function bulkBuildListings() {
+  const ids=[...invSelected];
+  if(!ids.length){toast('No cards selected');return;}
+  if(ids.length===1){buildListing(ids[0]);return;}
+  // For multiple cards, export eBay CSV (same as single card's CSV fallback)
+  exportEbayCSV();
+}
+function bulkCopyDetails() {
+  const ids=[...invSelected];
+  if(!ids.length){toast('No cards selected');return;}
+  const blocks=ids.map(pid=>{
+    const p=getP(pid);
+    const parts=[p.name];
+    if(p.player)parts.push('Player: '+p.player);
+    if(p.year)parts.push('Year: '+p.year);
+    if(p.set)parts.push('Set: '+p.set);
+    if(p.variation)parts.push('Variation: '+p.variation);
+    if(p.grade)parts.push('Grade: '+p.grade);
+    if(p.serial)parts.push('Serial: '+p.serial);
+    if(p.cost)parts.push('Cost: '+f$(p.cost));
+    if(p.type)parts.push('Type: '+p.type);
+    return parts.join('\n');
+  });
+  const text=blocks.join('\n\n---\n\n');
+  navigator.clipboard.writeText(text).then(()=>toast(`Copied details for ${ids.length} card${ids.length===1?'':'s'}!`)).catch(()=>{
+    const ta=document.createElement('textarea');
+    ta.value=text;ta.style.position='fixed';ta.style.opacity='0';
+    document.body.appendChild(ta);ta.select();document.execCommand('copy');
+    document.body.removeChild(ta);toast(`Copied details for ${ids.length} card${ids.length===1?'':'s'}!`);
+  });
+}
+function bulkDeleteSelected() {
+  const ids=[...invSelected];
+  if(!ids.length){toast('No cards selected');return;}
+  if(!confirm(`Remove ${ids.length} card${ids.length===1?'':'s'} from inventory?\nThis cannot be undone.`))return;
+  ids.forEach(pid=>{
+    sales.forEach(s=>{
+      if((saleEdits[s.id]?.linkedPid??s.linkedPid)===pid) editS(s.id,{linkedPid:null});
+    });
+    const idx=purchases.findIndex(x=>x.id===pid);
+    if(idx>=0)purchases.splice(idx,1);
+    delete purchaseEdits[pid];
+    delete valueLookups[pid];
+  });
+  try{localStorage.setItem('cb_purchaseEdits',JSON.stringify(purchaseEdits));}catch(e){}
+  persistLookups();
+  invSelected.clear();
+  toast(`Removed ${ids.length} card${ids.length===1?'':'s'}`);
+  render();
 }
 
 // ─────────────────────────────────────────────
