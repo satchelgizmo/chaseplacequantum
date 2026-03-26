@@ -378,7 +378,7 @@ thead th.sh:hover{color:var(--text)}
       <div class="brand-tag">CARD INTELLIGENCE</div>
     </div>
     <div class="nav">
-      <div class="ni on" id="ni-dash" onclick="nav('dash')"><span class="ic">📊</span><span>Dashboard</span></div>
+      <div class="ni on" id="ni-dash" role="button" tabindex="0" onclick="nav('dash')" onkeydown="if(event.key==='Enter'||event.key===' '){nav('dash')}" aria-current="page"><span class="ic">📊</span><span>Dashboard</span></div>
       <div class="ni" id="ni-inv" role="button" tabindex="0" onclick="nav('inv')" onkeydown="if(event.key==='Enter'||event.key===' '){nav('inv')}"><span class="ic">📦</span><span>Inventory</span></div>
       <div class="ni" id="ni-buys" role="button" tabindex="0" onclick="nav('buys')" onkeydown="if(event.key==='Enter'||event.key===' '){nav('buys')}"><span class="ic">🛒</span><span>Purchases</span></div>
       <div class="ni" id="ni-sells" role="button" tabindex="0" onclick="nav('sells')" onkeydown="if(event.key==='Enter'||event.key===' '){nav('sells')}"><span class="ic">💰</span><span>Sales &amp; P&amp;L</span></div>
@@ -403,7 +403,7 @@ thead th.sh:hover{color:var(--text)}
       </div>
     </div>
   </nav>
-  <div class="main" id="main"></div>
+  <div class="main" id="main" role="main"></div>
 </div>
 
 <!-- SLIDE-OUT PANEL -->
@@ -419,7 +419,28 @@ const APP_DATA = {"purchases":[{"id":"P0001","name":"PSA 10 Team Rocket's Crobat
 // ─────────────────────────────────────────────
 // STATE
 // ─────────────────────────────────────────────
-let { purchases, sales } = APP_DATA;
+// Load purchases/sales from localStorage; seed from APP_DATA only on first run
+let purchases, sales;
+(function() {
+  try {
+    const sp = localStorage.getItem('cb_purchases');
+    purchases = sp !== null ? JSON.parse(sp) : null;
+  } catch(e) { purchases = null; }
+  if (!Array.isArray(purchases)) {
+    purchases = APP_DATA.purchases;
+    try { localStorage.setItem('cb_purchases', JSON.stringify(purchases)); } catch(e) {}
+  }
+  try {
+    const ss = localStorage.getItem('cb_sales');
+    sales = ss !== null ? JSON.parse(ss) : null;
+  } catch(e) { sales = null; }
+  if (!Array.isArray(sales)) {
+    sales = APP_DATA.sales;
+    try { localStorage.setItem('cb_sales', JSON.stringify(sales)); } catch(e) {}
+  }
+})();
+function persistPurchases() { try { localStorage.setItem('cb_purchases', JSON.stringify(purchases)); } catch(e) {} }
+function persistSales()     { try { localStorage.setItem('cb_sales',     JSON.stringify(sales));    } catch(e) {} }
 let purchaseEdits = {};  // pid -> overridden fields
 let saleEdits = {};      // sid -> overridden fields
 try { purchaseEdits = JSON.parse(localStorage.getItem('cb_purchaseEdits') || '{}'); } catch(e) {}
@@ -452,6 +473,12 @@ const _NOISE_STARTERS = [
   'hero','image','wonder','shadow','future','final','radiating','cover','big',
   'circle','monday','shockwave','prized','animation','beautiful','top',
 ];
+// Pre-built regex for stripping leading noise starters in player extraction
+let _noiseStartRx = null;
+function _getNoiseStartRx() {
+  if (!_noiseStartRx) _noiseStartRx = new RegExp('^(?:' + _NOISE_STARTERS.map(n=>n.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|') + ')\\s+', 'i');
+  return _noiseStartRx;
+}
 function cleanPlayer(rawPlayer) {
   if (!rawPlayer) return rawPlayer;
   const words = rawPlayer.trim().split(/\s+/);
@@ -464,10 +491,11 @@ function cleanPlayer(rawPlayer) {
 // ── Type mismatch heuristic ───────────────────
 function likelyType(title) {
   const t = (title||'').toLowerCase();
+  if (/\b(premier league|la liga|bundesliga|nwsl|champions league|club world cup)\b/.test(t)||/\b(ucl|epl|cwc)\b/.test(t)) return 'Soccer';
   if (/\b(nfl|quarterback|qb|touchdown|nfc|afc|broncos|chiefs|eagles|saints|patriots|ravens|steelers|cowboys|packers|bears|rams|49ers|chargers|raiders|bengals|browns|titans|colts|seahawks|dolphins|bills|jets|giants|commanders|cardinals|falcons|panthers|buccaneers|vikings|lions)\b/.test(t)) return 'NFL';
   if (/\b(mlb|baseball|yankees|dodgers|mets|cubs|red sox|giants|braves|astros|phillies|padres|mariners|guardians|twins|brewers|pirates|rockies|diamondbacks|tigers|rays|orioles|blue jays|angels|athletics|rangers|royals|nationals|reds|white sox)\b/.test(t)) return 'MLB';
   if (/\b(nba|basketball|lakers|celtics|warriors|bulls|heat|bucks|nets|knicks|76ers|suns|clippers|nuggets|jazz|thunder|rockets|spurs|mavericks|grizzlies|pelicans|hawks|hornets|pistons|pacers|magic|wizards|raptors|blazers|timberwolves|kings|cavaliers)\b/.test(t)) return 'NBA';
-  if (/\b(pokemon|pikachu|charizard|bulbasaur|squirtle|mewtwo|eevee|psa|tcg|holo|vmax|vstar|illustration rare|special art)\b/.test(t)) return 'Pokémon';
+  if (/\b(pokemon|pikachu|charizard|bulbasaur|squirtle|mewtwo|eevee|tcg|holo|vmax|vstar|illustration rare|special art)\b/.test(t)) return 'Pokémon';
   if (/\b(marvel|spider.?man|avengers|iron man|captain america|thor|hulk|wolverine|black panther|deadpool)\b/.test(t)) return 'Marvel';
   if (/\b(yu.?gi.?oh|yugioh|dark magician|blue.?eyes|exodia)\b/.test(t)) return 'Yu-Gi-Oh';
   return null;
@@ -476,10 +504,16 @@ function likelyType(title) {
 function getP(pid) {
   const base = purchases.find(p=>p.id===pid)||{};
   const merged = { ...base, ...(purchaseEdits[pid]||{}) };
-  // Clean player at read-time — never mutate APP_DATA
-  if (merged.player && !purchaseEdits[pid]?.player) {
-    const cleaned = cleanPlayer(merged.player);
-    if (cleaned !== merged.player) merged.player = cleaned;
+  // Clean player at read-time — never mutate base data
+  if (!purchaseEdits[pid]?.player) {
+    if (merged.player) {
+      const cleaned = cleanPlayer(merged.player);
+      merged.player = cleaned;
+    }
+    // If still empty after clean, try extracting from title
+    if (!merged.player && merged.name) {
+      merged.player = parseCardTitle(merged.name).player || '';
+    }
   }
   // Flag type mismatch (heuristic only — never auto-correct)
   if (merged.type) {
@@ -488,7 +522,13 @@ function getP(pid) {
   }
   return merged;
 }
-function getS(sid) { return { ...sales.find(s=>s.id===sid)||{}, ...(saleEdits[sid]||{}) }; }
+function getS(sid) {
+  const merged = { ...sales.find(s=>s.id===sid)||{}, ...(saleEdits[sid]||{}) };
+  if (!saleEdits[sid]?.player && !merged.player && merged.title) {
+    merged.player = parseCardTitle(merged.title).player || '';
+  }
+  return merged;
+}
 function editP(pid, fields) { purchaseEdits[pid] = {...(purchaseEdits[pid]||{}), ...fields}; updateSidebar(); try{localStorage.setItem('cb_purchaseEdits',JSON.stringify(purchaseEdits));toast('✓ saved',1200);}catch(e){} }
 function editS(sid, fields) { saleEdits[sid] = {...(saleEdits[sid]||{}), ...fields}; updateSidebar(); try{localStorage.setItem('cb_saleEdits',JSON.stringify(saleEdits));toast('✓ saved',1200);}catch(e){} }
 
@@ -595,6 +635,10 @@ function executeDataClear() {
   ['cb_purchaseEdits','cb_saleEdits','cb_lookups','cb_listings','cb_listings_ts',
    'cb_inv_view','cb_buys_view','cb_sells_view','cb_listings_view',
    'cb_page_size','cb_last_backup_ts'].forEach(k=>localStorage.removeItem(k));
+  purchases = [];
+  sales = [];
+  localStorage.setItem('cb_purchases', '[]');
+  localStorage.setItem('cb_sales', '[]');
   purchaseEdits = {};
   saleEdits = {};
   valueLookups = {};
@@ -729,8 +773,9 @@ function ebayFee(price, qty) {
   return Math.round((feePct + 0.30) * 100) / 100;
 }
 function netProfit(salePrice, qty, cost) {
-  // cost is always per-card — costRaw is the lot total
-  return (salePrice*(qty||1)) - cost - ebayFee(salePrice, qty||1);
+  // cost is per-card; multiply by qty so lot sales deduct the correct total cost
+  const q = qty || 1;
+  return (salePrice * q) - (cost * q) - ebayFee(salePrice, q);
 }
 
 // ── Sale-purchase fuzzy scoring (shared by relinkPanel + activeListings) ──
@@ -884,6 +929,20 @@ function _tagCommit(type, id){
 }
 function scoreClass(sc){return sc>=70?'hi':sc>=50?'med':'lo';}
 function scoreLabel(sc){return sc>=70?`✓ ${sc}`:sc>=50?`~ ${sc}`:`? ${sc}`;}
+function _fmtListingDate(s){
+  if(!s)return'—';
+  try{
+    const d=new Date(s);
+    if(isNaN(d.getTime()))return s; // raw string fallback
+    const now=new Date();
+    const diffMs=d-now;
+    const diffDays=Math.round(diffMs/86400000);
+    const dateStr=d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+    if(diffDays>0&&diffDays<=7)return dateStr+' ('+diffDays+'d left)';
+    if(diffDays<0&&diffDays>=-3)return dateStr+' (ended)';
+    return dateStr;
+  }catch(e){return s;}
+}
 function relativeTime(iso){
   if(!iso)return'unknown time';
   const diff=Date.now()-new Date(iso).getTime();
@@ -897,7 +956,7 @@ function relativeTime(iso){
 function matchesQ(p,q){const s=q.toLowerCase();return[p.name,p.player,p.set,p.variation,p.seller,p.year,p.grade,p.type].some(v=>(v||'').toLowerCase().includes(s));}
 function matchesSQ(s,q){const sq=q.toLowerCase();return[s.title,s.player,s.type,s.platform].some(v=>(v||'').toLowerCase().includes(sq));}
 function toast(msg,ms){if(!ms)ms=Math.min(4000,Math.max(1800,1400+msg.length*38));const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');if(!el.onclick){el.style.pointerEvents='none';el.style.cursor='';}clearTimeout(el._t);el._t=setTimeout(()=>{el.classList.remove('show');el.onclick=null;el.style.pointerEvents='none';el.style.cursor='';},ms);}
-function nav(p){if(p==='pnl')p='sells';page=p;document.querySelectorAll('.ni').forEach(el=>el.classList.remove('on'));const ni=document.getElementById('ni-'+p);if(ni)ni.classList.add('on');render();}
+function nav(p){if(p==='pnl')p='sells';page=p;document.querySelectorAll('.ni').forEach(el=>{el.classList.remove('on');el.removeAttribute('aria-current');});const ni=document.getElementById('ni-'+p);if(ni){ni.classList.add('on');ni.setAttribute('aria-current','page');}render();}
 let _panelTrigger=null;
 function openPanel(html){
   _panelTrigger=document.activeElement;
@@ -1264,7 +1323,9 @@ function renderInv(){
 // ─────────────────────────────────────────────
 let _purchaseCsvState = ''; // 'pending' | 'done' | ''
 let _buysCsvRows = [];
+let _buysSkipped = 0;
 let _salesCsvRows = [];
+let _salesSkipped = 0;
 let _importTab = 'purchases'; // 'purchases' | 'sales'
 
 function renderBuys(){
@@ -1413,6 +1474,7 @@ function parseBuysCSV(text) {
   var iNotes  = col(['notes','note','comments']);
   var iImg    = col(['img','image','imageurl','photo','picture']);
   var iOrderNum = col(['ordernumber','orderid','ordernum','order#','transactionid']);
+  var iItemId   = col(['itemnumber','itemid','item number','item id','listingid','ebayitemid','item#']);
 
   if (iName < 0) {
     toast('No title column found');
@@ -1422,16 +1484,18 @@ function parseBuysCSV(text) {
   }
 
   _buysCsvRows = [];
+  _buysSkipped = 0;
   for (var r = 1; r < lines.length; r++) {
     var cells = _csvSplitRow(lines[r]);
     var name = (cells[iName] || '').trim();
-    if (!name) continue;
+    if (!name) { _buysSkipped++; continue; }
     // Strip eBay "Quantity: N" suffixes and leading junk
     name = name.replace(/\s*\|\s*Quantity:\s*\d+.*/i,'').replace(/^\d+\s+x\s+/i,'').trim();
     var costRaw = parseFloat((cells[iCost]||'').replace(/[^0-9.]/g,'')) || 0;
     var csvDate = (cells[iDate]||'').trim();
     var csvSeller = (cells[iSeller]||'').trim();
     var csvOrderNum = (iOrderNum >= 0 ? cells[iOrderNum] : '').trim();
+    var csvItemId   = (iItemId   >= 0 ? cells[iItemId]   : '').trim();
     // Use parseCardTitle to extract what we can from the title
     var parsed = parseCardTitle(name);
     // CSV explicit columns override title-parsed values where present
@@ -1451,6 +1515,7 @@ function parseBuysCSV(text) {
       date: csvDate,
       seller: csvSeller,
       orderNum: csvOrderNum,
+      itemId: csvItemId,
       player: player,
       type: type,
       year: year,
@@ -1468,12 +1533,13 @@ function parseBuysCSV(text) {
     });
   }
 
-  if (!_buysCsvRows.length) { toast('No valid rows found'); return; }
+  if (!_buysCsvRows.length) { toast('No valid rows found — all ' + (lines.length-1) + ' rows had an empty title column'); return; }
 
   render(); // re-render import page to show review
+  var skipNote = _buysSkipped ? ' (' + _buysSkipped + ' rows skipped: empty title)' : '';
   // Auto-trigger AI parse if API key present
   if (getApiKey()) parseBuysCsvWithAI();
-  else toast('Parsed ' + _buysCsvRows.length + ' rows — review below');
+  else toast('Parsed ' + _buysCsvRows.length + ' rows' + skipNote);
 }
 
 function _renderBuysCsvReview() {
@@ -1485,6 +1551,7 @@ function _renderBuysCsvReview() {
   var withRC   = _buysCsvRows.filter(function(r){ return r.is_rc; }).length;
   var html = '<div style="font-size:12px;color:var(--dim);font-family:var(--mono);margin-bottom:8px">'
     + 'Found ' + _buysCsvRows.length + ' rows · ' + withCost + ' with cost · ' + withAuto + ' autos · ' + withRC + ' RCs'
+    + (_buysSkipped ? '<span style="color:var(--orange);margin-left:8px">⚠ ' + _buysSkipped + ' rows skipped (empty title)</span>' : '')
     + '</div>'
     + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">'
     + '<div style="font-size:13px;font-weight:700">Review ' + _buysCsvRows.length + ' Rows</div>'
@@ -1546,10 +1613,10 @@ function confirmBuysCsvRow(i) {
     type: r.type||'', year: r.year||'', set: r.set||'', grade: r.grade||'',
     serial: r.serial||'', variation: r.variation||'', brand: r.brand||'',
     is_auto: !!r.is_auto, is_rc: !!r.is_rc, is_lot: !!r.is_lot, lotQty: r.lotQty||1,
-    notes: r.notes||'', img: r.img||'', itemId: '', orderNum: r.orderNum||'',
+    notes: r.notes||'', img: r.img||'', itemId: r.itemId||'', orderNum: r.orderNum||'',
     qty: 1, candidates: []
   });
-  persist();
+  persistPurchases();
   _buysCsvRows[i]._confirmed = true;
   var rowEl = document.getElementById('buys-row-' + i);
   if (rowEl) rowEl.outerHTML = _renderBuysCsvRow(i);
@@ -1660,9 +1727,10 @@ function renderSells(){
   const allSales=sales.map(s=>getS(s.id));
   const linked=allSales.filter(s=>s.linkedPid);
   const linkRate=allSales.length?Math.round(linked.length/allSales.length*100):0;
-  const tabBar=`<div style="display:flex;gap:6px;margin-bottom:14px">
-    <button class="btn ${sellsTab==='sales'?'pri':'ghost'}" onclick="sellsTab='sales';render()">All Sales (${sales.length})</button>
-    <button class="btn ${sellsTab==='pnl'?'pri':'ghost'}" onclick="sellsTab='pnl';render()">P&amp;L Flips (matched only)</button>
+  const tabBar=`<div style="display:flex;gap:8px;margin-bottom:14px;align-items:center">
+    <button class="btn ${sellsTab==='sales'?'pri':'ghost'}" onclick="sellsTab='sales';render()" title="All eBay sold orders — link each to a purchase to compute P&L">📋 Sales Log (${sales.length})</button>
+    <button class="btn ${sellsTab==='pnl'?'pri':'ghost'}" onclick="sellsTab='pnl';render()" title="Only sales that are linked to a purchase — shows net profit after eBay fees">💹 P&amp;L Flips (linked only)</button>
+    <span style="font-size:10px;color:var(--faint);font-family:var(--mono);margin-left:4px">${sellsTab==='sales'?'Link each sale to a purchase to compute net P&L':`${linked.length} of ${allSales.length} linked — showing matched pairs`}</span>
   </div>`;
   return`
   <div class="topbar"><div class="pg-title">Sales &amp; P&amp;L <span class="pg-sub"><span class="stat-num">${total.toLocaleString()}</span> orders<span class="stat-sep">·</span><span class="stat-money">${f$(items.reduce((a,s)=>a+s.price*(s.qty||1),0))}</span> revenue</span></div><button class="btn pri" onclick="openAddSale()">+ Add Sale</button></div>
@@ -1759,7 +1827,7 @@ function renderPnlView(){
     flips.push({sale:ss,purchase:pp,rev,pnl:rev-pp.cost});
   }
   // Compute net profit for each flip
-  for(const fl of flips){fl.fee=ebayFee(fl.sale.price,fl.sale.qty||1);fl.netPnl=fl.rev-fl.purchase.cost-fl.fee;}
+  for(const fl of flips){fl.fee=ebayFee(fl.sale.price,fl.sale.qty||1);fl.netPnl=fl.rev-(fl.purchase.cost*(fl.sale.qty||1))-fl.fee;}
   let items=flips;
   if(f.q){const q=f.q;items=items.filter(fl=>matchesSQ(fl.sale,q)||matchesQ(fl.purchase,q));}
   const sk=sortState.pnl; items=[...items].sort((a,b)=>{
@@ -1778,9 +1846,10 @@ function renderPnlView(){
   const page_items=items.slice(pn*PS,(pn+1)*PS);
   const allNetPnl=flips.reduce((a,f)=>a+(f.netPnl||0),0);
   const winners=flips.filter(f=>(f.netPnl||0)>0),losers=flips.filter(f=>(f.netPnl||0)<=0);
-  const tabBar=`<div style="display:flex;gap:6px;margin-bottom:14px">
-    <button class="btn ghost" onclick="sellsTab='sales';render()">All Sales (${sales.length})</button>
-    <button class="btn pri" onclick="sellsTab='pnl';render()">P&amp;L Flips (matched only)</button>
+  const tabBar=`<div style="display:flex;gap:8px;margin-bottom:14px;align-items:center">
+    <button class="btn ghost" onclick="sellsTab='sales';render()" title="All eBay sold orders — link each to a purchase to compute P&L">📋 Sales Log (${sales.length})</button>
+    <button class="btn pri" onclick="sellsTab='pnl';render()" title="Only sales linked to a purchase — shows net profit after eBay fees">💹 P&amp;L Flips (linked only)</button>
+    <span style="font-size:10px;color:var(--faint);font-family:var(--mono);margin-left:4px">${total} matched pairs · net fees deducted</span>
   </div>`;
   return`
   <div class="topbar"><div class="pg-title">Sales &amp; P&amp;L <span class="pg-sub">${total} matched pairs</span></div></div>
@@ -2277,7 +2346,7 @@ function buildSalePanel(sid){
   const s=getS(sid);
   const lp=s.linkedPid?getP(s.linkedPid):null;
   const pnl=lp?(s.price*(s.qty||1))-lp.cost:null;
-  const cands=(sales.find(x=>x.id===sid)?.candidates||[]).slice(0,5);
+  const cands=getTopCandidates(s, 10);
   const editing=_salePanelEdit['main'];
   return`
     <div class="pn-head">
@@ -2709,14 +2778,45 @@ function parseCardTitle(title) {
   ];
   for(const [rx,vn] of vars){if(rx.test(t)){out.variation=vn;break;}}
 
-  // Sport/type detection
-  if(/\b(Premier League|La Liga|Bundesliga|MLS|NWSL|FIFA|soccer|football club)\b/i.test(t)||/\b(CWC|UCL|EPL|PL|MLS)\b/.test(t)) out.type='Soccer';
+  // Sport/type detection — Soccer checked first; "football" alone is ambiguous (UK English = soccer)
+  if(/\b(Premier League|La Liga|Bundesliga|NWSL|FIFA|soccer|football club|Club World Cup)\b/i.test(t)||/\b(CWC|UCL|EPL)\b/.test(t)||(/\bMLS\b/.test(t)&&!/\bMLB\b/.test(t))) out.type='Soccer';
   else if(/\b(Pokemon|Pokémon|TCG|Pikachu|Charizard|Mewtwo|Destined Rivals|Scarlet|Violet|Paldea)\b/i.test(t)) out.type='Pokémon';
-  else if(/\b(NFL|football|quarterback|touchdown|Super Bowl|NFC|AFC)\b/i.test(t)&&!/soccer/i.test(t)) out.type='NFL';
+  // NFL requires explicit "NFL" or clear gridiron terms — not just "football" (too ambiguous with soccer)
+  else if(/\b(NFL|quarterback|qb|touchdown|Super Bowl|NFC|AFC)\b/i.test(t)||((/\bfootball\b/i.test(t))&&/\b(broncos|chiefs|eagles|saints|patriots|ravens|steelers|cowboys|packers|bears|rams|49ers|chargers|raiders|bengals|browns|titans|colts|seahawks|dolphins|bills|jets|giants|commanders|cardinals|falcons|panthers|buccaneers|vikings|lions)\b/i.test(t))) out.type='NFL';
   else if(/\b(MLB|baseball|pitcher|batting|World Series|ALDS|NLCS)\b/i.test(t)) out.type='MLB';
   else if(/\b(NBA|basketball|dunk|three-point|Finals)\b/i.test(t)) out.type='NBA';
-  else if(/\b(Marvel|Spider-Man|Iron Man|Avengers|X-Men|Captain)\b/i.test(t)) out.type='Marvel';
+  else if(/\b(Marvel|Spider-Man|Iron Man|Avengers|X-Men|Captain America)\b/i.test(t)) out.type='Marvel';
   else if(/\b(Yu-Gi-Oh|Yugioh|Duel Monsters)\b/i.test(t)) out.type='Yu-Gi-Oh';
+
+  // ── Player extraction: strip known metadata, keep the remainder ──
+  let rem = t;
+  rem = rem.replace(/\b(PSA|BGS|SGC|CGC|BVG)\s*\d+(?:\.\d+)?\b/gi, ' ');          // grade
+  rem = rem.replace(/\b(?:19|20)\d{2}(?:-\d{2,4})?\b/g, ' ');                      // year
+  rem = rem.replace(/#?\s*\d+\s*\/\s*\d+/g, ' ').replace(/\/\s*\d+\b/g, ' ').replace(/#\s*\d+\b/g, ' '); // serials & card#
+  rem = rem.replace(/\b(RC|Rookie\s*Card|Rookie|Auto|Autograph|Signed|Lot|Bundle|Collection|SIR|SAR|XRC|SP\b|SSP)\b/gi, ' ');
+  rem = rem.replace(/\b(Panini|Topps|Upper\s*Deck|Donruss|Bowman|Fleer|Score|Leaf|Select|Skybox|Stadium\s*Club|Archives|Heritage|Gallery|Classics|Contenders|Certified|Absolute|Immaculate|Majestic|Sage|Playoff|Pacific)\b/gi, ' ');
+  rem = rem.replace(/\b(Prizm|Chrome|Optic|Mosaic|Obsidian|National\s*Treasures|Finest|Topps\s*Now|Platinum|Luminance|Illusions|Spectra|Noir|Museum\s*Collection|Definitive|Inception|Revolution|Elements)\b/gi, ' ');
+  rem = rem.replace(/\b(Destined\s*Rivals|Scarlet\s*&?\s*Violet|Paldea|Evolving\s*Skies|Silver\s*Tempest|Crown\s*Zenith|Temporal\s*Forces|Stellar\s*Crown|Surging\s*Sparks|Twilight\s*Masquerade)\b/gi, ' ');
+  rem = rem.replace(/\b(Refractor|Superfractor|Holo(?:\s+Gold|\s+Silver)?|Gold\s+Prizm|Silver\s+Prizm|Rainbow\s+Prizm|Red\s+(?:Wave|Scope|Ice|Prizm)|Blue\s+(?:Wave|Prizm)|Black\s+(?:Finite|Gold)|Gold\s+(?:Vinyl|Refractor)|White\s+Sparkle|Sparkle|Camo|Pulsar|Raywave|Lava|Mojo|Logofractor|Sapphire|Aqua|Marble|Magenta|Starball|Shockwave|Voltage|Prism|Holo|VMAX|VSTAR)\b/gi, ' ');
+  rem = rem.replace(/\b(Premier\s*League|La\s*Liga|Bundesliga|MLS|NWSL|FIFA|UEFA|UCL|EPL|CWC|UEL|Club\s*World\s*Cup|Champions\s*League|World\s*Cup|Super\s*Bowl|World\s*Series|ALDS|NLCS|Football\s*Club)\b/gi, ' ');
+  rem = rem.replace(/\b(Pokemon|Pok[eé]mon|TCG|Marvel|Avengers|X-?Men|Iron\s*Man|Spider-?Man|Yu-?Gi-?Oh|Yugioh|Duel\s*Monsters|NBA|NFL|MLB|NFC|AFC)\b/gi, ' ');
+  rem = rem.replace(/\b(Illustration\s*Rare|Full\s*Art|Base|Insert|Variation|ex\b|GX|EX)\b/gi, ' ');
+  rem = rem.replace(/[()[\]|\/\\]/g, ' ').replace(/\s+/g, ' ').trim();
+  // Remove leading noise starters
+  const _nsRx = _getNoiseStartRx();
+  let playerCandidate = rem;
+  let safety = 0;
+  while (safety++ < 6) {
+    const before = playerCandidate;
+    playerCandidate = playerCandidate.replace(_nsRx, '').trim();
+    if (playerCandidate === before) break;
+  }
+  // Filter out remaining standalone noise tokens, keep up to 4 words
+  const filteredWords = playerCandidate.split(/\s+/).filter(w => {
+    const wl = w.toLowerCase().replace(/[^a-z]/g, '');
+    return wl.length > 1 && !PLAYER_NOISE.has(wl);
+  }).slice(0, 4);
+  out.player = filteredWords.join(' ');
 
   return out;
 }
@@ -2877,7 +2977,7 @@ function importListingsCSV() {
   if (!parsed) { toast('Could not find headers — paste the full CSV from eBay Seller Hub'); return; }
   if (!parsed.length) { toast('No listings found in CSV'); return; }
   activeListings = parsed;
-  activeListingsTs = new Date().toLocaleString();
+  activeListingsTs = new Date().toISOString();
   persistListings();
   toast('Loaded ' + parsed.length + ' listing' + (parsed.length === 1 ? '' : 's'));
   render();
@@ -2990,7 +3090,7 @@ async function fetchEbayStoreListings() {
   var seen = {}, deduped = [];
   allResults.forEach(function(r) { if (!seen[r.itemId]) { seen[r.itemId] = true; deduped.push(r); } });
   activeListings = deduped;
-  activeListingsTs = new Date().toLocaleString();
+  activeListingsTs = new Date().toISOString();
   persistListings();
   toast('Loaded ' + deduped.length + ' listing' + (deduped.length === 1 ? '' : 's') + ' from eBay');
   render();
@@ -3189,7 +3289,7 @@ function renderListings() {
       + '<td><span class="pr g">' + f$(l.price) + '</span>' + (l.qty > 1 ? '<div style="font-size:9px;font-family:var(--mono);color:var(--faint)">x' + l.qty + '</div>' : '') + '</td>'
       + '<td><span class="pr ' + wCls + '" style="font-family:var(--mono)">' + l.watchers + '</span></td>'
       + '<td><span style="font-family:var(--mono);font-size:12px;color:var(--faint)">' + (l.views || '&mdash;') + '</span></td>'
-      + '<td><span style="font-size:11px;font-family:var(--mono);color:var(--dim)">' + (l.endDate || '&mdash;') + '</span></td>'
+      + '<td><span style="font-size:11px;font-family:var(--mono);color:var(--dim)">' + (l.endDate ? _fmtListingDate(l.endDate) : '&mdash;') + '</span></td>'
       + '<td>' + matchCell + '</td>'
       + '<td>' + (netEst !== null ? '<span class="pr ' + (netEst >= 0 ? 'g' : 'r') + '">' + f$(netEst) + '</span>' : '<span style="color:var(--faint)">&mdash;</span>') + '</td>'
       + '</tr>';
@@ -3323,8 +3423,8 @@ function renderImport() {
 
     <!-- TABS -->
     <div style="display:flex;gap:8px;margin-bottom:18px">
-      ${tabBtn('purchases','🛒 Purchase History')}
-      ${tabBtn('sales','💰 Sales History')}
+      ${tabBtn('purchases','🛒 Import Purchases')}
+      ${tabBtn('sales','💰 Import Sales')}
     </div>
 
     <!-- TAB CONTENT -->
@@ -3572,10 +3672,11 @@ function parseSalesCSV(text) {
   }
 
   _salesCsvRows = [];
+  _salesSkipped = 0;
   for (var r = 1; r < lines.length; r++) {
     var cells = _csvSplitRow(lines[r]);
     var title = (cells[iTitle] || '').trim();
-    if (!title) continue;
+    if (!title) { _salesSkipped++; continue; }
     title = title.replace(/\s*\|\s*Quantity:\s*\d+.*/i, '').replace(/^\d+\s+x\s+/i, '').trim();
 
     var priceRaw = parseFloat((iPrice >= 0 ? cells[iPrice] : '').replace(/[^0-9.]/g,'')) || 0;
@@ -3615,9 +3716,10 @@ function parseSalesCSV(text) {
     });
   }
 
-  if (!_salesCsvRows.length) { toast('No valid rows found'); return; }
+  if (!_salesCsvRows.length) { toast('No valid rows found — all ' + (lines.length-1) + ' rows had an empty title column'); return; }
   render();
-  toast('Parsed ' + _salesCsvRows.length + ' sales — review below');
+  var _salesSkipNote = _salesSkipped > 0 ? ' (' + _salesSkipped + ' rows skipped: empty title)' : '';
+  toast('Parsed ' + _salesCsvRows.length + ' sales' + _salesSkipNote + ' — review below');
 }
 
 function _renderSalesCsvReview() {
@@ -3626,6 +3728,7 @@ function _renderSalesCsvReview() {
   var withPrice = _salesCsvRows.filter(function(r){ return r.price > 0; }).length;
   var html = '<div style="font-size:12px;color:var(--dim);font-family:var(--mono);margin-bottom:8px">'
     + 'Found ' + _salesCsvRows.length + ' rows · ' + withPrice + ' with price'
+    + (_salesSkipped ? '<span style="color:var(--orange);margin-left:8px">⚠ ' + _salesSkipped + ' rows skipped (empty title)</span>' : '')
     + '</div>'
     + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">'
     + '<div style="font-size:13px;font-weight:700">Review ' + _salesCsvRows.length + ' Sales</div>'
@@ -3700,6 +3803,7 @@ function confirmSalesCsvRow(i) {
     linkedPid: null,
     candidates: []
   });
+  persistSales();
   _salesCsvRows[i]._confirmed = true;
   var rowEl = document.getElementById('sales-row-' + i);
   if (rowEl) rowEl.outerHTML = _renderSalesCsvRow(i);
