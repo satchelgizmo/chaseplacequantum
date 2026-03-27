@@ -466,6 +466,11 @@ const PLAYER_NOISE = new Set([
   'psv','man','city','chelsea','arsenal','liverpool','barcelona','madrid',
   'juventus','milan','psg','dortmund','bayern','inter','napoli','spurs',
   'aston','villa','newcastle','fulham','brentford','wolves','brighton',
+  'nottingham','forest','crystal','palace','everton','tottenham',
+  'leicester','bournemouth','ipswich','southampton','sunderland',
+  'rangers','celtic','atletico','sevilla','valencia','benfica','porto',
+  'ajax','feyenoord','galatasaray','fenerbahce','besiktas',
+  'legend','legends','icons',
   'card','cards','trading','parallel','numbered','limited','short','print',
   'bowman','fleer','score','leaf','skybox','playoff','pacific','sage','absolute',
   'spectra','mosaic','noir','luminance','illusions','platinum','inception',
@@ -1594,15 +1599,20 @@ function _renderBuysCsvRow(i) {
     + '<div style="flex:1;min-width:0">'
     + '<div style="font-size:11px;font-weight:600;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--dim)" title="' + esc(r.name) + '">' + esc(r.name.length > 80 ? r.name.slice(0,77)+'…' : r.name) + '</div>'
     + '<div style="display:flex;gap:6px;flex-wrap:wrap">'
-    + inp('player','Player','120px')
+    + inp('player','Player','140px')
     + inp('type','Type','80px')
     + inp('year','Year','60px')
     + inp('set','Set','90px')
-    + inp('variation','Parallel','90px')
+    + inp('variation','Parallel','100px')
+    + inp('serial','Serial #','60px')
     + inp('grade','Grade','60px')
     + inp('cost','Cost $','70px')
     + inp('date','Date','90px')
     + inp('seller','Seller','90px')
+    + '<div style="min-width:50px"><label style="font-size:9px;color:var(--faint);font-family:var(--mono);text-transform:uppercase;display:block;margin-bottom:2px">Auto</label>'
+    + '<label style="display:flex;align-items:center;gap:4px;padding-top:3px;cursor:pointer"><input type="checkbox" ' + (r.is_auto ? 'checked' : '') + ' onchange="_buysCsvRows[' + i + '].is_auto=this.checked"><span style="font-size:11px;font-family:var(--mono)">Auto</span></label></div>'
+    + '<div style="min-width:50px"><label style="font-size:9px;color:var(--faint);font-family:var(--mono);text-transform:uppercase;display:block;margin-bottom:2px">RC</label>'
+    + '<label style="display:flex;align-items:center;gap:4px;padding-top:3px;cursor:pointer"><input type="checkbox" ' + (r.is_rc ? 'checked' : '') + ' onchange="_buysCsvRows[' + i + '].is_rc=this.checked"><span style="font-size:11px;font-family:var(--mono)">RC</span></label></div>'
     + '</div>'
     + '</div>'
     + '<div style="display:flex;flex-direction:column;gap:5px;flex-shrink:0;padding-top:20px">'
@@ -1659,11 +1669,17 @@ async function parseBuysCsvWithAI() {
     var chunk = pending.slice(c, c + CHUNK);
     var prompt = 'Parse these eBay trading card listing titles. Return ONLY a JSON array, one object per title, same order:\n'
       + '[{"i":0,"player":"","year":"","brand":"","set":"","variation":"","serial":"","grade":"","is_auto":false,"is_rc":false,"type":""}]\n\n'
-      + 'Rules: player = athlete/character name. year = 4-digit year. brand = manufacturer (Topps/Panini/Upper Deck/etc). '
-      + 'set = product line (Prizm/Chrome/Finest/etc). variation = exact parallel name (Gold Prizm, Silver, Refractor, Holo, etc) or empty string. '
-      + 'serial = print-run denominator only ("99" from "/99", "10" from "5/10"). '
-      + 'grade = slab label if present (PSA 10, BGS 9.5). '
-      + 'type = one of: Soccer/Pokémon/NFL/MLB/NBA/Marvel/Yu-Gi-Oh/Other.\n\n'
+      + 'Rules:\n'
+      + '- player: full athlete/character name as it would appear on the card. Soccer players can have 1-4 name parts (e.g. "Neymar", "Dennis Bergkamp", "Jean Philippe Mateta", "Vinicius Junior"). NEVER include a club/team name (Arsenal, Chelsea, Barcelona, etc.) or descriptor (Legend, Icon, LEGEND) in the player field. Do not include refractor color or parallel names.\n'
+      + '- year: 4-digit year or YYYY-YY range (e.g. 2025-26).\n'
+      + '- brand: manufacturer — Topps, Panini, Upper Deck, etc.\n'
+      + '- set: product line — Prizm, Chrome, Finest, etc.\n'
+      + '- variation: exact parallel/refractor name (Gold Prizm, True Blue, Red Wave, Golazo Orange, Black Monday Night, etc.) or empty string. Include color + word combos that describe the card finish.\n'
+      + '- serial: print-run denominator only — "99" from "/99", "10" from "#5/10", "25" from "/25".\n'
+      + '- grade: slab label if present (PSA 10, BGS 9.5).\n'
+      + '- is_auto: true if "Auto", "Autograph", or "Signed" appears.\n'
+      + '- is_rc: true if "RC", "Rookie", or "Rookie Card" appears.\n'
+      + '- type: one of Soccer/Pokémon/NFL/MLB/NBA/Marvel/Yu-Gi-Oh/Other.\n\n'
       + 'Titles:\n' + chunk.map(function(r,j){ return j + ': ' + r.name; }).join('\n');
     try {
       var res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -2797,7 +2813,7 @@ function parseCardTitle(title) {
     [/\bGold\s+Vinyl\b/i,'Gold Vinyl'],[/\bGold\s+Prizm\b/i,'Gold Prizm'],[/\bGold\s+Refractor\b/i,'Gold Refractor'],
     [/\bSilver\s+Prizm\b/i,'Silver Prizm'],[/\bRainbow\s+Prizm\b/i,'Rainbow Prizm'],
     [/\bRed\s+Wave\b/i,'Red Wave'],[/\bRed\s+Scope\b/i,'Red Scope'],[/\bRed\s+Ice\b/i,'Red Ice'],[/\bRed\s+Prizm\b/i,'Red Prizm'],
-    [/\bBlue\s+Wave\b/i,'Blue Wave'],[/\bBlue\s+Prizm\b/i,'Blue Prizm'],
+    [/\bTrue\s+Blue\b/i,'True Blue'],[/\bBlue\s+Wave\b/i,'Blue Wave'],[/\bBlue\s+Prizm\b/i,'Blue Prizm'],
     [/\bHolo\s+Gold\b/i,'Holo Gold'],[/\bHolo\s+Silver\b/i,'Holo Silver'],
     [/\bSuperFractor\b/i,'Superfractor'],[/\bRefractor\b/i,'Refractor'],
     [/\bSapphire\b/i,'Sapphire'],[/\bAqua\b/i,'Aqua'],[/\bOrange\b/i,'Orange'],
@@ -2835,11 +2851,14 @@ function parseCardTitle(title) {
   rem = rem.replace(/\b(Panini|Topps|Upper\s*Deck|Donruss|Bowman|Fleer|Score|Leaf|Select|Skybox|Stadium\s*Club|Archives|Heritage|Gallery|Classics|Contenders|Certified|Absolute|Immaculate|Majestic|Sage|Playoff|Pacific)\b/gi, ' ');
   rem = rem.replace(/\b(Prizm|Chrome|Optic|Mosaic|Obsidian|National\s*Treasures|Finest|Topps\s*Now|Platinum|Luminance|Illusions|Spectra|Noir|Museum\s*Collection|Definitive|Inception|Revolution|Elements|Bowman\s*Draft)\b/gi, ' ');
   rem = rem.replace(/\b(Destined\s*Rivals|Scarlet\s*&?\s*Violet|Paldea|Evolving\s*Skies|Silver\s*Tempest|Crown\s*Zenith|Temporal\s*Forces|Stellar\s*Crown|Surging\s*Sparks|Twilight\s*Masquerade)\b/gi, ' ');
-  rem = rem.replace(/\b(Refractor|Superfractor|Holo(?:\s+Gold|\s+Silver)?|Gold\s+Prizm|Silver\s+Prizm|Rainbow\s+Prizm|Red\s+(?:Wave|Scope|Ice|Prizm)|Blue\s+(?:Wave|Prizm)|Black\s+(?:Finite|Gold)|Gold\s+(?:Vinyl|Refractor)|Neon\s+Green\s+Refractor|Sepia\s+Refractor|White\s+Sparkle|Sparkle|Camo|Pulsar|Raywave|Lava|Mojo|Logofractor|Sapphire|Aqua|Marble|Magenta|Starball|Shockwave|Voltage|Prism|Holo|VMAX|VSTAR)\b/gi, ' ');
+  rem = rem.replace(/\b(Refractor|Superfractor|Holo(?:\s+Gold|\s+Silver)?|Gold\s+Prizm|Silver\s+Prizm|Rainbow\s+Prizm|Red\s+(?:Wave|Scope|Ice|Prizm)|True\s+Blue|Blue\s+(?:Wave|Prizm)|Black\s+(?:Finite|Gold)|Gold\s+(?:Vinyl|Refractor)|Neon\s+Green\s+Refractor|Sepia\s+Refractor|White\s+Sparkle|Sparkle|Camo|Pulsar|Raywave|Lava|Mojo|Logofractor|Sapphire|Aqua|Marble|Magenta|Starball|Shockwave|Voltage|Prism|Holo|VMAX|VSTAR)\b/gi, ' ');
   rem = rem.replace(/\b(Premier\s*League|La\s*Liga|Bundesliga|MLS|NWSL|FIFA|UEFA|UCL|EPL|CWC|UEL|Club\s*World\s*Cup|Champions\s*League|World\s*Cup|Super\s*Bowl|World\s*Series|ALDS|NLCS|Football\s*Club)\b/gi, ' ');
   rem = rem.replace(/\b(Pokemon|Pok[e\u00e9]mon|TCG|Marvel|Avengers|X-?Men|Iron\s*Man|Spider-?Man|Yu-?Gi-?Oh|Yugioh|Duel\s*Monsters|NBA|NFL|MLB|NHL|NFC|AFC)\b/gi, ' ');
   rem = rem.replace(/\b(Illustration\s*Rare|Full\s*Art|Base|Insert|Variation|ex\b|GX|EX)\b/gi, ' ');
-  rem = rem.replace(/[()[\]|\/\\#]/g, ' ').replace(/\s+/g, ' ').trim();
+  rem = rem.replace(/[()[\]|\/\\#]/g, ' ');
+  // Strip emoji (surrogate pairs cover 🔥 etc; BMP ranges cover ★☆♠♣ etc)
+  rem = rem.replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, ' ').replace(/[\u2600-\u27BF\u2B00-\u2BFF\u{1F000}-\u{1FAFF}]/gu, ' ');
+  rem = rem.replace(/\s+/g, ' ').trim();
   // Strip leading noise words
   const _nsRx = _getNoiseStartRx();
   let playerCandidate = rem;
