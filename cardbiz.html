@@ -1707,6 +1707,10 @@ async function parseBuysCsvWithAI() {
         _buysCsvRows[idx].is_auto = _buysCsvRows[idx].is_auto || !!ai.is_auto;
         _buysCsvRows[idx].is_rc   = _buysCsvRows[idx].is_rc   || !!ai.is_rc;
         _buysCsvRows[idx]._aiDone = true;
+        // Rebuild standardized name now that AI has filled in player/year/set/etc.
+        if (_buysCsvRows[idx].player) {
+          _buysCsvRows[idx].name = buildStandardName(_buysCsvRows[idx]);
+        }
       }
     } catch(err) {
       toast('AI parse error: ' + err.message);
@@ -2740,6 +2744,23 @@ function showLookupResult(pid,r){
 // ─────────────────────────────────────────────
 // CARD TITLE PARSER
 // ─────────────────────────────────────────────
+
+// Build the standardized card name from parsed fields:
+// "Player Variation /Serial Year Set [comp] [series]"
+function buildStandardName(p) {
+  if (!p.player) return p.name || '';
+  const parts = [p.player];
+  if (p.variation) parts.push(p.variation);
+  if (p.is_auto && !/auto/i.test(p.variation||'')) parts.push('Auto');
+  if (p.is_rc) parts.push('RC');
+  if (p.serial) parts.push('/' + p.serial);
+  if (p.year) parts.push(p.year);
+  if (p.set) parts.push(p.set);
+  if (p.comp) parts.push(p.comp);
+  if (p.series) parts.push(p.series);
+  return parts.join(' ');
+}
+
 function parseCardTitle(title) {
   const t = title || '';
   const out = { name:t, player:'', year:'', brand:'', set:'', variation:'', serial:'', grade:'', is_auto:false, is_rc:false, is_lot:false, lotQty:1, type:'', comp:'' };
@@ -2798,8 +2819,14 @@ function parseCardTitle(title) {
   else if(/\b(Marvel|Spider-Man|Spider\s*Man|Avengers|Iron\s*Man|X-Men|Captain\s*America|Thor|Hulk|Wolverine|Deadpool|Black\s*Panther)\b/i.test(t)) out.type='Marvel';
   else if(/\b(Yu-Gi-Oh|Yugioh|Duel\s*Monsters|Dark\s*Magician|Blue.Eyes)\b/i.test(t)) out.type='Yu-Gi-Oh';
 
+  // Competition/league detection
+  const comps=[['UEFA Champions League','UCL'],['Champions League','UCL'],['UEFA','UEFA'],['UCL','UCL'],['Premier League','PL'],['EPL','PL'],['La Liga','La Liga'],['Bundesliga','Bundesliga'],['MLS','MLS'],['NWSL','NWSL'],['CWC','CWC'],['Serie A','Serie A'],['Ligue 1','Ligue 1'],['Eredivisie','Eredivisie']];
+  for(const [kw,cn] of comps){if(t.toLowerCase().includes(kw.toLowerCase())){out.comp=cn;break;}}
+
   // ── Player name extraction ──
-  // Strip all known metadata tokens, then find the first run of Title Case words
+  // Strip all known metadata tokens, then collect ALL Title Case word groups.
+  // Pick the best group (prefer first 2-word group for "First Last" names) rather
+  // than relying on the player name appearing in a specific position.
   let rem = t;
   rem = rem.replace(/\b(PSA|BGS|SGC|CGC|BVG)\s*\d+(?:\.\d+)?\b/gi, ' ');
   rem = rem.replace(/\b(?:19|20)\d{2}(?:-\d{2,4})?\b/g, ' ');
@@ -2821,20 +2848,29 @@ function parseCardTitle(title) {
     playerCandidate = playerCandidate.replace(_nsRx, '').trim();
     if (playerCandidate === before) break;
   }
-  // Collect the first continuous run of Title Case words that aren't noise.
+  // Collect ALL groups of consecutive Title-Case non-noise words.
   // Title Case = first char uppercase, second char lowercase (rejects ALL-CAPS codes & lowercase filler).
-  // Stop at the first noise word or non-Title-Case token.
+  // Then pick the best group: prefer the first group with ≥2 words ("First Last"),
+  // then ≥3 words, then 1 word. This avoids false positives when an unrecognised
+  // set/marketing word (Title Case) appears before the actual player name.
   const words = playerCandidate.split(/\s+/);
-  const nameParts = [];
+  const allGroups = [];
+  let curGroup = [];
   for (const w of words) {
     const wl = w.toLowerCase().replace(/[^a-z]/g, '');
-    if (wl.length < 2) break;
-    if (PLAYER_NOISE.has(wl)) break;
-    if (!/^[A-Z\u00C0-\u00DE][a-z\u00DF-\u00FF]/.test(w)) break;
-    nameParts.push(w);
-    if (nameParts.length === 3) break;
+    if (wl.length >= 2 && !PLAYER_NOISE.has(wl) && /^[A-Z\u00C0-\u00DE][a-z\u00DF-\u00FF]/.test(w)) {
+      curGroup.push(w);
+    } else {
+      if (curGroup.length) { allGroups.push(curGroup); curGroup = []; }
+    }
   }
-  out.player = nameParts.join(' ');
+  if (curGroup.length) allGroups.push(curGroup);
+  // Prefer first group with ≥2 words (typical "First Last"), fall back to any group
+  const bestGroup = allGroups.find(g => g.length >= 2) || allGroups.find(g => g.length >= 1) || [];
+  out.player = bestGroup.slice(0, 3).join(' ');
+
+  // Rebuild card name with standardized convention when player was identified
+  if (out.player) out.name = buildStandardName(out);
 
   return out;
 }
@@ -3522,7 +3558,9 @@ function runImportParse() {
     const costRaw = priceM ? parseFloat(priceM[1].replace(',','')) : 0;
     const cleanTitle = priceM ? line.slice(0, line.lastIndexOf(priceM[0])).trim() : line;
     const parsed = parseCardTitle(cleanTitle);
-    return { _id:'IMP'+i, ...parsed, name:cleanTitle, cost:costRaw, costRaw, img:'', seller:'', orderNum:'', date:new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}), _confirmed:false };
+    // Use standardized name when player was identified; keep raw title as fallback
+    const cardName = parsed.player ? parsed.name : cleanTitle;
+    return { _id:'IMP'+i, ...parsed, name:cardName, cost:costRaw, costRaw, img:'', seller:'', orderNum:'', date:new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}), _confirmed:false };
   });
   // Re-render the import page to show results
   document.getElementById('import-results').innerHTML = _importRows.length ? renderImportResults() : '<div style="color:var(--faint);font-size:12px;font-family:var(--mono)">No valid lines found</div>';
