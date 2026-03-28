@@ -302,6 +302,12 @@ function persistLookups() { try { localStorage.setItem('cb_lookups', JSON.string
 // Known variants registry — tracks every variant seen so new ones can be flagged
 let knownVariants = new Set(JSON.parse(localStorage.getItem('cb_known_variants')||'[]'));
 function persistKnownVariants() { try { localStorage.setItem('cb_known_variants', JSON.stringify([...knownVariants])); } catch(e){} }
+// Checklists (answer key) — maps set name → {players:[], variants:[]}; canonical source for player lookup
+let checklists = JSON.parse(localStorage.getItem('cb_checklists')||'{}');
+// Custom players — names extracted via heuristic that aren't in any loaded checklist
+let customPlayers = new Set(JSON.parse(localStorage.getItem('cb_custom_players')||'[]'));
+function persistChecklists(){try{localStorage.setItem('cb_checklists',JSON.stringify(checklists));}catch(e){}}
+function persistCustomPlayers(){try{localStorage.setItem('cb_custom_players',JSON.stringify([...customPlayers]));}catch(e){}}
 // API key
 function getApiKey() { return localStorage.getItem('cb_apikey')||''; }
 function saveApiKey(v) {
@@ -1390,6 +1396,37 @@ function showLookupResult(pid,r){
 // ─────────────────────────────────────────────
 // CARD TITLE PARSER
 // ─────────────────────────────────────────────
+// ─────────────────────────────────────────────
+// CHECKLIST PLAYER LOOKUP
+// ─────────────────────────────────────────────
+// Returns a Map of normalized-name → {name, fromChecklist} from all loaded checklists + custom players
+function buildPlayerMap() {
+  const map = new Map();
+  function norm(s){return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');}
+  for(const cl of Object.values(checklists)) {
+    for(const p of (cl.players||[])) {const k=norm(p);if(!map.has(k))map.set(k,{name:p,fromChecklist:true});}
+  }
+  for(const p of customPlayers) {const k=norm(p);if(!map.has(k))map.set(k,{name:p,fromChecklist:false});}
+  return map;
+}
+
+// Parse raw checklist text (one card per line) into {players:[], variants:[]}
+function importChecklistText(text) {
+  const playerSet=new Set(), varSet=new Set();
+  for(const raw of text.split('\n')) {
+    let line=raw.trim();
+    if(line.length<2) continue;
+    line=line.replace(/^#?\d+[\s.:\-\)]+/,'').replace(/\/\s*\d+\s*$/,'').trim();
+    if(!line) continue;
+    const p=parseCardTitle(line);
+    if(p.player) playerSet.add(p.player);
+    if(p.variation) varSet.add(p.variation);
+  }
+  // Checklist players should not pollute the custom players registry
+  for(const p of playerSet) customPlayers.delete(p);
+  return {players:[...playerSet],variants:[...varSet]};
+}
+
 function parseCardTitle(title) {
   const t = title || '';
   const out = { name:t, player:'', year:'', brand:'', set:'', variation:'', serial:'', grade:'', is_auto:false, is_rc:false, is_lot:false, lotQty:1, type:'', comp:'', series:'' };
@@ -1509,12 +1546,33 @@ function parseCardTitle(title) {
   // Collect Title Case words: starts with uppercase, has ≥1 lowercase letter, length ≥ 2
   // This matches "Giorgio", "Chiellini", "Granit", "Xhaka" but not "CC", "SP", "UEFA"
   const nameTokens = rem.split(/\s+/).filter(w => /^[A-ZÀ-Ÿ][a-zà-ÿ]/.test(w) && w.length >= 2);
-  // Take first 2 words as player name (covers the vast majority of "First Last" formats)
-  // First word alone is valid for single-name players (Pelé, Ronaldinho, etc.)
-  if (nameTokens.length >= 2) {
-    out.player = nameTokens.slice(0, 2).join(' ');
-  } else if (nameTokens.length === 1) {
-    out.player = nameTokens[0];
+
+  // Option 1: sliding-window lookup against checklist player names (answer key)
+  const _pMap = buildPlayerMap();
+  function _norm(s){return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');}
+  let _found = null;
+  if(_pMap.size > 0 && nameTokens.length > 0) {
+    chkLoop: for(const wSz of [3,2,1]) {
+      for(let i=0; i<=nameTokens.length-wSz; i++) {
+        const cand = nameTokens.slice(i, i+wSz).join(' ');
+        const match = _pMap.get(_norm(cand));
+        if(match){_found=match;break chkLoop;}
+      }
+    }
+  }
+  if(_found) {
+    out.player = _found.name;
+    // Still flag as custom if it came from the custom registry (not an official checklist)
+    if(!_found.fromChecklist) out._customPlayer = true;
+  } else {
+    // Option 2: Title Case heuristic fallback
+    if(nameTokens.length >= 2) out.player = nameTokens.slice(0, 2).join(' ');
+    else if(nameTokens.length === 1) out.player = nameTokens[0];
+    // Track in custom registry if checklists are loaded (otherwise nothing to validate against)
+    if(out.player && _pMap.size > 0) {
+      out._customPlayer = true;
+      if(!customPlayers.has(out.player)){customPlayers.add(out.player);persistCustomPlayers();}
+    }
   }
 
   // ── Standardize card name: "Player Variation /Serial Year Set" ──────────
@@ -1602,7 +1660,7 @@ function renderImport() {
   const f = filt.imp;
   const apiKey = getApiKey();
   return`
-  <div class="topbar"><div class="pg-title">Import <span class="pg-sub">paste eBay order data or title list</span></div><button class="btn ghost sm" style="margin-left:auto" onclick="showVariantLog()">🧬 Variant Registry (${knownVariants.size})</button></div>
+  <div class="topbar"><div class="pg-title">Import <span class="pg-sub">paste eBay order data or title list</span></div><div style="margin-left:auto;display:flex;gap:8px"><button class="btn ghost sm" onclick="showChecklistPanel()">📋 Checklists (${Object.keys(checklists).length})</button><button class="btn ghost sm" onclick="showVariantLog()">🧬 Variants (${knownVariants.size})</button></div></div>
   <div class="content">
     ${!apiKey?`<div class="alert warn" style="margin-bottom:16px">⚠ Enter your Anthropic API key in the sidebar to enable AI parsing and image scanning.</div>`:''}
 
@@ -1713,6 +1771,7 @@ function renderImportResults() {
             <div style="font-weight:600;font-size:12px;margin-bottom:4px;word-break:break-word">${esc(r.name)}</div>
             <div style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:6px">
               ${r.type?`<span class="tb ${(r.type||'').toLowerCase().replace(/[^a-z0-9-]/g,'')}">${esc(r.type)}</span>`:''}
+              ${r._customPlayer?`<span style="font-size:9px;font-weight:700;background:rgba(46,204,138,.12);color:var(--green);border:1px solid rgba(46,204,138,.3);border-radius:3px;padding:1px 4px;font-family:var(--mono)" title="Player not found in any loaded checklist — added to custom registry">CUSTOM</span>`:''}
               ${r.year?`<span class="pt year">${esc(r.year)}</span>`:''}
               ${r.set?`<span class="pt set">${esc(r.set)}</span>`:''}
               ${r.comp?`<span class="pt" style="background:rgba(99,179,237,.12);color:#63b3ed;border:1px solid rgba(99,179,237,.25)">${esc(r.comp)}</span>`:''}
@@ -1767,6 +1826,82 @@ function confirmImportRow(i) {
 
 function confirmAllImport() {
   _importRows.forEach((_,i) => { if(!_importRows[i]._confirmed) confirmImportRow(i); });
+}
+
+function showChecklistPanel() {
+  const setNames = Object.keys(checklists).sort();
+  const totalPlayers = new Set(Object.values(checklists).flatMap(c=>c.players||[])).size;
+  openPanel(`
+    <div style="padding:20px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+        <div style="font-size:15px;font-weight:700">Checklists</div>
+        <span style="font-size:11px;font-family:var(--mono);color:var(--dim)">${setNames.length} sets · ${totalPlayers} players</span>
+      </div>
+      <div style="font-size:11px;color:var(--dim);margin-bottom:16px;font-family:var(--mono);line-height:1.5">
+        Import official set checklists as the answer key for player name lookup. Parsed titles get an exact checklist match when possible; everything else falls back to heuristic and is tracked as <span style="color:var(--green);font-weight:700">CUSTOM</span>.
+      </div>
+
+      <div style="background:var(--surf2);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:16px">
+        <div style="font-size:12px;font-weight:700;margin-bottom:10px">Import a Checklist</div>
+        <div style="margin-bottom:8px">
+          <label style="font-size:9px;color:var(--faint);font-family:var(--mono);text-transform:uppercase;display:block;margin-bottom:4px">Set Name</label>
+          <input id="cl-setname" style="width:100%;background:var(--surf);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:var(--r2);font-size:12px;font-family:var(--mono);outline:none" placeholder="e.g. 2024-25 Panini Prizm Soccer PL">
+        </div>
+        <div style="margin-bottom:10px">
+          <label style="font-size:9px;color:var(--faint);font-family:var(--mono);text-transform:uppercase;display:block;margin-bottom:4px">Checklist — one card per line</label>
+          <textarea id="cl-text" rows="7" style="width:100%;background:var(--surf);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:var(--r2);font-size:11px;font-family:var(--mono);outline:none;resize:vertical" placeholder="#1 Mohamed Salah Base&#10;#2 Erling Haaland Base&#10;#151 Mohamed Salah Gold /10&#10;#152 Erling Haaland Silver /149&#10;..."></textarea>
+        </div>
+        <button class="btn pri sm" onclick="doImportChecklist()">📥 Import</button>
+      </div>
+
+      ${setNames.length===0
+        ? `<div style="color:var(--faint);font-size:12px;font-family:var(--mono);margin-bottom:16px">No checklists loaded yet.</div>`
+        : `<div style="margin-bottom:16px">
+            <div style="font-size:10px;font-weight:700;color:var(--faint);font-family:var(--mono);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px">Loaded Checklists</div>
+            <div style="display:grid;gap:6px">
+              ${setNames.map(name=>{
+                const safeName=name.replace(/'/g,"\\'");
+                return`<div style="background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);padding:8px 12px;display:flex;align-items:center;gap:10px">
+                  <div style="flex:1;min-width:0">
+                    <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(name)}</div>
+                    <div style="font-size:10px;font-family:var(--mono);color:var(--dim);margin-top:2px">${(checklists[name].players||[]).length} players · ${(checklists[name].variants||[]).length} variants</div>
+                  </div>
+                  <button class="btn xs red" onclick="if(confirm('Remove: ${esc(name)}?')){delete checklists['${safeName}'];persistChecklists();showChecklistPanel();}">✕</button>
+                </div>`;}).join('')}
+            </div>
+          </div>`}
+
+      ${customPlayers.size===0?'':`
+        <div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+            <div style="font-size:10px;font-weight:700;color:var(--faint);font-family:var(--mono);letter-spacing:1px;text-transform:uppercase">Custom Players</div>
+            <span style="font-size:10px;font-family:var(--mono);color:var(--faint)">${customPlayers.size} — not in any checklist</span>
+            <button class="btn xs ghost" style="margin-left:auto;color:var(--red)" onclick="if(confirm('Clear custom player registry?')){customPlayers=new Set();persistCustomPlayers();showChecklistPanel();}">↺ Clear</button>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:5px">
+            ${[...customPlayers].sort().map(p=>`<span class="pt" style="cursor:default;background:rgba(46,204,138,.1);color:var(--green);border-color:rgba(46,204,138,.25)">${esc(p)}</span>`).join('')}
+          </div>
+        </div>`}
+    </div>`);
+}
+
+function doImportChecklist() {
+  const name=(document.getElementById('cl-setname')?.value||'').trim();
+  const text=document.getElementById('cl-text')?.value||'';
+  if(!name){toast('Enter a set name');return;}
+  if(!text.trim()){toast('Paste checklist lines first');return;}
+  const result=importChecklistText(text);
+  if(!result.players.length&&!result.variants.length){toast('Nothing found — check format');return;}
+  if(checklists[name]) {
+    const pSet=new Set([...(checklists[name].players||[]),...result.players]);
+    const vSet=new Set([...(checklists[name].variants||[]),...result.variants]);
+    checklists[name]={players:[...pSet],variants:[...vSet]};
+  } else {
+    checklists[name]=result;
+  }
+  persistChecklists();
+  toast(`Imported ${result.players.length} players, ${result.variants.length} variants`);
+  showChecklistPanel();
 }
 
 function showVariantLog() {
