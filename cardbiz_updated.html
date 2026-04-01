@@ -2078,51 +2078,6 @@ function showLookupResult(pid,r){
 // ─────────────────────────────────────────────
 // CARD TITLE PARSER
 // ─────────────────────────────────────────────
-// Words that are definitely NOT player names — checked after metadata stripping
-const PLAYER_NOISE = new Set([
-  'chrome','topps','panini','donruss','prizm','finest','select','merlin',
-  'sapphire','refractor','lava','raywave','prism','wave','geometric',
-  'mojo','starball','logofractor','toppsfractor','pulsar','aqua','magenta',
-  'orange','green','blue','pink','red','gold','black','white','silver','purple',
-  'auto','autograph','rc','rookie','sp','ssp','case','hit','insert','variation',
-  'hero','image','wonder','kids','youthquake','radiating','shadow','etch',
-  'future','stars','golazo','tifo','noise','night','munich','brush','final',
-  'destination','club','competition','competitions','uefa','ucl','ucc','uel',
-  'fifa','premier','league','bundesliga','mls','serie','lot','patch','relic',
-  'japanese','edition','korea','england','germany','spain','france','brazil',
-  'argentina','usa','belgium','portugal','netherlands','italy','mexico',
-  'archives','signature','obsidian','magmatic','prized','footballers','fusion',
-  'skillset','top','world','cover','big','picture','circle','power','voltage',
-  'high','shockwave','monday','lights','xi','base','set','optic','cubic',
-  'cracked','ice','plum','blossom','animation','beautiful','game','huge',
-  'psv','man','city','chelsea','arsenal','liverpool','barcelona','madrid',
-  'juventus','milan','psg','dortmund','bayern','inter','napoli','spurs',
-  'aston','villa','newcastle','fulham','brentford','wolves','brighton',
-  'card','cards','trading','parallel','numbered','limited','short','print',
-  'bowman','fleer','score','leaf','skybox','playoff','pacific','sage','absolute',
-  'spectra','mosaic','noir','luminance','illusions','platinum','inception',
-  'immaculate','contenders','certified','revolution','elements','majestic',
-  'holo','holofoil','foil','sparkle','camo','atomic','inferno','neon','marble',
-  'superfractor','xfractor','prizmatic','negative','sepia','status',
-  'xrc','sir','sar','vmax','vstar','gx',
-  'signed','autographed','graded','slabbed',
-  'nfl','nba','mlb','nhl','wnba','tcg','pokemon',
-  'super','bowl','series','championship','trophy','cup',
-]);
-// Leading noise words: if the player candidate starts with one of these, drop it
-const _NOISE_STARTERS = [
-  'club','obsidian','patch','archives','lot','huge','japanese','blue','orange',
-  'green','magenta','gold','black','red','pink','white','purple','aqua','night',
-  'hero','image','wonder','shadow','future','final','radiating','cover','big',
-  'circle','monday','shockwave','prized','animation','beautiful','top',
-  'signed','auto','rc','rookie','sp','ssp','holo','foil','neon','cracked',
-];
-let _noiseStartRx = null;
-function _getNoiseStartRx() {
-  if (!_noiseStartRx) _noiseStartRx = new RegExp('^(?:' + _NOISE_STARTERS.map(n => n.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|') + ')\\s+', 'i');
-  return _noiseStartRx;
-}
-
 function parseCardTitle(title) {
   const t = title || '';
   const out = { name:t, player:'', year:'', brand:'', set:'', variation:'', serial:'', grade:'', is_auto:false, is_rc:false, is_lot:false, lotQty:1, type:'', comp:'' };
@@ -2140,26 +2095,21 @@ function parseCardTitle(title) {
   const gradeM = t.match(/\b(PSA|BGS|SGC|CGC|BVG)\s*(\d+(?:\.\d+)?)\b/i);
   if(gradeM) out.grade = gradeM[1].toUpperCase()+gradeM[2];
 
-  // Auto / RC / Lot flags
+  // Auto / RC flags
   if(/\b(auto|autograph|signed)\b/i.test(t)) out.is_auto=true;
   if(/\b(RC|rookie card|rookie)\b/i.test(t)) out.is_rc=true;
   if(/\b(lot|bundle|collection)\b/i.test(t)) out.is_lot=true;
 
   // Brand detection
-  const brands=[['Panini','Panini'],['Topps','Topps'],['Upper Deck','Upper Deck'],['Donruss','Donruss'],['Bowman','Bowman'],['Fleer','Fleer'],['Score','Score'],['Leaf','Leaf'],['Skybox','Skybox']];
+  const brands=[['Panini','Panini'],['Topps','Topps'],['Upper Deck','Upper Deck'],['Donruss','Donruss'],['Bowman','Bowman'],['Fleer','Fleer'],['Score','Score'],['Select','Panini']];
   for(const [kw,br] of brands){if(t.toLowerCase().includes(kw.toLowerCase())){out.brand=br;break;}}
 
-  // Set detection
-  const sets=[['Prizm','Prizm'],['Chrome','Chrome'],['Optic','Optic'],['Mosaic','Mosaic'],['Obsidian','Obsidian'],['National Treasures','National Treasures'],['Contenders','Contenders'],['Select','Select'],['Revolution','Revolution'],['Immaculate','Immaculate'],['Finest','Finest'],['Sapphire','Sapphire'],['Heritage','Heritage'],['Stadium Club','Stadium Club'],['Inception','Inception'],['Certified','Certified'],['Elements','Elements'],['Spectra','Spectra'],['Bowman Draft','Bowman Draft'],['Bowman','Bowman'],['Noir','Noir'],['Luminance','Luminance'],['Platinum','Platinum']];
+  // Set detection (after brand match)
+  const sets=[['Prizm','Prizm'],['Chrome','Chrome'],['Optic','Optic'],['Mosaic','Mosaic'],['Obsidian','Obsidian'],['National Treasures','National Treasures'],['Contenders','Contenders'],['Select','Select'],['Revolution','Revolution'],['Immaculate','Immaculate'],['Finest','Finest'],['Sapphire','Sapphire'],['Heritage','Heritage'],['Stadium Club','Stadium Club'],['Inception','Inception'],['Certified','Certified'],['Elements','Elements'],['Spectra','Spectra']];
   for(const [kw,sn] of sets){if(t.toLowerCase().includes(kw.toLowerCase())){out.set=sn;break;}}
 
-  // Competition/league
-  const comps=[['UEFA Champions League','UCL'],['Champions League','UCL'],['Club World Cup','CWC'],['Premier League','PL'],['La Liga','La Liga'],['Bundesliga','Bundesliga'],['Ligue 1','Ligue 1'],['Serie A','Serie A'],['NWSL','NWSL'],['MLS','MLS']];
-  for(const [kw,cn] of comps){if(t.toLowerCase().includes(kw.toLowerCase())){out.comp=cn;break;}}
-
-  // Variation/parallel detection — order matters (most specific first)
+  // Variation/parallel detection — order matters (more specific first)
   const vars=[
-    [/\bNeon\s+Green\s+Refractor\b/i,'Neon Green Refractor'],[/\bSepia\s+Refractor\b/i,'Sepia Refractor'],
     [/\bBlack\s+Finite\b/i,'Black Finite'],[/\bBlack\s+Gold\b/i,'Black Gold'],
     [/\bGold\s+Vinyl\b/i,'Gold Vinyl'],[/\bGold\s+Prizm\b/i,'Gold Prizm'],[/\bGold\s+Refractor\b/i,'Gold Refractor'],
     [/\bSilver\s+Prizm\b/i,'Silver Prizm'],[/\bRainbow\s+Prizm\b/i,'Rainbow Prizm'],
@@ -2167,66 +2117,24 @@ function parseCardTitle(title) {
     [/\bBlue\s+Wave\b/i,'Blue Wave'],[/\bBlue\s+Prizm\b/i,'Blue Prizm'],
     [/\bHolo\s+Gold\b/i,'Holo Gold'],[/\bHolo\s+Silver\b/i,'Holo Silver'],
     [/\bSuperFractor\b/i,'Superfractor'],[/\bRefractor\b/i,'Refractor'],
-    [/\bSapphire\b/i,'Sapphire'],[/\bAqua\b/i,'Aqua'],
-    [/\bOrange\s+(?:Wave|Prizm)\b/i,'Orange Prizm'],[/\bPurple\s+(?:Wave|Prizm)\b/i,'Purple Prizm'],
+    [/\bSapphire\b/i,'Sapphire'],[/\bAqua\b/i,'Aqua'],[/\bOrange\b/i,'Orange'],
+    [/\bPurple\b/i,'Purple'],[/\bGreen\b/i,'Green'],[/\bPink\b/i,'Pink'],
     [/\bCamo\b/i,'Camo'],[/\bWhite\s+Sparkle\b/i,'White Sparkle'],[/\bSparkle\b/i,'Sparkle'],
-    [/\bMarble\b/i,'Marble'],[/\bPulsar\b/i,'Pulsar'],[/\bRaywave\b/i,'Raywave'],[/\bLava\b/i,'Lava'],[/\bMojo\b/i,'Mojo'],
     [/\bXRC\b/i,'XRC'],[/\bHolo\b/i,'Holo'],[/\bGold\b/i,'Gold'],[/\bSilver\b/i,'Silver'],
-    [/\bBlue\b/i,'Blue'],[/\bOrange\b/i,'Orange'],[/\bGreen\b/i,'Green'],[/\bRed\b/i,'Red'],[/\bPink\b/i,'Pink'],[/\bPurple\b/i,'Purple'],
     [/\bPrizm\b/i,'Base Prizm'],[/\bSIR\b/,'Special Illustration Rare'],[/\bSAR\b/,'Special Art Rare'],
     [/\bFull\s+Art\b/i,'Full Art'],[/\bIllustration\s+Rare\b/i,'Illustration Rare'],
     [/\bex\b/,'ex'],[/\bVmax\b/i,'VMAX'],[/\bVstar\b/i,'VSTAR'],
   ];
   for(const [rx,vn] of vars){if(rx.test(t)){out.variation=vn;break;}}
 
-  // Sport/type detection — Soccer first; football alone is ambiguous; team names as fallback
-  if(/\b(Premier League|La Liga|Bundesliga|NWSL|FIFA|soccer|football club|Club World Cup)\b/i.test(t)||/\b(CWC|UCL|EPL)\b/.test(t)||(/\bMLS\b/.test(t)&&!/\bMLB\b/.test(t))) out.type='Soccer';
-  else if(/\b(Pokemon|Pok[e\u00e9]mon|TCG|Pikachu|Charizard|Bulbasaur|Squirtle|Mewtwo|Eevee|Vmax|Vstar|Illustration\s*Rare|Special\s*Art|Destined\s*Rivals|Scarlet|Violet|Paldea|Evolving\s*Skies|Silver\s*Tempest|Crown\s*Zenith)\b/i.test(t)) out.type='Pok\u00e9mon';
-  else if(/\b(NFL|quarterback|qb|touchdown|Super Bowl|NFC|AFC)\b/i.test(t)||((/\bfootball\b/i.test(t))&&!/soccer/i.test(t)&&/\b(broncos|chiefs|eagles|saints|patriots|ravens|steelers|cowboys|packers|bears|rams|49ers|chargers|raiders|bengals|browns|titans|colts|seahawks|dolphins|bills|jets|giants|commanders|cardinals|falcons|panthers|buccaneers|vikings|lions)\b/i.test(t))) out.type='NFL';
-  else if(/\b(MLB|baseball|pitcher|batting|World Series|ALDS|NLCS)\b/i.test(t)||/\b(yankees|dodgers|mets|cubs|red sox|giants|braves|astros|phillies|padres|mariners|guardians|twins|brewers|pirates|rockies|diamondbacks|tigers|rays|orioles|blue jays|angels|athletics|rangers|royals|nationals|reds|white sox)\b/i.test(t)) out.type='MLB';
-  else if(/\b(NBA|basketball|dunk|three-point)\b/i.test(t)||/\b(lakers|celtics|warriors|bulls|heat|bucks|nets|knicks|76ers|suns|clippers|nuggets|jazz|thunder|rockets|spurs|mavericks|grizzlies|pelicans|hawks|hornets|pistons|pacers|magic|wizards|raptors|blazers|timberwolves|kings|cavaliers)\b/i.test(t)) out.type='NBA';
-  else if(/\b(Marvel|Spider-Man|Spider\s*Man|Avengers|Iron\s*Man|X-Men|Captain\s*America|Thor|Hulk|Wolverine|Deadpool|Black\s*Panther)\b/i.test(t)) out.type='Marvel';
-  else if(/\b(Yu-Gi-Oh|Yugioh|Duel\s*Monsters|Dark\s*Magician|Blue.Eyes)\b/i.test(t)) out.type='Yu-Gi-Oh';
-
-  // ── Player name extraction ──
-  // Strip all known metadata tokens, then find the first run of Title Case words
-  let rem = t;
-  rem = rem.replace(/\b(PSA|BGS|SGC|CGC|BVG)\s*\d+(?:\.\d+)?\b/gi, ' ');
-  rem = rem.replace(/\b(?:19|20)\d{2}(?:-\d{2,4})?\b/g, ' ');
-  rem = rem.replace(/#?\s*\d+\s*\/\s*\d+/g, ' ').replace(/\/\s*\d+\b/g, ' ').replace(/#\s*\d+\b/g, ' ');
-  rem = rem.replace(/\b(RC|Rookie\s*Card|Rookie|Auto|Autograph|Signed|Lot|Bundle|Collection|SIR|SAR|XRC|SP|SSP)\b/gi, ' ');
-  rem = rem.replace(/\b(Panini|Topps|Upper\s*Deck|Donruss|Bowman|Fleer|Score|Leaf|Select|Skybox|Stadium\s*Club|Archives|Heritage|Gallery|Classics|Contenders|Certified|Absolute|Immaculate|Majestic|Sage|Playoff|Pacific)\b/gi, ' ');
-  rem = rem.replace(/\b(Prizm|Chrome|Optic|Mosaic|Obsidian|National\s*Treasures|Finest|Topps\s*Now|Platinum|Luminance|Illusions|Spectra|Noir|Museum\s*Collection|Definitive|Inception|Revolution|Elements|Bowman\s*Draft)\b/gi, ' ');
-  rem = rem.replace(/\b(Destined\s*Rivals|Scarlet\s*&?\s*Violet|Paldea|Evolving\s*Skies|Silver\s*Tempest|Crown\s*Zenith|Temporal\s*Forces|Stellar\s*Crown|Surging\s*Sparks|Twilight\s*Masquerade)\b/gi, ' ');
-  rem = rem.replace(/\b(Refractor|Superfractor|Holo(?:\s+Gold|\s+Silver)?|Gold\s+Prizm|Silver\s+Prizm|Rainbow\s+Prizm|Red\s+(?:Wave|Scope|Ice|Prizm)|Blue\s+(?:Wave|Prizm)|Black\s+(?:Finite|Gold)|Gold\s+(?:Vinyl|Refractor)|Neon\s+Green\s+Refractor|Sepia\s+Refractor|White\s+Sparkle|Sparkle|Camo|Pulsar|Raywave|Lava|Mojo|Logofractor|Sapphire|Aqua|Marble|Magenta|Starball|Shockwave|Voltage|Prism|Holo|VMAX|VSTAR)\b/gi, ' ');
-  rem = rem.replace(/\b(Premier\s*League|La\s*Liga|Bundesliga|MLS|NWSL|FIFA|UEFA|UCL|EPL|CWC|UEL|Club\s*World\s*Cup|Champions\s*League|World\s*Cup|Super\s*Bowl|World\s*Series|Football\s*Club)\b/gi, ' ');
-  rem = rem.replace(/\b(Pokemon|Pok[e\u00e9]mon|TCG|Marvel|Avengers|X-?Men|Iron\s*Man|Spider-?Man|Yu-?Gi-?Oh|Yugioh|Duel\s*Monsters|NBA|NFL|MLB|NHL|NFC|AFC)\b/gi, ' ');
-  rem = rem.replace(/\b(Illustration\s*Rare|Full\s*Art|Base|Insert|Variation|ex\b|GX|EX)\b/gi, ' ');
-  rem = rem.replace(/[()[\]|\/\\#]/g, ' ').replace(/\s+/g, ' ').trim();
-
-  // Strip leading noise words
-  const _nsRx = _getNoiseStartRx();
-  let playerCandidate = rem;
-  for (let safety = 0; safety < 6; safety++) {
-    const before = playerCandidate;
-    playerCandidate = playerCandidate.replace(_nsRx, '').trim();
-    if (playerCandidate === before) break;
-  }
-
-  // Collect the first continuous run of Title Case words (not in noise set).
-  // Title Case = first char uppercase, second char lowercase (filters ALL-CAPS codes & lowercase filler).
-  // Stop as soon as we hit a noise word or a non-Title-Case token — that’s the boundary between name and rest.
-  const words = playerCandidate.split(/\s+/);
-  const nameParts = [];
-  for (const w of words) {
-    const wl = w.toLowerCase().replace(/[^a-z]/g, '');
-    if (wl.length < 2) break;
-    if (PLAYER_NOISE.has(wl)) break;
-    if (!/^[A-Z\u00C0-\u00DE][a-z\u00DF-\u00FF]/.test(w)) break;
-    nameParts.push(w);
-    if (nameParts.length === 3) break;
-  }
-  out.player = nameParts.join(' ');
+  // Sport/type detection
+  if(/\b(Premier League|La Liga|Bundesliga|MLS|NWSL|FIFA|soccer|football club)\b/i.test(t)||/\b(CWC|UCL|EPL|PL|MLS)\b/.test(t)) out.type='Soccer';
+  else if(/\b(Pokemon|Pokémon|TCG|Pikachu|Charizard|Mewtwo|Destined Rivals|Scarlet|Violet|Paldea)\b/i.test(t)) out.type='Pokémon';
+  else if(/\b(NFL|football|quarterback|touchdown|Super Bowl|NFC|AFC)\b/i.test(t)&&!/soccer/i.test(t)) out.type='NFL';
+  else if(/\b(MLB|baseball|pitcher|batting|World Series|ALDS|NLCS)\b/i.test(t)) out.type='MLB';
+  else if(/\b(NBA|basketball|dunk|three-point|Finals)\b/i.test(t)) out.type='NBA';
+  else if(/\b(Marvel|Spider-Man|Iron Man|Avengers|X-Men|Captain)\b/i.test(t)) out.type='Marvel';
+  else if(/\b(Yu-Gi-Oh|Yugioh|Duel Monsters)\b/i.test(t)) out.type='Yu-Gi-Oh';
 
   return out;
 }
