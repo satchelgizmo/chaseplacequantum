@@ -1836,6 +1836,7 @@ function renderSells(){
       <div class="sc"><div class="sc-lbl">Linked</div><div class="sc-val">${linked.length}</div><div class="sc-sub">${linkRate}% link rate</div></div>
       <div class="sc"><div class="sc-lbl">Unlinked</div><div class="sc-val r">${allSales.length-linked.length}</div><div class="sc-sub">need matching</div></div>
     </div>
+    ${allSales.length-linked.length>0?`<div style="margin-bottom:16px"><button class="btn pri" onclick="autoLinkAll()" title="Automatically match each unlinked sale to its best available purchase using scoring — review &amp; adjust afterward">⚡ Auto-link ${allSales.length-linked.length} unlinked sale${allSales.length-linked.length===1?'':'s'}</button></div>`:''}
     ${tabBar}
     <div class="fb">
       ${buildSearchInput('sells','Search sales…')}
@@ -2606,6 +2607,50 @@ function _lastUnlinkUndo(){
     toast('Link restored ✓');
     render();
   }
+}
+
+// ─────────────────────────────────────────────
+// AUTO-LINK ALL
+// ─────────────────────────────────────────────
+function autoLinkAll() {
+  const unlinkedSales = sales.map(s => getS(s.id)).filter(s => !s.linkedPid);
+  if (unlinkedSales.length === 0) { toast('All sales are already linked ✓'); return; }
+
+  // Purchases already claimed by existing links
+  const usedPids = new Set(soldPids());
+
+  // Score every unlinked-sale × available-purchase pair
+  const pairs = [];
+  for (const s of unlinkedSales) {
+    for (const p of purchases) {
+      if (usedPids.has(p.id)) continue;
+      const score = scoreSalePurchase(s, getP(p.id));
+      if (score > 25) pairs.push({ sid: s.id, pid: p.id, score });
+    }
+  }
+
+  // Greedy one-to-one assignment: highest score first, no conflicts
+  pairs.sort((a, b) => b.score - a.score);
+  const assignedSales = new Set();
+  const assignedPids = new Set(usedPids);
+  const links = [];
+  for (const pair of pairs) {
+    if (assignedSales.has(pair.sid) || assignedPids.has(pair.pid)) continue;
+    links.push(pair);
+    assignedSales.add(pair.sid);
+    assignedPids.add(pair.pid);
+  }
+
+  if (links.length === 0) {
+    toast('No confident matches found — try linking manually');
+    return;
+  }
+
+  if (!confirm(`Auto-link ${links.length} of ${unlinkedSales.length} unlinked sales to their best-matching purchases?\n\nYou can review and adjust any links afterward.`)) return;
+
+  for (const lk of links) editS(lk.sid, { linkedPid: lk.pid });
+  toast(`Auto-linked ${links.length} sale${links.length===1?'':'s'} ✓`);
+  render();
 }
 
 // ─────────────────────────────────────────────
