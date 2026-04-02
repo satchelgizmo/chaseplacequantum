@@ -560,6 +560,7 @@ let page = 'dash', pgNum = {};
 let currentCardPid = '', _cardPhotoIdx = 0;
 let sortState = { inv: {col:'date',dir:-1}, buys: {col:'date',dir:-1}, sells: {col:'date',dir:-1}, pnl: {col:'pnl',dir:1}, imp: {col:'date',dir:-1} };
 let sellsTab = 'sales'; // 'sales' | 'pnl'
+let _dashPlayerMode = 'rev'; // 'rev' | 'roi'
 // persist market lookups: pid -> {avgPrice, lowPrice, highPrice, confidence, recentSales, ts}
 let valueLookups = JSON.parse(localStorage.getItem('cb_lookups')||'{}');
 function persistLookups() { try { localStorage.setItem('cb_lookups', JSON.stringify(valueLookups)); } catch(e){} }
@@ -731,6 +732,13 @@ function applySort(items, key) {
       av=ssa.reduce((x,s)=>x+getS(s.id).price*(getS(s.id).qty||1),0)-a.cost;
       bv=ssb.reduce((x,s)=>x+getS(s.id).price*(getS(s.id).qty||1),0)-b.cost;
     }
+    else if (col==='roi' && a.id?.startsWith('P')) {
+      const ssa=salesForPid(a.id); const ssb=salesForPid(b.id);
+      const pnlA=ssa.reduce((x,s)=>x+netProfit(getS(s.id).price,getS(s.id).qty||1,a.cost,getS(s.id).fees||0),0);
+      const pnlB=ssb.reduce((x,s)=>x+netProfit(getS(s.id).price,getS(s.id).qty||1,b.cost,getS(s.id).fees||0),0);
+      av=ssa.length&&a.cost>0?pnlA/a.cost*100:-Infinity;
+      bv=ssb.length&&b.cost>0?pnlB/b.cost*100:-Infinity;
+    }
     // Sale-specific
     else if (col==='price')  { av=a.price; bv=b.price; }
     else if (col==='title')  { av=a.title||''; bv=b.title||''; }
@@ -740,6 +748,12 @@ function applySort(items, key) {
       const lpb=b.linkedPid?getP(b.linkedPid):null;
       av=lpa?netProfit(a.price,a.qty||1,lpa.cost,a.fees||0):-Infinity;
       bv=lpb?netProfit(b.price,b.qty||1,lpb.cost,b.fees||0):-Infinity;
+    }
+    else if (col==='roi') {
+      const lpa=a.linkedPid?getP(a.linkedPid):null;
+      const lpb=b.linkedPid?getP(b.linkedPid):null;
+      av=lpa&&lpa.cost>0?netProfit(a.price,a.qty||1,lpa.cost,a.fees||0)/lpa.cost*100:-Infinity;
+      bv=lpb&&lpb.cost>0?netProfit(b.price,b.qty||1,lpb.cost,b.fees||0)/lpb.cost*100:-Infinity;
     }
     else if (col==='match')  { av=a.linkedPid?1:0; bv=b.linkedPid?1:0; }
     else { av=a[col]??''; bv=b[col]??''; }
@@ -942,7 +956,7 @@ function parsedTags(o,clickable){
   if(o.year) t.push(`<span class="pt year"${c(o.year)}>${esc(o.year)}</span>`);
   if(o.set)  t.push(`<span class="pt set"${c(o.set)}>${esc(o.set)}</span>`);
   if(o.variation) t.push(`<span class="pt var"${c(o.variation)}>${esc(o.variation)}</span>`);
-  if(o.serial)    t.push(`<span class="pt serial"${c('/'+o.serial)}>/${esc(o.serial)}</span>`);
+  if(o.serial){const sDisp=o.serial.includes('/')?esc(o.serial):'/'+esc(o.serial);const sFilter=o.serial.includes('/')?o.serial:'/'+o.serial;t.push(`<span class="pt serial"${c(sFilter)}>${sDisp}</span>`);}
   if(o.grade)     t.push(`<span class="pt grade"${c(o.grade)}>${esc(o.grade)}</span>`);
   if(o.is_auto)   t.push(`<span class="pt auto"${c('AUTO')}>AUTO</span>`);
   if(o.is_rc)     t.push(`<span class="pt rc"${c('RC')}>RC</span>`);
@@ -958,7 +972,7 @@ function editableTags(type, id, o){
   if(o.year)      tt.push(chip('year','year',o.year,o.year));
   if(o.set)       tt.push(chip('set','set',o.set,o.set));
   if(o.variation) tt.push(chip('var','variation',o.variation,o.variation));
-  if(o.serial)    tt.push(chip('serial','serial','/'+o.serial,o.serial));
+  if(o.serial)    tt.push(chip('serial','serial',o.serial.includes('/')?o.serial:'/'+o.serial,o.serial));
   if(o.grade)     tt.push(chip('grade','grade',o.grade,o.grade));
   if(o.is_auto)   tt.push(`<span class="pt auto" data-edit>AUTO<button class="pt-del" onclick="event.stopPropagation();tagDel('${type}','${id}','is_auto')" title="Remove">×</button></span>`);
   if(o.is_rc)     tt.push(`<span class="pt rc" data-edit>RC<button class="pt-del" onclick="event.stopPropagation();tagDel('${type}','${id}','is_rc')" title="Remove">×</button></span>`);
@@ -1134,6 +1148,10 @@ function renderDash(){
   for(const s of sales){const ss=getS(s.id);const pl=ss.player;if(!pl||pl.length<3)continue;plrev[pl]=(plrev[pl]||0)+ss.price*(ss.qty||1);}
   const topPl=Object.entries(plrev).sort((a,b)=>b[1]-a[1]).slice(0,DASH_TOP_PLAYERS);
   const maxPl=topPl[0]?.[1]||1;
+  const plroiMap={};
+  for(const s of sales){const ss=getS(s.id);const pl=ss.player;if(!pl||pl.length<3||!ss.linkedPid)continue;const pp=getP(ss.linkedPid);const np=netProfit(ss.price,ss.qty||1,pp.cost,ss.fees||0);if(!plroiMap[pl])plroiMap[pl]={net:0,cost:0};plroiMap[pl].net+=np;plroiMap[pl].cost+=pp.cost;}
+  const topPlROI=Object.entries(plroiMap).filter(([,v])=>v.cost>0).map(([pl,v])=>[pl,v.net/v.cost*100]).sort((a,b)=>b[1]-a[1]).slice(0,DASH_TOP_PLAYERS);
+  const maxPlROI=Math.max(...topPlROI.map(([,v])=>Math.abs(v)),1);
   return`
   <div class="topbar"><div class="pg-title">Dashboard</div></div>
   <div class="content">
@@ -1183,9 +1201,18 @@ function renderDash(){
           <div class="mini-cal-grid">${mcCells}</div>
         </div>
       </div>
-      <div><div style="font-size:13px;font-weight:700;margin-bottom:10px">Top Players by Revenue</div>
+      <div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <div style="font-size:13px;font-weight:700">${_dashPlayerMode==='rev'?'Top Players by Revenue':'Top Players by ROI%'}</div>
+          <div style="display:flex;gap:4px">
+            <button class="btn xs ${_dashPlayerMode==='rev'?'pri':'ghost'}" onclick="_dashPlayerMode='rev';render()" title="Sort by total revenue">Revenue</button>
+            <button class="btn xs ${_dashPlayerMode==='roi'?'pri':'ghost'}" onclick="_dashPlayerMode='roi';render()" title="Sort by return on investment %">ROI%</button>
+          </div>
+        </div>
         <div style="background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:14px">
-          ${topPl.length>=2?topPl.map(([pl,rv])=>`<div class="bar-wrap"><div class="bar-lbl"><span>${esc(pl)}</span><span style="color:var(--gold)">${f$(rv)}</span></div><div class="bar-track"><div class="bar-fill" style="width:${(rv/maxPl*100).toFixed(1)}%;background:var(--gold)"></div></div></div>`).join(''):`<div style="color:var(--faint);font-size:11px;font-family:var(--mono)">Add player names to sales to see revenue by player.</div>`}
+          ${_dashPlayerMode==='rev'
+            ?(topPl.length>=2?topPl.map(([pl,rv])=>`<div class="bar-wrap"><div class="bar-lbl"><span>${esc(pl)}</span><span style="color:var(--gold)">${f$(rv)}</span></div><div class="bar-track"><div class="bar-fill" style="width:${(rv/maxPl*100).toFixed(1)}%;background:var(--gold)"></div></div></div>`).join(''):`<div style="color:var(--faint);font-size:11px;font-family:var(--mono)">Add player names to sales to see revenue by player.</div>`)
+            :(topPlROI.length>=1?topPlROI.map(([pl,roi])=>`<div class="bar-wrap"><div class="bar-lbl"><span>${esc(pl)}</span><span style="color:${roi>=0?'var(--green)':'var(--red)'};font-family:var(--mono);font-weight:700">${roi.toFixed(0)}%</span></div><div class="bar-track"><div class="bar-fill" style="width:${(Math.abs(roi)/maxPlROI*100).toFixed(1)}%;background:${roi>=0?'var(--green)':'var(--red)'}"></div></div></div>`).join(''):`<div style="color:var(--faint);font-size:11px;font-family:var(--mono)">Link sales to purchases to see ROI by player.</div>`)}
         </div>
       </div>
     </div>`;
@@ -1470,6 +1497,7 @@ function renderBuys(){
         ${buildSortTh('buys','cost','COST')}
         <th>STATUS</th>
         ${buildSortTh('buys','pnl','NET P&L')}
+        ${buildSortTh('buys','roi','ROI%')}
       </tr></thead>
       <tbody>${page_items.map(p=>{
         const isSold=sp.has(p.id);
@@ -1477,6 +1505,7 @@ function renderBuys(){
         const rev=ss.reduce((a,s)=>a+getS(s.id).price*(getS(s.id).qty||1),0);
         const totalFees=ss.reduce((a,s)=>a+(getS(s.id).fees||0),0);
         const netPnl=rev-p.cost-totalFees;
+        const roi=isSold&&p.cost>0?(netPnl/p.cost*100).toFixed(0)+'%':null;
         return`<tr onclick="showCardPage('${p.id}')" style="cursor:pointer">
           <td class="cic">${thumb(p.img)}</td>
           <td><div class="cn">${esc(p.name)}</div><div class="cm">${esc(p.seller)}</div></td>
@@ -1486,6 +1515,7 @@ function renderBuys(){
           <td><span class="pr o">${f$(p.cost)}</span></td>
           <td>${isSold?`<span class="sb sold">SOLD</span>`:`<span class="sb stock">IN STOCK</span>`}</td>
           <td>${isSold?`<span class="pr ${netPnl>=0?'g':'r'}">${f$(netPnl)}</span><div style="font-size:9px;color:var(--faint);font-family:var(--mono)">after fees</div>`:`<span class="pr d">—</span>`}</td>
+          <td>${roi!==null?`<span class="pr ${parseFloat(roi)>=0?'g':'r'}" style="font-weight:700">${roi}</span>`:`<span class="pr d">—</span>`}</td>
         </tr>`;}).join('')}
       </tbody>
     </table></div>`}
@@ -1883,10 +1913,13 @@ function renderSells(){
         ${buildSortTh('sells','total','TOTAL')}
         ${buildSortTh('sells','match','MATCH')}
         ${buildSortTh('sells','pnl','NET P&L')}
+        ${buildSortTh('sells','roi','ROI%')}
       </tr></thead>
       <tbody>${page_items.map(ss=>{
         const lp=ss.linkedPid?getP(ss.linkedPid):null;
-        const pnl=lp?(ss.price*(ss.qty||1))-lp.cost:null;
+        const fee=ss.fees||0;
+        const np=lp?netProfit(ss.price,ss.qty||1,lp.cost,fee):null;
+        const roi=lp&&lp.cost>0?(np/lp.cost*100).toFixed(0)+'%':null;
         return`<tr onclick="showSale('${ss.id}')" style="cursor:pointer">
           <td class="cic">${thumb(lp?.img||'')}</td>
           <td><div class="cn">${esc(ss.title)}</div><div class="cm">#${esc(ss.recordNum)}</div></td>
@@ -1901,7 +1934,8 @@ function renderSells(){
             if(topC&&topC.score>=50) return`<span class="sb unlinked" style="cursor:pointer" onclick="event.stopPropagation();openRelinkPanel('${ss.id}')" title="Top match score: ${topC.score}">~ match (${topC.score})</span>`;
             return`<button class="btn xs" onclick="event.stopPropagation();openRelinkPanel('${ss.id}')">🔗 Link</button>`;
           })()}</td>
-          <td>${(()=>{if(!lp)return'<span class=\'pr d\'>—</span>';const fee=ss.fees||0;const np=netProfit(ss.price,ss.qty||1,lp.cost,fee);return`<span class="pr ${np>=0?'g':'r'}">${f$(np)}</span>${fee?`<div style="font-size:9px;font-family:var(--mono);color:var(--faint)">fee ${f$(fee)}</div>`:''}`;})()}</td>
+          <td>${np!==null?`<span class="pr ${np>=0?'g':'r'}">${f$(np)}</span>${fee?`<div style="font-size:9px;font-family:var(--mono);color:var(--faint)">fee ${f$(fee)}</div>`:''}`:`<span class="pr d">—</span>`}</td>
+          <td>${roi!==null?`<span class="pr ${parseFloat(roi)>=0?'g':'r'}" style="font-weight:700">${roi}</span>`:`<span class="pr d">—</span>`}</td>
         </tr>`;}).join('')}
       </tbody>
     </table></div>`}
@@ -2915,8 +2949,11 @@ function parseCardTitle(title) {
 
   // Serial number: /N or #N/N or N/N — but NOT year ranges like 2024/25 or 24/25
   const tNoYearSlash = t.replace(/\b(?:19|20)\d{2}\/\d{2,4}\b/g, ' ').replace(/\b\d{2}\/\d{2}\b(?=\s|$)/g, ' ');
-  const serialM = tNoYearSlash.match(/(?:^|\s)#?\d*\s*\/(\d+)\b/) || tNoYearSlash.match(/\b(\d+)\/(\d+)\b/);
-  if(serialM) out.serial = serialM[1]==='1'&&serialM[2]?serialM[2]:serialM[1];
+  // Try N/M first (e.g. 9/25 → store "9/25"), then /M only (e.g. /25 → store "25")
+  const serialFullM = tNoYearSlash.match(/(?:^|\s)#?(\d+)\s*\/(\d+)\b/);
+  const serialDenomM = !serialFullM && tNoYearSlash.match(/(?:^|\s)\/(\d+)\b/);
+  if(serialFullM) out.serial = serialFullM[1]+'/'+serialFullM[2];
+  else if(serialDenomM) out.serial = serialDenomM[1];
 
   // Grade
   const gradeM = t.match(/\b(PSA|BGS|SGC|CGC|BVG)\s*(\d+(?:\.\d+)?)\b/i);
