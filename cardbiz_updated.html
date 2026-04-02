@@ -1236,7 +1236,7 @@ function renderPnl(){
       <div class="sc"><div class="sc-lbl">Losers</div><div class="sc-val r">${losers.length}</div><div class="sc-sub">${f$(losers.reduce((a,f)=>a+(f.netPnl||0),0))} net</div></div>
       <div class="sc"><div class="sc-lbl">Win Rate</div><div class="sc-val">${total?Math.round(winners.length/total*100):0}%</div><div class="sc-sub">${total} flips</div></div>
     </div>
-    <div class="fb"><div class="sw"><span class="si">🔍</span><input value="${esc(f.q)}" placeholder="Search flips…" oninput="filt.pnl.q=this.value;pgNum.pnl=0;render()"></div></div>
+    <div class="fb"><div class="sw"><span class="si">🔍</span><input id="search-pnl" value="${esc(f.q)}" placeholder="Search flips…" oninput="filt.pnl.q=this.value;pgNum.pnl=0;render()"></div></div>
     <div class="tw"><table>
       <thead><tr><th></th>
         <th onclick="setSort('pnl','player')" class="sh">PURCHASE → SALE${sortIcon('pnl','player')}</th>

@@ -817,7 +817,7 @@ function buildTypeSelect(pageKey) {
 
 // Renders the search input bar bound to filt[pageKey].q
 function buildSearchInput(pageKey, placeholder='Search…') {
-  return `<div class="sw"><span class="si">🔍</span><input value="${esc(filt[pageKey].q)}" placeholder="${esc(placeholder)}" oninput="filt.${pageKey}.q=this.value;pgNum.${pageKey}=0;render()"></div>`;
+  return `<div class="sw"><span class="si">🔍</span><input id="search-${pageKey}" value="${esc(filt[pageKey].q)}" placeholder="${esc(placeholder)}" oninput="filt.${pageKey}.q=this.value;pgNum.${pageKey}=0;render()"></div>`;
 }
 
 // Renders a sortable <th> header cell
