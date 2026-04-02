@@ -420,10 +420,6 @@ const APP_DATA = {"purchases":[{"id":"P0001","name":"PSA 10 Team Rocket's Crobat
 // ─────────────────────────────────────────────
 const CARD_TYPES = ['Soccer','Pokémon','NFL','MLB','Marvel','NBA','Yu-Gi-Oh'];
 const CARD_TYPES_WITH_OTHER = [...CARD_TYPES, 'Other'];
-const EBAY_FEE_TIER1_MAX = 7500;
-const EBAY_FEE_TIER1_RATE = 0.1325;
-const EBAY_FEE_TIER2_RATE = 0.0235;
-const EBAY_FEE_FIXED = 0.30;
 const DASH_MONTHS = 12;
 const DASH_TOP_PLAYERS = 8;
 const DASH_RECENT_SALES = 12;
@@ -742,8 +738,8 @@ function applySort(items, key) {
     else if (col==='pnl') {
       const lpa=a.linkedPid?getP(a.linkedPid):null;
       const lpb=b.linkedPid?getP(b.linkedPid):null;
-      av=lpa?netProfit(a.price,a.qty||1,lpa.cost):-Infinity;
-      bv=lpb?netProfit(b.price,b.qty||1,lpb.cost):-Infinity;
+      av=lpa?netProfit(a.price,a.qty||1,lpa.cost,a.fees||0):-Infinity;
+      bv=lpb?netProfit(b.price,b.qty||1,lpb.cost,b.fees||0):-Infinity;
     }
     else if (col==='match')  { av=a.linkedPid?1:0; bv=b.linkedPid?1:0; }
     else { av=a[col]??''; bv=b[col]??''; }
@@ -783,7 +779,7 @@ function linkedPnl() {
   for (const s of sales) {
     const ss = getS(s.id); const lp = ss.linkedPid;
     if (!lp) continue;
-    r += netProfit(ss.price, ss.qty||1, getP(lp).cost);
+    r += netProfit(ss.price, ss.qty||1, getP(lp).cost, ss.fees||0);
   }
   return r;
 }
@@ -794,18 +790,10 @@ function invCost() { const sp = soldPids(); return purchases.filter(p=>!sp.has(p
 // HELPERS
 // ─────────────────────────────────────────────
 function f$(n) { return n==null?'—':'$'+Number(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
-// eBay fee: 13.25% on first $7500, 2.35% above — plus $0.30 fixed per order
-function ebayFee(price, qty) {
-  const total = price * (qty||1);
-  const feePct = total <= EBAY_FEE_TIER1_MAX
-    ? total * EBAY_FEE_TIER1_RATE
-    : (EBAY_FEE_TIER1_MAX * EBAY_FEE_TIER1_RATE + (total - EBAY_FEE_TIER1_MAX) * EBAY_FEE_TIER2_RATE);
-  return Math.round((feePct + EBAY_FEE_FIXED) * 100) / 100;
-}
-function netProfit(salePrice, qty, cost) {
+function netProfit(salePrice, qty, cost, fees) {
   // cost is per-card; multiply by qty so lot sales deduct the correct total cost
   const q = qty || 1;
-  return (salePrice * q) - (cost * q) - ebayFee(salePrice, q);
+  return (salePrice * q) - (cost * q) - (fees || 0);
 }
 
 // ─────────────────────────────────────────────
@@ -1350,13 +1338,12 @@ function renderInv(){
             return`<div class="lg-card${isSel?' selected':''}" onclick="if(event.ctrlKey||event.metaKey){event.preventDefault();toggleInvSelect('${p.id}');render();}else{showCardPage('${p.id}');}" style="cursor:pointer" title="${isSel?'Ctrl+click to deselect':'Ctrl+click to select'}">
               ${imgTag}
               <div class="lg-card-body">
-                <div class="lg-card-title">${esc(p.name)}${isListed?'<span style="display:inline-block;font-size:8px;font-family:var(--mono);background:rgba(46,204,138,.15);color:var(--green);border:1px solid rgba(46,204,138,.35);border-radius:3px;padding:1px 4px;margin-left:4px;vertical-align:middle">LISTED</span>':''}</div>
+                <div class="lg-card-title">${esc(p.player||p.name)}${isListed?'<span style="display:inline-block;font-size:8px;font-family:var(--mono);background:rgba(46,204,138,.15);color:var(--green);border:1px solid rgba(46,204,138,.35);border-radius:3px;padding:1px 4px;margin-left:4px;vertical-align:middle">LISTED</span>':''}</div>
                 <div class="lg-card-price">${f$(p.cost)}</div>
                 <div class="lg-card-meta">
                   ${typeBadge(p.type,p._typeMismatch)}
                   ${vl?`<span style="color:${mktDiff>=0?'var(--green)':'var(--red)'}">${f$(vl.avgPrice)} mkt</span>`:''}
                 </div>
-                ${p.player?`<div style="font-size:11.5px;color:var(--text);font-family:var(--mono);font-weight:600;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(p.player)}">${esc(p.player)}</div>`:''}
                 ${parsedTags(p,true)}
               </div>
               <div class="lg-card-foot" onclick="event.stopPropagation()">
@@ -1457,13 +1444,13 @@ function renderBuys(){
             const isSold=sp.has(p.id);
             const ss=salesForPid(p.id);
             const rev=ss.reduce((a,s)=>a+getS(s.id).price*(getS(s.id).qty||1),0);
-            const totalFees=ss.reduce((a,s)=>a+ebayFee(getS(s.id).price,getS(s.id).qty||1),0);
+            const totalFees=ss.reduce((a,s)=>a+(getS(s.id).fees||0),0);
             const netPnl=rev-p.cost-totalFees;
             const imgTag=p.img?`<img class="lg-card-img" src="${esc(p.img)}" onerror="this.parentNode.innerHTML='<div class=lg-card-img-ph>&#x1F0CF;</div>'">`:`<div class="lg-card-img-ph">&#x1F0CF;</div>`;
             return`<div class="lg-card" onclick="showCardPage('${p.id}')" style="cursor:pointer">
               ${imgTag}
               <div class="lg-card-body">
-                <div class="lg-card-title">${esc(p.name)}</div>
+                <div class="lg-card-title">${esc(p.player||p.name)}</div>
                 <div class="lg-card-price">${f$(p.cost)}</div>
                 <div class="lg-card-meta">
                   ${typeBadge(p.type,p._typeMismatch)}
@@ -1488,7 +1475,7 @@ function renderBuys(){
         const isSold=sp.has(p.id);
         const ss=salesForPid(p.id);
         const rev=ss.reduce((a,s)=>a+getS(s.id).price*(getS(s.id).qty||1),0);
-        const totalFees=ss.reduce((a,s)=>a+ebayFee(getS(s.id).price,getS(s.id).qty||1),0);
+        const totalFees=ss.reduce((a,s)=>a+(getS(s.id).fees||0),0);
         const netPnl=rev-p.cost-totalFees;
         return`<tr onclick="showCardPage('${p.id}')" style="cursor:pointer">
           <td class="cic">${thumb(p.img)}</td>
@@ -1868,19 +1855,20 @@ function renderSells(){
           ?`<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--faint);font-family:var(--mono)">No sales found</div>`
           :page_items.map(ss=>{
             const lp=ss.linkedPid?getP(ss.linkedPid):null;
-            const np=lp?netProfit(ss.price,ss.qty||1,lp.cost):null;
+            const np=lp?netProfit(ss.price,ss.qty||1,lp.cost,ss.fees||0):null;
             const imgSrc=lp?.img||'';
             const imgTag=imgSrc?`<img class="lg-card-img" src="${esc(imgSrc)}" onerror="this.parentNode.innerHTML='<div class=lg-card-img-ph>&#x1F0CF;</div>'">`:`<div class="lg-card-img-ph">&#x1F0CF;</div>`;
             return`<div class="lg-card" onclick="showSale('${ss.id}')" style="cursor:pointer">
               ${imgTag}
               <div class="lg-card-body">
-                <div class="lg-card-title">${esc(ss.title)}</div>
+                <div class="lg-card-title">${esc(ss.player||ss.title)}</div>
                 <div class="lg-card-price">${f$(ss.price*(ss.qty||1))}</div>
                 <div class="lg-card-meta">
                   ${typeBadge(ss.type)}
                   ${lp?`<span class="sb linked" style="font-size:9px">✓ linked</span>`:`<span class="sb unlinked" style="font-size:9px;cursor:pointer" onclick="event.stopPropagation();openRelinkPanel('${ss.id}')">🔗 link</span>`}
                 </div>
                 ${np!==null?`<div style="font-size:11px;font-family:var(--mono);color:${np>=0?'var(--green)':'var(--red)'};margin-top:2px">${f$(np)} net</div>`:''}
+                ${parsedTags(ss,true)}
               </div>
             </div>`;}).join('')}
         </div>`
@@ -1912,7 +1900,7 @@ function renderSells(){
             if(topC&&topC.score>=50) return`<span class="sb unlinked" style="cursor:pointer" onclick="event.stopPropagation();openRelinkPanel('${ss.id}')" title="Top match score: ${topC.score}">~ match (${topC.score})</span>`;
             return`<button class="btn xs" onclick="event.stopPropagation();openRelinkPanel('${ss.id}')">🔗 Link</button>`;
           })()}</td>
-          <td>${(()=>{if(!lp)return'<span class=\'pr d\'>—</span>';const np=netProfit(ss.price,ss.qty||1,lp.cost);const fee=ebayFee(ss.price,ss.qty||1);return`<span class="pr ${np>=0?'g':'r'}">${f$(np)}</span><div style="font-size:9px;font-family:var(--mono);color:var(--faint)">fee ${f$(fee)}</div>`;})()}</td>
+          <td>${(()=>{if(!lp)return'<span class=\'pr d\'>—</span>';const fee=ss.fees||0;const np=netProfit(ss.price,ss.qty||1,lp.cost,fee);return`<span class="pr ${np>=0?'g':'r'}">${f$(np)}</span>${fee?`<div style="font-size:9px;font-family:var(--mono);color:var(--faint)">fee ${f$(fee)}</div>`:''}`;})()}</td>
         </tr>`;}).join('')}
       </tbody>
     </table></div>`}
@@ -1933,8 +1921,8 @@ function renderPnlView(){
     const rev=ss.price*(ss.qty||1);
     flips.push({sale:ss,purchase:pp,rev,pnl:rev-pp.cost});
   }
-  // Compute net profit for each flip
-  for(const fl of flips){fl.fee=ebayFee(fl.sale.price,fl.sale.qty||1);fl.netPnl=fl.rev-(fl.purchase.cost*(fl.sale.qty||1))-fl.fee;}
+  // Compute net profit for each flip using the exact fee recorded on the sale
+  for(const fl of flips){fl.fee=fl.sale.fees||0;fl.netPnl=fl.rev-(fl.purchase.cost*(fl.sale.qty||1))-fl.fee;}
   let items=flips;
   if(f.q){const q=f.q;items=items.filter(fl=>matchesSQ(fl.sale,q)||matchesQ(fl.purchase,q));}
   const sk=sortState.pnl; items=[...items].sort((a,b)=>{
@@ -2005,7 +1993,7 @@ function showPurchase(pid){
   const sp=soldPids().has(pid);
   const matched=salesForPid(pid);
   const rev=matched.reduce((a,s)=>a+getS(s.id).price*(getS(s.id).qty||1),0);
-  const totalFee=matched.reduce((a,s)=>{const ss=getS(s.id);return a+ebayFee(ss.price,ss.qty||1);},0);
+  const totalFee=matched.reduce((a,s)=>{const ss=getS(s.id);return a+(ss.fees||0);},0);
   const pnl=sp?rev-p.cost:null;
   const netPnl=sp?rev-p.cost-totalFee:null;
   _panelEdit={}; // reset edit state
@@ -2317,7 +2305,7 @@ function renderCardDetail(pid){
   const sp=soldPids().has(pid);
   const matched=salesForPid(pid);
   const rev=matched.reduce((a,s)=>a+getS(s.id).price*(getS(s.id).qty||1),0);
-  const totalFee=matched.reduce((a,s)=>{const ss=getS(s.id);return a+ebayFee(ss.price,ss.qty||1);},0);
+  const totalFee=matched.reduce((a,s)=>{const ss=getS(s.id);return a+(ss.fees||0);},0);
   const pnl=sp?rev-p.cost:null;
   const netPnl=sp?rev-p.cost-totalFee:null;
   const imgs=getImgs(pid);
@@ -2533,13 +2521,14 @@ function buildSaleEditForm(sid){
 
 function buildSaleFinReadView(sid,pnl,lp){
   const s=getS(sid);
-  const fee_=ebayFee(s.price,s.qty||1);
-  const np_=lp?netProfit(s.price,s.qty||1,lp.cost):null;
+  const fee_=s.fees||0;
+  const np_=lp?netProfit(s.price,s.qty||1,lp.cost,fee_):null;
   return`<div class="field-grid">
     <div class="field-item"><label>Sale Price</label><div class="field-val pr g">${f$(s.price)}</div></div>
     <div class="field-item"><label>Quantity</label><div class="field-val">${s.qty||1}</div></div>
     <div class="field-item"><label>Gross Revenue</label><div class="field-val pr g">${f$(s.price*(s.qty||1))}</div></div>
-    <div class="field-item"><label>eBay Fee (~13.25%)</label><div class="field-val pr r">−${f$(fee_)}</div></div>
+    ${fee_?`<div class="field-item"><label>eBay Fees</label><div class="field-val pr r">−${f$(fee_)}</div></div>`:''}
+    ${s.buyerShip?`<div class="field-item"><label>Buyer Paid Ship</label><div class="field-val pr g">+${f$(s.buyerShip)}</div></div>`:''}
     ${lp?`<div class="field-item"><label>Cost Basis</label><div class="field-val pr o">−${f$(lp.cost)}</div></div>`:''}
     ${np_!==null?`<div class="field-item"><label>Net Profit</label><div class="field-val pr ${np_>=0?'g':'r'}" style="font-weight:700">${f$(np_)} (${lp.cost>0?((np_/lp.cost)*100).toFixed(0)+'%':'—'} ROI)</div></div>`:''}
     <div class="field-item"><label>Sale Date</label><div class="field-val">${esc(s.date)}</div></div>
@@ -2551,6 +2540,8 @@ function buildSaleFinEditForm(sid){
   return`<div class="field-grid">
     <div class="field-item"><label>Sale Price ($)</label><input class="field-input mono" type="number" step="0.01" id="es-price-${sid}" value="${s.price||0}"></div>
     <div class="field-item"><label>Quantity</label><input class="field-input mono" type="number" id="es-qty-${sid}" value="${s.qty||1}"></div>
+    <div class="field-item"><label>eBay Fees ($)</label><input class="field-input mono" type="number" step="0.01" id="es-fees-${sid}" value="${s.fees||0}"></div>
+    <div class="field-item"><label>Buyer Paid Ship ($)</label><input class="field-input mono" type="number" step="0.01" id="es-buyerShip-${sid}" value="${s.buyerShip||0}"></div>
     <div class="field-item"><label>Sale Date</label><input class="field-input mono" id="es-date-${sid}" value="${esc(s.date||'')}"></div>
   </div>
   ${buildEditActions(`saveSaleFinFields('${sid}')`, `toggleSaleEdit('${sid}','fin')`)}`;
@@ -2582,9 +2573,11 @@ function saveSaleFields(sid){
 function saveSaleFinFields(sid){
   const g = id => document.getElementById(id)?.value ?? '';
   editS(sid, {
-    price: parseFloat(g(`es-price-${sid}`))||0,
-    qty:   parseInt(g(`es-qty-${sid}`))||1,
-    date:  g(`es-date-${sid}`),
+    price:     parseFloat(g(`es-price-${sid}`))||0,
+    qty:       parseInt(g(`es-qty-${sid}`))||1,
+    fees:      parseFloat(g(`es-fees-${sid}`))||0,
+    buyerShip: parseFloat(g(`es-buyerShip-${sid}`))||0,
+    date:      g(`es-date-${sid}`),
   });
   _panelEdit['fin']=false;
   document.getElementById('pn').innerHTML=buildSalePanel(sid);
@@ -2775,7 +2768,7 @@ recentSales: up to 8 items, sorted newest first. imageUrl: only real https:// UR
 function showLookupResult(pid,r){
   const p=getP(pid);
   const pnl=r.avgPrice?r.avgPrice-p.cost:null;
-  const netPnlEst=pnl!=null?pnl-ebayFee(r.avgPrice,1):null;
+  const netPnlEst=pnl;
   const imgUrl=r.recentSales?.[0]?.imageUrl;
   const ebayUrl=`https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(p.name)}&LH_Complete=1&LH_Sold=1&_sop=13`;
   const ageHrs=r.ts?Math.round((Date.now()-r.ts)/3600000):null;
@@ -3460,7 +3453,7 @@ function renderListings() {
     var l = items[i];
     var pp = l.matchedPid ? getP(l.matchedPid) : null;
     if (pp && !pp.id) pp = null;
-    var netEst = pp ? netProfit(l.price, l.qty || 1, pp.cost) : null;
+    var netEst = pp ? netProfit(l.price, l.qty || 1, pp.cost, 0) : null;
     var wCls = l.watchers >= 5 ? 'g' : l.watchers >= 1 ? 'o' : '';
     var matchCell = (pp
       ? '<div style="display:flex;align-items:center;gap:6px">'
@@ -3494,7 +3487,7 @@ function renderListings() {
     var l = items[i];
     var pp = l.matchedPid ? getP(l.matchedPid) : null;
     if (pp && !pp.id) pp = null;
-    var netEst = pp ? netProfit(l.price, l.qty || 1, pp.cost) : null;
+    var netEst = pp ? netProfit(l.price, l.qty || 1, pp.cost, 0) : null;
     var imgSrc = l.imgUrl || (pp ? pp.img : '');
     var imgTag = imgSrc
       ? '<img class="lg-card-img" src="' + esc(imgSrc) + '" onerror="this.parentNode.innerHTML=\'<div class=lg-card-img-ph>&#x1F0CF;</div>\'">'
@@ -3854,10 +3847,16 @@ function parseSalesCSV(text) {
   var iItemNum = col(['itemnumber','itemid','item number','item id','listingid']);
   var iRecNum  = col(['record#','recordnumber','record number','recordnum','salesrecordnumber','salesrecord']);
   var iType    = col(['type','sport','category']);
-  var iPlayer  = col(['player','subject','athlete']);
+  var iPlayer  = col(['player','playercard','player/card','subject','athlete']);
   var iYear    = col(['year']);
-  var iSet     = col(['set','series']);
+  var iSet     = col(['set','setname','set name','series']);
   var iGrade   = col(['grade','grading']);
+  var iSerial  = col(['serial','serialnumber','serial number','serial#']);
+  var iVariation = col(['parallel','variation','parallelvariation','parallel/variation']);
+  var iBuyerShip = col(['buyerpaidship','buyershipcost','shipping','buyershipping','buyer paid ship']);
+  var iTotalBuyerPaid = col(['totalbuyerpaid','total buyer paid','totalbuyer']);
+  var iTotalFees = col(['totalfees','total fees','fees','ebay fees','ebay fee','platformfees']);
+  var iNetRevenue = col(['netrevenue','net revenue','net','netprofit','net profit']);
 
   if (iTitle < 0) {
     toast('No title column found');
@@ -3888,6 +3887,12 @@ function parseSalesCSV(text) {
     var year   = (iYear   >= 0 ? cells[iYear]   : '').trim() || parsed.year;
     var set    = (iSet    >= 0 ? cells[iSet]    : '').trim() || parsed.set;
     var grade  = (iGrade  >= 0 ? cells[iGrade]  : '').trim() || parsed.grade;
+    var serial = (iSerial >= 0 ? cells[iSerial] : '').replace(/[^0-9]/g,'').trim() || parsed.serial || '';
+    var variation = (iVariation >= 0 ? cells[iVariation] : '').trim() || parsed.variation || '';
+    var buyerShip = parseFloat((iBuyerShip >= 0 ? cells[iBuyerShip] : '').replace(/[^0-9.]/g,'')) || 0;
+    var totalBuyerPaid = parseFloat((iTotalBuyerPaid >= 0 ? cells[iTotalBuyerPaid] : '').replace(/[^0-9.]/g,'')) || 0;
+    var totalFees = parseFloat((iTotalFees >= 0 ? cells[iTotalFees] : '').replace(/[^0-9.]/g,'')) || 0;
+    var netRevenue = parseFloat((iNetRevenue >= 0 ? cells[iNetRevenue] : '').replace(/[^0-9.]/g,'')) || 0;
 
     _salesCsvRows.push({
       _id: 'SC' + r,
@@ -3905,9 +3910,13 @@ function parseSalesCSV(text) {
       year: year,
       set: set,
       grade: grade,
-      serial: parsed.serial || '',
-      variation: parsed.variation || '',
+      serial: serial,
+      variation: variation,
       is_auto: parsed.is_auto || false,
+      buyerShip: buyerShip,
+      totalBuyerPaid: totalBuyerPaid,
+      fees: totalFees,
+      netRevenue: netRevenue,
     });
   }
 
@@ -3954,15 +3963,21 @@ function _renderSalesCsvRow(i) {
     + '<div style="flex:1;min-width:0">'
     + '<div style="font-size:11px;font-weight:600;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--dim)" title="' + esc(r.title) + '">' + esc(r.title.length > 80 ? r.title.slice(0,77)+'…' : r.title) + '</div>'
     + '<div style="display:flex;gap:6px;flex-wrap:wrap">'
-    + inp('player','Player','120px')
-    + inp('type','Type','80px')
+    + inp('player','Player / Card','130px')
+    + inp('type','Sport','80px')
     + inp('year','Year','60px')
-    + inp('set','Set','90px')
-    + inp('variation','Parallel','90px')
+    + inp('set','Set Name','100px')
+    + inp('variation','Parallel / Variation','110px')
+    + inp('serial','Serial','60px')
     + inp('grade','Grade','60px')
-    + inp('price','Price $','70px','number')
     + inp('qty','Qty','50px','number')
-    + inp('date','Date','90px')
+    + inp('price','Sale Price $','80px','number')
+    + inp('buyerShip','Buyer Paid Ship','90px','number')
+    + inp('totalBuyerPaid','Total Buyer Paid','90px','number')
+    + inp('fees','Total Fees','80px','number')
+    + inp('netRevenue','Net Revenue','90px','number')
+    + inp('date','Sale Date','100px')
+    + inp('orderNum','Order #','100px')
     + inp('buyer','Buyer','90px')
     + '</div>'
     + '</div>'
@@ -3987,6 +4002,7 @@ function confirmSalesCsvRow(i) {
     qty: parseInt(r.qty) || 1,
     itemNum: r.itemNum || '',
     recordNum: r.recNum || '',
+    orderNum: r.orderNum || '',
     type: r.type || '',
     player: r.player || '',
     year: r.year || '',
@@ -3995,6 +4011,10 @@ function confirmSalesCsvRow(i) {
     serial: r.serial || '',
     grade: r.grade || '',
     is_auto: !!r.is_auto,
+    buyerShip: parseFloat(r.buyerShip) || 0,
+    totalBuyerPaid: parseFloat(r.totalBuyerPaid) || 0,
+    fees: parseFloat(r.fees) || 0,
+    netRevenue: parseFloat(r.netRevenue) || 0,
     linkedPid: null,
     candidates: []
   });
