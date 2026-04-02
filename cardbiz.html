@@ -1365,7 +1365,7 @@ function renderInv(){
             return`<div class="lg-card${isSel?' selected':''}" onclick="if(event.ctrlKey||event.metaKey){event.preventDefault();toggleInvSelect('${p.id}');render();}else{showCardPage('${p.id}');}" style="cursor:pointer" title="${isSel?'Ctrl+click to deselect':'Ctrl+click to select'}">
               ${imgTag}
               <div class="lg-card-body">
-                <div class="lg-card-title">${esc(p.player||p.name)}${isListed?'<span style="display:inline-block;font-size:8px;font-family:var(--mono);background:rgba(46,204,138,.15);color:var(--green);border:1px solid rgba(46,204,138,.35);border-radius:3px;padding:1px 4px;margin-left:4px;vertical-align:middle">LISTED</span>':''}</div>
+                <div class="lg-card-title">${esc(buildStandardName(p)||p.name)}${isListed?'<span style="display:inline-block;font-size:8px;font-family:var(--mono);background:rgba(46,204,138,.15);color:var(--green);border:1px solid rgba(46,204,138,.35);border-radius:3px;padding:1px 4px;margin-left:4px;vertical-align:middle">LISTED</span>':''}</div>
                 <div class="lg-card-price">${f$(p.cost)}</div>
                 <div class="lg-card-meta">
                   ${typeBadge(p.type,p._typeMismatch)}
@@ -1375,7 +1375,7 @@ function renderInv(){
               </div>
               <div class="lg-card-foot" onclick="event.stopPropagation()">
                 <button class="btn xs" onclick="showCardPage('${p.id}')">✏</button>
-                <a class="btn xs" href="https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(p.name)}&_sop=13" target="_blank" style="text-decoration:none" title="Search eBay">🔗</a>
+                <a class="btn xs" href="https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(buildStandardName(p)||p.name)}&_sop=13" target="_blank" style="text-decoration:none" title="Search eBay">🔗</a>
                 <button class="btn xs" onclick="buildListing('${p.id}')">📝</button>
                 <button class="btn xs" onclick="copyCardDetails('${p.id}')" title="Copy card details">📋</button>
                 <button class="btn xs red" onclick="deletePurchase('${p.id}')" title="Remove card">🗑</button>
@@ -1416,7 +1416,7 @@ function renderInv(){
           <td>${mktHtml}</td>
           <td onclick="event.stopPropagation()" style="white-space:nowrap">
             <button class="btn xs" onclick="showCardPage('${p.id}')">✏ Edit</button>
-            <a class="btn xs" href="https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(p.name)}&_sop=13" target="_blank" style="text-decoration:none;margin-left:3px" title="Search eBay">🔗 eBay</a>
+            <a class="btn xs" href="https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(buildStandardName(p)||p.name)}&_sop=13" target="_blank" style="text-decoration:none;margin-left:3px" title="Search eBay">🔗 eBay</a>
             <button class="btn xs" style="margin-left:3px" onclick="buildListing('${p.id}')">📝</button>
             <button class="btn xs" style="margin-left:3px" onclick="copyCardDetails('${p.id}')" title="Copy card details">📋</button>
             <button class="btn xs red" style="margin-left:3px" onclick="deletePurchase('${p.id}')">🗑</button>
@@ -1975,6 +1975,9 @@ function renderPnlView(){
   const pn=pgNum.pnl||0,total=items.length;
   const page_items=items.slice(pn*PS,(pn+1)*PS);
   const allNetPnl=flips.reduce((a,f)=>a+(f.netPnl||0),0);
+  const allCogs=flips.reduce((a,fl)=>a+(fl.purchase.cost*(fl.sale.qty||1)),0);
+  const allRev=flips.reduce((a,fl)=>a+fl.rev,0);
+  const allFees=flips.reduce((a,fl)=>a+(fl.fee||0),0);
   const winners=flips.filter(f=>(f.netPnl||0)>0),losers=flips.filter(f=>(f.netPnl||0)<=0);
   const tabBar=`<div style="display:flex;gap:8px;margin-bottom:14px;align-items:center">
     <button class="btn ghost" onclick="sellsTab='sales';render()" title="All eBay sold orders — link each to a purchase to compute P&L">📋 Sales Log (${sales.length})</button>
@@ -1986,6 +1989,9 @@ function renderPnlView(){
   <div class="content">
     ${tabBar}
     <div class="sg" style="margin-bottom:16px">
+      <div class="sc"><div class="sc-lbl">Revenue</div><div class="sc-val g">${f$(allRev)}</div><div class="sc-sub">gross sales</div></div>
+      <div class="sc"><div class="sc-lbl">COGS</div><div class="sc-val o">${f$(allCogs)}</div><div class="sc-sub">cost of goods sold</div></div>
+      <div class="sc"><div class="sc-lbl">eBay Fees</div><div class="sc-val r">${f$(allFees)}</div><div class="sc-sub">total fees</div></div>
       <div class="sc"><div class="sc-lbl">Net P&L (after fees)</div><div class="sc-val ${allNetPnl>=0?'g':'r'}">${f$(allNetPnl)}</div><div class="sc-sub">matched flips</div></div>
       <div class="sc"><div class="sc-lbl">Winners</div><div class="sc-val g">${winners.length}</div><div class="sc-sub">${f$(winners.reduce((a,f)=>a+(f.netPnl||0),0))} net</div></div>
       <div class="sc"><div class="sc-lbl">Losers</div><div class="sc-val r">${losers.length}</div><div class="sc-sub">${f$(losers.reduce((a,f)=>a+(f.netPnl||0),0))} net</div></div>
@@ -2893,19 +2899,23 @@ function showLookupResult(pid,r){
 // ─────────────────────────────────────────────
 
 // Build the standardized card name from parsed fields:
-// "Player Variation /Serial Year Set [comp] [series]"
+// "PLAYER / CARD PARALLEL / VARIATION SERIAL YEAR SET NAME"
 function buildStandardName(p) {
   if (!p.player) return p.name || '';
-  const parts = [p.player];
-  if (p.variation) parts.push(p.variation);
-  if (p.is_auto && !/auto/i.test(p.variation||'')) parts.push('Auto');
-  if (p.is_rc) parts.push('RC');
-  if (p.serial) parts.push('/' + p.serial);
-  if (p.year) parts.push(p.year);
-  if (p.set) parts.push(p.set);
-  if (p.comp) parts.push(p.comp);
-  if (p.series) parts.push(p.series);
-  return parts.join(' ');
+  // Segment 3: flags + serial + year + set
+  const rest = [];
+  if (p.is_auto && !/auto/i.test(p.variation||'')) rest.push('Auto');
+  if (p.is_rc) rest.push('RC');
+  if (p.serial) rest.push(p.serial.includes('/') ? p.serial : '/' + p.serial);
+  if (p.year) rest.push(p.year);
+  if (p.set) rest.push(p.set);
+  if (p.comp) rest.push(p.comp);
+  if (p.series) rest.push(p.series);
+  // Build segments: Player / [Card Parallel] / [Variation Serial Year Set]
+  const segments = [p.player];
+  if (p.variation) segments.push(p.variation);
+  if (rest.length) segments.push(rest.join(' '));
+  return segments.join(' / ');
 }
 
 // ─────────────────────────────────────────────
