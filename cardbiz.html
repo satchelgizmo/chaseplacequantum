@@ -127,6 +127,8 @@ td{padding:8px 10px;vertical-align:middle}
 
 /* ── TYPE BADGE ── */
 .tb{display:inline-block;padding:2px 7px;border-radius:3px;font-size:9px;font-family:var(--mono);font-weight:500;letter-spacing:.5px}
+select.recat-sel{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);color:var(--text);font-size:9px;font-family:var(--mono);font-weight:500;letter-spacing:.5px;padding:2px 6px;border-radius:3px;cursor:pointer;outline:none;transition:border-color .15s}
+select.recat-sel:hover{border-color:var(--gold)}
 .tb.soccer{background:rgba(46,204,138,.1);color:var(--green);border:1px solid rgba(46,204,138,.2)}
 .tb.pokémon,.tb.pokemon{background:rgba(245,200,66,.1);color:var(--gold);border:1px solid rgba(245,200,66,.2)}
 .tb.nfl{background:rgba(77,166,255,.1);color:var(--blue);border:1px solid rgba(77,166,255,.2)}
@@ -555,6 +557,8 @@ function getS(sid) {
 }
 function editP(pid, fields) { purchaseEdits[pid] = {...(purchaseEdits[pid]||{}), ...fields}; updateSidebar(); try{localStorage.setItem('cb_purchaseEdits',JSON.stringify(purchaseEdits));toast('✓ saved',1200);}catch(e){} }
 function editS(sid, fields) { saleEdits[sid] = {...(saleEdits[sid]||{}), ...fields}; updateSidebar(); try{localStorage.setItem('cb_saleEdits',JSON.stringify(saleEdits));toast('✓ saved',1200);}catch(e){} }
+function recategorizeP(pid, type) { editP(pid, {type}); document.getElementById('pn').innerHTML = buildPurchasePanel(pid); render(); }
+function recategorizeS(sid, type) { editS(sid, {type}); document.getElementById('pn').innerHTML = buildSalePanel(sid); render(); }
 
 let page = 'dash', pgNum = {};
 let currentCardPid = '', _cardPhotoIdx = 0;
@@ -2057,8 +2061,8 @@ function buildPurchasePanel(pid){
       <div style="flex:1;min-width:0">
         <div class="pn-title" id="p-title-display">${esc(p.name)}</div>
         <div class="pn-meta">${esc(p.date)} · ${esc(p.seller)}</div>
-        <div style="margin-top:6px;display:flex;gap:5px;flex-wrap:wrap">
-          ${typeBadge(p.type)}
+        <div style="margin-top:6px;display:flex;gap:5px;flex-wrap:wrap;align-items:center">
+          <select class="recat-sel" onchange="recategorizeP('${pid}',this.value)">${['Soccer','Pokémon','NFL','MLB','Marvel','NBA','Yu-Gi-Oh','Other'].map(t=>`<option value="${t}" ${p.type===t?'selected':''}>${t}</option>`).join('')}</select>
           ${sp?`<span class="sb sold">SOLD</span>`:`<span class="sb stock">IN STOCK</span>`}
           ${p.grade?`<span class="pt grade">${esc(p.grade)}</span>`:''}
           ${p.is_lot?`<span class="pt" style="color:var(--orange)">LOT×${p.lotQty}</span>`:''}
@@ -2481,7 +2485,7 @@ function buildSalePanel(sid){
       <div style="flex:1;min-width:0">
         <div class="pn-title">${esc(s.title)}</div>
         <div class="pn-meta">${esc(s.date)} · Order #${esc(s.recordNum)}</div>
-        <div style="margin-top:6px">${typeBadge(s.type)}</div>
+        <div style="margin-top:6px"><select class="recat-sel" onchange="recategorizeS('${sid}',this.value)">${['Soccer','Pokémon','NFL','MLB','Marvel','NBA','Yu-Gi-Oh','Other'].map(t=>`<option value="${t}" ${s.type===t?'selected':''}>${t}</option>`).join('')}</select></div>
       </div>
       <button class="pn-close" onclick="closePanel()">✕</button>
     </div>
