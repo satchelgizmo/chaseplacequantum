@@ -1440,6 +1440,7 @@ function renderInv(){
 let _purchaseCsvState = ''; // 'pending' | 'done' | ''
 let _buysCsvRows = [];
 let _buysSkipped = 0;
+let _buysDuplicates = 0;
 let _salesCsvRows = [];
 let _salesSkipped = 0;
 let _importTab = 'purchases'; // 'purchases' | 'sales'
@@ -1601,6 +1602,7 @@ function parseBuysCSV(text) {
 
   _buysCsvRows = [];
   _buysSkipped = 0;
+  _buysDuplicates = 0;
   for (var r = 1; r < lines.length; r++) {
     var cells = _csvSplitRow(lines[r]);
     var name = (cells[iName] || '').trim();
@@ -1612,6 +1614,11 @@ function parseBuysCSV(text) {
     var csvSeller = (cells[iSeller]||'').trim();
     var csvOrderNum = (iOrderNum >= 0 ? cells[iOrderNum] : '').trim();
     var csvItemId   = (iItemId   >= 0 ? cells[iItemId]   : '').trim();
+    // Dedup: skip if a purchase with this itemId already exists
+    if (csvItemId && purchases.some(function(p){ return p.itemId === csvItemId; })) {
+      _buysDuplicates++;
+      continue;
+    }
     // Use parseCardTitle to extract what we can from the title
     var parsed = parseCardTitle(name);
     // CSV explicit columns override title-parsed values where present
@@ -1652,7 +1659,9 @@ function parseBuysCSV(text) {
   if (!_buysCsvRows.length) { toast('No valid rows found — all ' + (lines.length-1) + ' rows had an empty title column'); return; }
 
   render(); // re-render import page to show review
-  var skipNote = _buysSkipped ? ' (' + _buysSkipped + ' rows skipped: empty title)' : '';
+  var skipNote = '';
+  if (_buysSkipped) skipNote += ' (' + _buysSkipped + ' skipped: empty title)';
+  if (_buysDuplicates) skipNote += ' (' + _buysDuplicates + ' skipped: already imported)';
   // Auto-trigger AI parse if API key present
   if (getApiKey()) parseBuysCsvWithAI();
   else toast('Parsed ' + _buysCsvRows.length + ' rows' + skipNote);
@@ -1667,12 +1676,14 @@ function _renderBuysCsvReview() {
   var withRC   = _buysCsvRows.filter(function(r){ return r.is_rc; }).length;
   var html = '<div style="font-size:12px;color:var(--dim);font-family:var(--mono);margin-bottom:8px">'
     + 'Found ' + _buysCsvRows.length + ' rows · ' + withCost + ' with cost · ' + withAuto + ' autos · ' + withRC + ' RCs'
-    + (_buysSkipped ? '<span style="color:var(--orange);margin-left:8px">⚠ ' + _buysSkipped + ' rows skipped (empty title)</span>' : '')
+    + (_buysSkipped ? '<span style="color:var(--orange);margin-left:8px">⚠ ' + _buysSkipped + ' skipped (empty title)</span>' : '')
+    + (_buysDuplicates ? '<span style="color:var(--dim);margin-left:8px">· ' + _buysDuplicates + ' skipped (already imported)</span>' : '')
     + '</div>'
     + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">'
     + '<div style="font-size:13px;font-weight:700">Review ' + _buysCsvRows.length + ' Rows</div>'
     + '<span id="buys-csv-confirmed-ct" style="font-size:11px;font-family:var(--mono);color:var(--dim)">' + confirmed + ' confirmed</span>'
     + (hasApiKey ? '<button class="btn sm" id="buys-ai-btn" onclick="parseBuysCsvWithAI()">&#x2728; AI Parse Titles</button>' : '')
+    + (function(){ var scannable = _buysCsvRows.filter(function(r){ return r.img && !r.player && !r._confirmed; }).length; return (hasApiKey && scannable) ? '<button class="btn sm" id="buys-img-scan-btn" onclick="_scanImportImages()" title="Use Claude Vision to extract player names from card images">&#x1F441; Scan ' + scannable + ' Image' + (scannable===1?'':'s') + '</button>' : ''; })()
     + '<button class="btn pri sm" style="margin-left:auto" onclick="confirmAllBuysCsv()">&#x2713; Import ' + _buysCsvRows.length + ' cards</button>'
     + '<button class="btn ghost sm" onclick="_buysCsvRows=[];render()">&#x2715; Cancel</button>'
     + '</div>'
@@ -1838,7 +1849,87 @@ async function parseBuysCsvWithAI() {
   // Re-render the review section
   var revEl = document.getElementById('buys-csv-review');
   if (revEl) revEl.innerHTML = _renderBuysCsvReview();
+  if (btn) { btn.disabled = false; btn.textContent = '✨ AI Parse Titles'; }
   toast('AI parse complete ✓');
+  // Auto-scan images for rows that still have no player but have an image URL
+  _scanImportImages();
+}
+
+// Scan card images via Vision API for import rows that still have no player name
+async function _scanImportImages() {
+  var apiKey = getApiKey();
+  if (!apiKey) return;
+  var toScan = _buysCsvRows.filter(function(r){ return r.img && !r.player && !r._imgScanned && !r._confirmed; });
+  if (!toScan.length) return;
+
+  var btn = document.getElementById('buys-img-scan-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Scanning…'; }
+  toast('Scanning ' + toScan.length + ' card image' + (toScan.length === 1 ? '' : 's') + ' for player names…');
+
+  var prompt = 'This is a trading card image. Extract ALL visible information and return ONLY valid JSON:\n'
+    + '{"player":"","year":"","brand":"","set":"","variation":"","serial":"","grade":"","is_auto":false,"is_rc":false,"type":"","comp":""}\n\n'
+    + 'Rules:\n'
+    + '- player: the subject/player name printed on the card\n'
+    + '- year: the card year (4 digits, or YYYY-YY)\n'
+    + '- brand: Panini, Topps, Upper Deck, etc.\n'
+    + '- set: Prizm, Chrome, Finest, etc.\n'
+    + '- variation: EXACT parallel name visible (Gold Prizm, Silver, Refractor, etc.)\n'
+    + '- serial: print-run denominator only — "99" from "/99", "10" from "#5/10"\n'
+    + '- grade: grading slab text if visible (e.g. PSA 10, BGS 9.5)\n'
+    + '- is_auto: true if signature visible\n'
+    + '- is_rc: true if RC or Rookie Card logo visible\n'
+    + '- type: Soccer, Pokémon, NFL, MLB, NBA, Marvel, Yu-Gi-Oh, or Other\n'
+    + '- comp: competition/league shorthand (PL, CWC, UCL, etc.)';
+
+  for (var si = 0; si < toScan.length; si++) {
+    var row = toScan[si];
+    var idx = _buysCsvRows.indexOf(row);
+    if (idx < 0) continue;
+    try {
+      var res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: 'claude-opus-4-6',
+          max_tokens: 400,
+          messages: [{role: 'user', content: [
+            {type: 'image', source: {type: 'url', url: row.img}},
+            {type: 'text', text: prompt}
+          ]}]
+        })
+      });
+      _buysCsvRows[idx]._imgScanned = true;
+      if (!res.ok) continue;
+      var data = await res.json();
+      var txt = data.content.filter(function(b){ return b.type==='text'; }).map(function(b){ return b.text; }).join('');
+      var json = JSON.parse(txt.replace(/```json|```/g,'').trim());
+      if (json.player) _buysCsvRows[idx].player = json.player;
+      if (json.year && !_buysCsvRows[idx].year) _buysCsvRows[idx].year = json.year;
+      if (json.brand && !_buysCsvRows[idx].brand) _buysCsvRows[idx].brand = json.brand;
+      if (json.set && !_buysCsvRows[idx].set) _buysCsvRows[idx].set = json.set;
+      if (json.variation && !_buysCsvRows[idx].variation) _buysCsvRows[idx].variation = json.variation;
+      if (json.serial && !_buysCsvRows[idx].serial) _buysCsvRows[idx].serial = json.serial;
+      if (json.grade && !_buysCsvRows[idx].grade) _buysCsvRows[idx].grade = json.grade;
+      if (json.type && json.type !== 'Other' && !_buysCsvRows[idx].type) _buysCsvRows[idx].type = json.type;
+      if (json.comp && !_buysCsvRows[idx].comp) _buysCsvRows[idx].comp = json.comp;
+      _buysCsvRows[idx].is_auto = _buysCsvRows[idx].is_auto || !!json.is_auto;
+      _buysCsvRows[idx].is_rc   = _buysCsvRows[idx].is_rc   || !!json.is_rc;
+      if (_buysCsvRows[idx].player) {
+        _buysCsvRows[idx].name = buildStandardName(_buysCsvRows[idx]);
+      }
+    } catch(e) {
+      _buysCsvRows[idx]._imgScanned = true;
+    }
+  }
+
+  var revEl2 = document.getElementById('buys-csv-review');
+  if (revEl2) revEl2.innerHTML = _renderBuysCsvReview();
+  toast('Image scan complete ✓');
 }
 
 // ─────────────────────────────────────────────
@@ -2830,7 +2921,7 @@ recentSales: up to 8 items, sorted newest first. imageUrl: only real https:// UR
   try{
     const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
       headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-beta':'prompt-caching-2024-07-31','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:'claude-opus-4-5',max_tokens:2500,
+      body:JSON.stringify({model:'claude-opus-4-6',max_tokens:2500,
         tools:[{type:'web_search_20250305',name:'web_search'}],messages:[{role:'user',content:prompt}]})});
     if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error((e.error?.message)||'API '+res.status);}
     const data=await res.json();
@@ -3133,7 +3224,7 @@ Rules:
       : {type:'image',source:{type:'url',url:imgUrl}};
     const res = await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
       headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:'claude-opus-4-5',max_tokens:800,
+      body:JSON.stringify({model:'claude-opus-4-6',max_tokens:800,
         messages:[{role:'user',content:[imgContent,{type:'text',text:prompt}]}]})});
     if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error((e.error?.message)||'API '+res.status);}
     const data = await res.json();
@@ -3761,7 +3852,7 @@ variation: be very specific about the exact parallel (Gold Prizm, Silver Prizm, 
   try {
     const res = await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
       headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:'claude-opus-4-5',max_tokens:600,
+      body:JSON.stringify({model:'claude-opus-4-6',max_tokens:600,
         messages:[{role:'user',content:[{type:'image',source:{type:'url',url}},{type:'text',text:prompt}]}]})});
     if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error((e.error?.message)||'API '+res.status);}
     const data = await res.json();
