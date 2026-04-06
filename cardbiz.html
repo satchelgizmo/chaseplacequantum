@@ -4515,7 +4515,7 @@ Card info:
 - Set: ${p.set||'unknown'}
 - Parallel/Variety: ${p.variation&&p.variation.toLowerCase()!=='base'?p.variation:'Base'}
 - Serial numbered: ${p.serial?'Yes, /'+p.serial:'No'}
-- Graded: ${p.grade?'Yes — '+p.grade+(_gr?' ('+_gr+' '+_gv+')'):'No (raw card)'}
+- Graded: ${p.grade?'Yes — '+p.grade+(_gr?' ('+_gr+' '+_gv+')':''):'No (raw card)'}
 - Autographed: ${p.is_auto?'Yes':'No'}
 - Rookie card: ${p.is_rc?'Yes':'No'}
 - Card type/sport: ${p.type||'Trading Card'}
