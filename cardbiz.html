@@ -1443,7 +1443,9 @@ let _buysSkipped = 0;
 let _buysDuplicates = 0;
 let _salesCsvRows = [];
 let _salesSkipped = 0;
-let _importTab = 'purchases'; // 'purchases' | 'sales'
+let _templateCsvRows = [];
+let _templateSkipped = 0;
+let _importTab = 'template'; // 'template' | 'purchases' | 'sales'
 
 function renderBuys(){
   const sp=soldPids();
@@ -3758,7 +3760,27 @@ function renderImport() {
   };
 
   let tabContent = '';
-  if (tab === 'purchases') {
+  if (tab === 'template') {
+    if (_templateCsvRows.length) {
+      tabContent = `<div id="tmpl-csv-review">${_renderTemplateCsvReview()}</div>`;
+    } else {
+      tabContent = `
+        <div style="background:var(--surf2);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:14px">
+          <div style="font-size:12px;font-weight:700;margin-bottom:4px">Template Columns</div>
+          <div style="font-size:11px;color:var(--dim);font-family:var(--mono);line-height:1.7;margin-bottom:10px">
+            Date Purchased · Quantity · Player · Year · Set · Variation · Serial Number · Category · Condition · Slab Serial # · Estimated Value · Notes · Tags · Image · Back Image
+          </div>
+          <button class="btn sm" style="background:rgba(0,212,255,.08);border-color:rgba(0,212,255,.25);color:var(--gold)" onclick="downloadImportTemplate()">⬇ Download Blank Template</button>
+        </div>
+        ${dropZone('template')}
+        <textarea id="imp-paste-template" rows="8" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:10px;border-radius:var(--r2);font-size:11px;font-family:var(--mono);outline:none;resize:vertical;box-sizing:border-box"
+          placeholder="Paste your filled template CSV here…&#10;&#10;Expected columns (in any order):&#10;Date Purchased, Quantity, Player, Year, Set, Variation, Serial Number,&#10;Category, Condition, Slab Serial #, Estimated Value, Notes, Tags, Image, Back Image"></textarea>
+        <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
+          <button class="btn pri sm" onclick="parseTemplateCSV()">⚡ Parse</button>
+          <button class="btn ghost sm" onclick="document.getElementById('imp-paste-template').value=''">Clear</button>
+        </div>`;
+    }
+  } else if (tab === 'purchases') {
     if (_buysCsvRows.length) {
       tabContent = `<div id="buys-csv-review">${_renderBuysCsvReview()}</div>`;
     } else {
@@ -3794,8 +3816,9 @@ function renderImport() {
     ${!apiKey?`<div class="alert warn" style="margin-bottom:16px">⚠ Enter your Anthropic API key in the sidebar to enable AI title parsing.</div>`:''}
 
     <!-- TABS -->
-    <div style="display:flex;gap:8px;margin-bottom:18px">
-      ${tabBtn('purchases','🛒 Import Purchases')}
+    <div style="display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap">
+      ${tabBtn('template','📋 Template Import')}
+      ${tabBtn('purchases','🛒 eBay / Custom CSV')}
       ${tabBtn('sales','💰 Import Sales')}
     </div>
 
@@ -4001,11 +4024,244 @@ function _handleImportFile(file, type) {
 }
 
 function _dispatchImportText(text, type) {
-  if (type === 'purchases') {
+  if (type === 'template') {
+    parseTemplateCSV(text);
+  } else if (type === 'purchases') {
     parseBuysCSV(text);
   } else {
     parseSalesCSV(text);
   }
+}
+
+// ─────────────────────────────────────────────
+// TEMPLATE IMPORT
+// ─────────────────────────────────────────────
+const TEMPLATE_HEADERS = [
+  'Date Purchased','Quantity','Player','Year','Set','Variation',
+  'Serial Number','Category','Condition','Slab Serial #',
+  'Estimated Value','Notes','Tags','Image','Back Image'
+];
+
+function downloadImportTemplate() {
+  var sample = [
+    'Apr 22 2026','1','Patrick Mahomes','2020','Panini Prizm','Gold Prizm',
+    '10','NFL','PSA 10','12345678','350.00','Great card!','auto',
+    'https://i.ebayimg.com/example-front.jpg','https://i.ebayimg.com/example-back.jpg'
+  ];
+  var csv = TEMPLATE_HEADERS.map(function(h){ return '"' + h + '"'; }).join(',')
+    + '\n'
+    + sample.map(function(v){ return '"' + v + '"'; }).join(',');
+  var blob = new Blob([csv], {type:'text/csv'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = 'cardbiz-import-template.csv'; a.click();
+  URL.revokeObjectURL(url);
+  toast('Template downloaded ✓');
+}
+
+function parseTemplateCSV(text) {
+  if (!text) {
+    var ta = document.getElementById('imp-paste-template');
+    if (!ta || !ta.value.trim()) { toast('Paste CSV data first'); return; }
+    text = ta.value.trim();
+  }
+  text = text.trim();
+  var lines = text.split(/\r?\n/).filter(function(l){ return l.trim(); });
+  if (lines.length < 2) { toast('Need a header row and at least one data row'); return; }
+
+  var header = _csvSplitRow(lines[0]).map(function(h){ return h.toLowerCase().replace(/['"]/g,'').trim(); });
+  var col = _csvCols(header);
+
+  var iDate    = col(['date purchased','datepurchased','date']);
+  var iQty     = col(['quantity','qty']);
+  var iPlayer  = col(['player']);
+  var iYear    = col(['year']);
+  var iSet     = col(['set']);
+  var iVar     = col(['variation','parallel']);
+  var iSerial  = col(['serial number','serialnumber','serial#','serial']);
+  var iCat     = col(['category','type','sport']);
+  var iCond    = col(['condition','grade']);
+  var iSlab    = col(['slab serial #','slabserial#','slabserial','slab serial','cert','certnumber','cert#']);
+  var iEstVal  = col(['estimated value','estvalue','est value','value']);
+  var iNotes   = col(['notes','note']);
+  var iTags    = col(['tags','tag']);
+  var iImg     = col(['image','img','front image','frontimage','imageurl','photo']);
+  var iBackImg = col(['back image','backimage','backimg','back photo','backphoto','back']);
+
+  _templateCsvRows = [];
+  _templateSkipped = 0;
+
+  for (var r = 1; r < lines.length; r++) {
+    var cells = _csvSplitRow(lines[r]);
+    if (cells.every(function(c){ return !c.trim(); })) { _templateSkipped++; continue; }
+
+    var player    = (iPlayer  >= 0 ? cells[iPlayer]  : '').replace(/['"]/g,'').trim();
+    var year      = (iYear    >= 0 ? cells[iYear]    : '').replace(/['"]/g,'').trim();
+    var set       = (iSet     >= 0 ? cells[iSet]     : '').replace(/['"]/g,'').trim();
+    var variation = (iVar     >= 0 ? cells[iVar]     : '').replace(/['"]/g,'').trim();
+    var serial    = (iSerial  >= 0 ? cells[iSerial]  : '').replace(/['"]/g,'').replace(/[^0-9\/]/g,'').trim();
+    var type      = (iCat     >= 0 ? cells[iCat]     : '').replace(/['"]/g,'').trim();
+    var grade     = (iCond    >= 0 ? cells[iCond]    : '').replace(/['"]/g,'').trim();
+    var slabSerial= (iSlab    >= 0 ? cells[iSlab]    : '').replace(/['"]/g,'').trim();
+    var date      = (iDate    >= 0 ? cells[iDate]    : '').replace(/['"]/g,'').trim();
+    var qty       = Math.max(1, parseInt((iQty >= 0 ? cells[iQty] : '1').replace(/['"]/g,'')) || 1);
+    var estValue  = parseFloat((iEstVal  >= 0 ? cells[iEstVal]  : '').replace(/['"]/g,'').replace(/[^0-9.]/g,'')) || 0;
+    var notes     = (iNotes   >= 0 ? cells[iNotes]   : '').replace(/['"]/g,'').trim();
+    var tags      = (iTags    >= 0 ? cells[iTags]    : '').replace(/['"]/g,'').trim();
+    var img       = (iImg     >= 0 ? cells[iImg]     : '').replace(/['"]/g,'').trim();
+    var backImg   = (iBackImg >= 0 ? cells[iBackImg] : '').replace(/['"]/g,'').trim();
+
+    // Auto-detect flags from tags and variation
+    var tagsLower = tags.toLowerCase();
+    var varLower  = variation.toLowerCase();
+    var is_auto   = /\bauto\b|\bautograph\b/.test(tagsLower) || /\bauto\b|\bautograph\b/.test(varLower);
+    var is_rc     = /\brc\b|\brookies?\b/.test(tagsLower);
+    var is_lot    = qty > 1;
+
+    // Build card name from structured fields
+    var nameParts = [];
+    if (player) nameParts.push(player);
+    if (variation && !/^base$/i.test(variation)) nameParts.push(variation);
+    var metaParts = [];
+    if (year) metaParts.push(year);
+    if (set)  metaParts.push(set);
+    if (serial) metaParts.push(serial.startsWith('/') ? serial : '/' + serial);
+    if (metaParts.length) nameParts.push(metaParts.join(' '));
+    var name = nameParts.join(' / ') || 'Unnamed Card';
+
+    _templateCsvRows.push({
+      _id: 'TC' + r, _confirmed: false,
+      name: name, player: player, year: year, set: set, variation: variation,
+      serial: serial, type: type, grade: grade, slabSerial: slabSerial,
+      date: date, qty: qty, estValue: estValue, notes: notes, tags: tags,
+      img: img, backImg: backImg, is_auto: is_auto, is_rc: is_rc, is_lot: is_lot,
+      lotQty: qty,
+    });
+  }
+
+  if (!_templateCsvRows.length) { toast('No valid rows found'); return; }
+  render();
+  toast('Parsed ' + _templateCsvRows.length + ' card' + (_templateCsvRows.length === 1 ? '' : 's')
+    + (_templateSkipped ? ' (' + _templateSkipped + ' blank rows skipped)' : ''));
+}
+
+function _renderTemplateCsvReview() {
+  var pending   = _templateCsvRows.filter(function(r){ return !r._confirmed; }).length;
+  var confirmed = _templateCsvRows.length - pending;
+  var html = '<div style="font-size:12px;color:var(--dim);font-family:var(--mono);margin-bottom:8px">'
+    + _templateCsvRows.length + ' cards parsed'
+    + (_templateSkipped ? '<span style="color:var(--orange);margin-left:8px">⚠ ' + _templateSkipped + ' blank rows skipped</span>' : '')
+    + '</div>'
+    + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">'
+    + '<div style="font-size:13px;font-weight:700">Review ' + _templateCsvRows.length + ' Cards</div>'
+    + '<span id="tmpl-csv-confirmed-ct" style="font-size:11px;font-family:var(--mono);color:var(--dim)">' + confirmed + ' confirmed</span>'
+    + '<button class="btn pri sm" style="margin-left:auto" onclick="confirmAllTemplateCsv()">&#x2713; Import All</button>'
+    + '<button class="btn ghost sm" onclick="_templateCsvRows=[];render()">&#x2715; Cancel</button>'
+    + '</div>'
+    + '<div id="tmpl-csv-rows" style="display:grid;gap:8px">';
+  for (var i = 0; i < _templateCsvRows.length; i++) {
+    html += _renderTemplateCsvRow(i);
+  }
+  html += '</div>';
+  return html;
+}
+
+function _renderTemplateCsvRow(i) {
+  var r = _templateCsvRows[i];
+  var inp = function(field, label, w, type) {
+    var v = (r[field] === undefined ? '' : r[field]).toString();
+    return '<div style="min-width:' + (w || '80px') + ';flex:1">'
+      + '<label style="font-size:9px;color:var(--faint);font-family:var(--mono);text-transform:uppercase;display:block;margin-bottom:2px">' + label + '</label>'
+      + '<input ' + (type ? 'type="' + type + '"' : '') + ' style="width:100%;background:var(--surf3);border:1px solid var(--border);color:var(--text);padding:3px 6px;border-radius:3px;font-size:11px;font-family:var(--mono);outline:none" '
+      + 'value="' + esc(v) + '" oninput="_templateCsvRows[' + i + '].' + field + '=(this.type===\'number\'?parseFloat(this.value)||0:this.value)">'
+      + '</div>';
+  };
+  var imgPreview = r.img
+    ? '<img src="' + esc(r.img) + '" style="width:48px;height:68px;object-fit:cover;border-radius:4px;flex-shrink:0" onerror="this.style.display=\'none\'">'
+    : '<div style="width:48px;height:68px;background:var(--surf3);border-radius:4px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:20px">🃏</div>';
+  var confirmed = r._confirmed;
+  return '<div id="tmpl-row-' + i + '" style="background:var(--surf);border:1px solid ' + (confirmed ? 'var(--green)' : 'var(--border)') + ';border-radius:var(--r);padding:10px;opacity:' + (confirmed ? '.55' : '1') + '">'
+    + '<div style="display:flex;gap:10px;align-items:flex-start">'
+    + imgPreview
+    + '<div style="flex:1;min-width:0">'
+    + '<div style="font-size:11px;font-weight:600;margin-bottom:6px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + esc(r.name) + '">' + esc(r.name) + '</div>'
+    + '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px">'
+    + inp('player',    'Player',       '130px')
+    + inp('year',      'Year',         '55px')
+    + inp('set',       'Set',          '100px')
+    + inp('variation', 'Variation',    '100px')
+    + inp('serial',    'Serial #',     '60px')
+    + inp('type',      'Category',     '80px')
+    + inp('grade',     'Condition',    '90px')
+    + inp('slabSerial','Slab Serial #','100px')
+    + '</div>'
+    + '<div style="display:flex;gap:5px;flex-wrap:wrap">'
+    + inp('date',     'Date',        '100px')
+    + inp('qty',      'Qty',          '45px', 'number')
+    + inp('estValue', 'Est. Value $', '80px',  'number')
+    + inp('tags',     'Tags',        '110px')
+    + inp('notes',    'Notes',       '150px')
+    + '<div style="flex:2;min-width:160px">'
+    + '<label style="font-size:9px;color:var(--faint);font-family:var(--mono);text-transform:uppercase;display:block;margin-bottom:2px">Front Image URL</label>'
+    + '<input style="width:100%;background:var(--surf3);border:1px solid var(--border);color:var(--text);padding:3px 6px;border-radius:3px;font-size:10px;font-family:var(--mono);outline:none" '
+    + 'value="' + esc(r.img || '') + '" placeholder="https://…" oninput="_templateCsvRows[' + i + '].img=this.value"></div>'
+    + '<div style="flex:2;min-width:160px">'
+    + '<label style="font-size:9px;color:var(--faint);font-family:var(--mono);text-transform:uppercase;display:block;margin-bottom:2px">Back Image URL</label>'
+    + '<input style="width:100%;background:var(--surf3);border:1px solid var(--border);color:var(--text);padding:3px 6px;border-radius:3px;font-size:10px;font-family:var(--mono);outline:none" '
+    + 'value="' + esc(r.backImg || '') + '" placeholder="https://…" oninput="_templateCsvRows[' + i + '].backImg=this.value"></div>'
+    + '</div>'
+    + '<div style="display:flex;gap:8px;margin-top:6px">'
+    + '<label style="display:flex;align-items:center;gap:4px;font-size:10px;font-family:var(--mono);cursor:pointer"><input type="checkbox" ' + (r.is_auto ? 'checked' : '') + ' onchange="_templateCsvRows[' + i + '].is_auto=this.checked"> Auto</label>'
+    + '<label style="display:flex;align-items:center;gap:4px;font-size:10px;font-family:var(--mono);cursor:pointer"><input type="checkbox" ' + (r.is_rc ? 'checked' : '') + ' onchange="_templateCsvRows[' + i + '].is_rc=this.checked"> RC</label>'
+    + '</div>'
+    + '</div>'
+    + '<div style="display:flex;flex-direction:column;gap:5px;flex-shrink:0;padding-top:24px">'
+    + (confirmed
+        ? '<span style="font-size:10px;color:var(--green);font-family:var(--mono)">&#x2714; added</span>'
+        : '<button class="btn xs" onclick="confirmTemplateCsvRow(' + i + ')">+ Add</button>')
+    + '<button class="btn xs red" onclick="_templateCsvRows.splice(' + i + ',1);document.getElementById(\'tmpl-csv-review\').innerHTML=_renderTemplateCsvReview()">&#x2715;</button>'
+    + '</div>'
+    + '</div></div>';
+}
+
+function confirmTemplateCsvRow(i) {
+  var r = _templateCsvRows[i];
+  if (!r || r._confirmed) return;
+  var newId = 'P' + Date.now().toString().slice(-6) + i;
+  purchases.push({
+    id: newId, name: r.name, date: r.date || '', cost: 0, costRaw: 0,
+    qty: r.qty || 1, lotQty: r.lotQty || 1,
+    player: r.player || '', type: r.type || '', year: r.year || '',
+    set: r.set || '', variation: r.variation || '', serial: r.serial || '',
+    grade: r.grade || '', brand: '', comp: '', notes: r.notes || '',
+    is_auto: !!r.is_auto, is_rc: !!r.is_rc, is_lot: !!r.is_lot,
+    img: r.img || '', itemId: '', orderNum: '', seller: '',
+    slabSerial: r.slabSerial || '', estValue: r.estValue || 0, tags: r.tags || '',
+    candidates: [],
+  });
+  // Store back image via purchaseEdits so it appears in the gallery
+  if (r.backImg) {
+    if (!purchaseEdits[newId]) purchaseEdits[newId] = {};
+    purchaseEdits[newId].imgs = [r.backImg];
+    try { localStorage.setItem('cb_purchaseEdits', JSON.stringify(purchaseEdits)); } catch(e) {}
+  }
+  persistPurchases();
+  _templateCsvRows[i]._confirmed = true;
+  var rowEl = document.getElementById('tmpl-row-' + i);
+  if (rowEl) rowEl.outerHTML = _renderTemplateCsvRow(i);
+  var ct = document.getElementById('tmpl-csv-confirmed-ct');
+  if (ct) ct.textContent = _templateCsvRows.filter(function(r){ return r._confirmed; }).length + ' confirmed';
+  toast('Added: ' + r.name.slice(0, 40) + (r.name.length > 40 ? '…' : ''));
+}
+
+function confirmAllTemplateCsv() {
+  var count = 0;
+  for (var i = 0; i < _templateCsvRows.length; i++) {
+    if (!_templateCsvRows[i]._confirmed) { confirmTemplateCsvRow(i); count++; }
+  }
+  toast('Added ' + count + ' card' + (count === 1 ? '' : 's') + ' ✓');
+  _templateCsvRows = [];
+  render();
 }
 
 // ─────────────────────────────────────────────
