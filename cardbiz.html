@@ -3768,13 +3768,13 @@ function renderImport() {
         <div style="background:var(--surf2);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:14px">
           <div style="font-size:12px;font-weight:700;margin-bottom:4px">Template Columns</div>
           <div style="font-size:11px;color:var(--dim);font-family:var(--mono);line-height:1.7;margin-bottom:10px">
-            Date Purchased · Quantity · Player · Year · Set · Variation · Serial Number · Category · Condition · Slab Serial # · Estimated Value · Notes · Tags · Image · Back Image
+            Date Purchased · Purchase Price · Quantity · Player · Year · Set · Variation · Serial Number · Category · Condition · Slab Serial # · Estimated Value · Notes · Tags · Image · Back Image
           </div>
           <button class="btn sm" style="background:rgba(0,212,255,.08);border-color:rgba(0,212,255,.25);color:var(--gold)" onclick="downloadImportTemplate()">⬇ Download Blank Template</button>
         </div>
         ${dropZone('template')}
         <textarea id="imp-paste-template" rows="8" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:10px;border-radius:var(--r2);font-size:11px;font-family:var(--mono);outline:none;resize:vertical;box-sizing:border-box"
-          placeholder="Paste your filled template CSV here…&#10;&#10;Expected columns (in any order):&#10;Date Purchased, Quantity, Player, Year, Set, Variation, Serial Number,&#10;Category, Condition, Slab Serial #, Estimated Value, Notes, Tags, Image, Back Image"></textarea>
+          placeholder="Paste your filled template CSV here…&#10;&#10;Expected columns (in any order):&#10;Date Purchased, Purchase Price, Quantity, Player, Year, Set, Variation,&#10;Serial Number, Category, Condition, Slab Serial #, Estimated Value, Notes, Tags, Image, Back Image"></textarea>
         <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
           <button class="btn pri sm" onclick="parseTemplateCSV()">⚡ Parse</button>
           <button class="btn ghost sm" onclick="document.getElementById('imp-paste-template').value=''">Clear</button>
@@ -4037,14 +4037,14 @@ function _dispatchImportText(text, type) {
 // TEMPLATE IMPORT
 // ─────────────────────────────────────────────
 const TEMPLATE_HEADERS = [
-  'Date Purchased','Quantity','Player','Year','Set','Variation',
+  'Date Purchased','Purchase Price','Quantity','Player','Year','Set','Variation',
   'Serial Number','Category','Condition','Slab Serial #',
   'Estimated Value','Notes','Tags','Image','Back Image'
 ];
 
 function downloadImportTemplate() {
   var sample = [
-    'Apr 22 2026','1','Patrick Mahomes','2020','Panini Prizm','Gold Prizm',
+    'Apr 22 2026','125.00','1','Patrick Mahomes','2020','Panini Prizm','Gold Prizm',
     '10','NFL','PSA 10','12345678','350.00','Great card!','auto',
     'https://i.ebayimg.com/example-front.jpg','https://i.ebayimg.com/example-back.jpg'
   ];
@@ -4073,6 +4073,7 @@ function parseTemplateCSV(text) {
   var col = _csvCols(header);
 
   var iDate    = col(['date purchased','datepurchased','date']);
+  var iCost    = col(['purchase price','purchaseprice','cost','price','paid','amount']);
   var iQty     = col(['quantity','qty']);
   var iPlayer  = col(['player']);
   var iYear    = col(['year']);
@@ -4104,6 +4105,7 @@ function parseTemplateCSV(text) {
     var grade     = (iCond    >= 0 ? cells[iCond]    : '').replace(/['"]/g,'').trim();
     var slabSerial= (iSlab    >= 0 ? cells[iSlab]    : '').replace(/['"]/g,'').trim();
     var date      = (iDate    >= 0 ? cells[iDate]    : '').replace(/['"]/g,'').trim();
+    var cost      = parseFloat((iCost >= 0 ? cells[iCost] : '').replace(/['"]/g,'').replace(/[^0-9.]/g,'')) || 0;
     var qty       = Math.max(1, parseInt((iQty >= 0 ? cells[iQty] : '1').replace(/['"]/g,'')) || 1);
     var estValue  = parseFloat((iEstVal  >= 0 ? cells[iEstVal]  : '').replace(/['"]/g,'').replace(/[^0-9.]/g,'')) || 0;
     var notes     = (iNotes   >= 0 ? cells[iNotes]   : '').replace(/['"]/g,'').trim();
@@ -4133,7 +4135,7 @@ function parseTemplateCSV(text) {
       _id: 'TC' + r, _confirmed: false,
       name: name, player: player, year: year, set: set, variation: variation,
       serial: serial, type: type, grade: grade, slabSerial: slabSerial,
-      date: date, qty: qty, estValue: estValue, notes: notes, tags: tags,
+      date: date, cost: cost, qty: qty, estValue: estValue, notes: notes, tags: tags,
       img: img, backImg: backImg, is_auto: is_auto, is_rc: is_rc, is_lot: is_lot,
       lotQty: qty,
     });
@@ -4196,9 +4198,10 @@ function _renderTemplateCsvRow(i) {
     + inp('slabSerial','Slab Serial #','100px')
     + '</div>'
     + '<div style="display:flex;gap:5px;flex-wrap:wrap">'
-    + inp('date',     'Date',        '100px')
-    + inp('qty',      'Qty',          '45px', 'number')
-    + inp('estValue', 'Est. Value $', '80px',  'number')
+    + inp('date',     'Date',           '100px')
+    + inp('cost',     'Purchase Price $','80px', 'number')
+    + inp('qty',      'Qty',             '45px', 'number')
+    + inp('estValue', 'Est. Value $',    '80px',  'number')
     + inp('tags',     'Tags',        '110px')
     + inp('notes',    'Notes',       '150px')
     + '<div style="flex:2;min-width:160px">'
@@ -4229,7 +4232,7 @@ function confirmTemplateCsvRow(i) {
   if (!r || r._confirmed) return;
   var newId = 'P' + Date.now().toString().slice(-6) + i;
   purchases.push({
-    id: newId, name: r.name, date: r.date || '', cost: 0, costRaw: 0,
+    id: newId, name: r.name, date: r.date || '', cost: parseFloat(r.cost) || 0, costRaw: parseFloat(r.cost) || 0,
     qty: r.qty || 1, lotQty: r.lotQty || 1,
     player: r.player || '', type: r.type || '', year: r.year || '',
     set: r.set || '', variation: r.variation || '', serial: r.serial || '',
