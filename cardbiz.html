@@ -61,9 +61,12 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);min-height:100
 /* ── FILTER BAR ── */
 .fb{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center}
 .sw{position:relative;flex:1;min-width:200px}
-.sw input{width:100%;background:var(--surf);border:1px solid var(--border);color:var(--text);padding:8px 10px 8px 30px;border-radius:var(--r2);font-size:12.5px;font-family:var(--ui);outline:none;transition:border .12s}
+.sw input{width:100%;background:var(--surf);border:1px solid var(--border);color:var(--text);padding:8px 26px 8px 30px;border-radius:var(--r2);font-size:12.5px;font-family:var(--ui);outline:none;transition:border .12s}
 .sw input:focus{border-color:var(--gold)}
 .sw .si{position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--faint);font-size:13px;pointer-events:none}
+.sw .s-clr{display:none;position:absolute;right:7px;top:50%;transform:translateY(-50%);color:var(--faint);cursor:pointer;font-size:15px;line-height:1;border:none;background:none;padding:0 3px;border-radius:3px}
+.sw .s-clr:hover{color:var(--text)}
+.sw input:not(:placeholder-shown)~.s-clr{display:block}
 select,.btn{background:var(--surf);border:1px solid var(--border);color:var(--text);padding:7px 12px;border-radius:var(--r2);font-size:12.5px;font-family:var(--ui);cursor:pointer;outline:none;transition:all .12s}
 .btn{font-weight:600}
 .btn:hover{background:var(--surf2);border-color:var(--border2)}
@@ -835,7 +838,7 @@ function buildTypeSelect(pageKey) {
 
 // Renders the search input bar bound to filt[pageKey].q
 function buildSearchInput(pageKey, placeholder='Search…') {
-  return `<div class="sw"><span class="si">🔍</span><input id="search-${pageKey}" value="${esc(filt[pageKey].q)}" placeholder="${esc(placeholder)}" oninput="filt.${pageKey}.q=this.value;pgNum.${pageKey}=0;render()"></div>`;
+  return `<div class="sw"><span class="si">🔍</span><input id="search-${pageKey}" value="${esc(filt[pageKey].q)}" placeholder="${esc(placeholder)}" oninput="filt.${pageKey}.q=this.value;pgNum.${pageKey}=0;render()"><button class="s-clr" onclick="const i=this.previousElementSibling;i.value='';i.dispatchEvent(new Event('input'))" tabindex="-1">×</button></div>`;
 }
 
 // Renders a sortable <th> header cell
@@ -2982,7 +2985,7 @@ function openRelinkPanel(sid){
         <div class="ps-title">Search All Purchases</div>
         <div class="fb" style="margin-bottom:8px">
           <div class="sw" style="flex:1"><span class="si">🔍</span>
-            <input id="relink-q" placeholder="Player name, set, year…" oninput="renderRelinkResults('${sid}',this.value)">
+            <input id="relink-q" placeholder="Player name, set, year…" oninput="renderRelinkResults('${sid}',this.value)"><button class="s-clr" onclick="const i=this.previousElementSibling;i.value='';i.dispatchEvent(new Event('input'))" tabindex="-1">×</button>
           </div>
         </div>
         <div id="relink-results"></div>
@@ -3689,7 +3692,7 @@ function openRelinkListing(itemId) {
     + topSection
     + '<div class="ps"><div class="ps-title">Search All Inventory</div>'
     + '<div class="fb" style="margin-bottom:8px"><div class="sw" style="flex:1"><span class="si">&#x1F50D;</span>'
-    + '<input id="relink-listing-q" placeholder="Search name, player..." oninput="_relinkQ=this.value;_updateRelinkListingResults()">'
+    + '<input id="relink-listing-q" placeholder="Search name, player..." oninput="_relinkQ=this.value;_updateRelinkListingResults()"><button class="s-clr" onclick="const i=this.previousElementSibling;i.value=\'\';i.dispatchEvent(new Event(\'input\'))" tabindex="-1">\xd7</button>'
     + '</div></div>'
     + '<div id="relink-listing-results"></div>'
     + '</div>'
@@ -3877,7 +3880,7 @@ function renderListings() {
     + '<div class="sc"><div class="sc-lbl">MATCHED</div><div class="sc-val">' + matchedCount + '/' + activeListings.length + '</div><div class="sc-sub">linked to inventory</div></div>'
     + '</div>'
     + '<div class="fb" style="margin-bottom:14px">'
-    + '<div class="sw"><span class="si">&#x1F50D;</span><input id="search-listings" value="' + esc(_listingsQ) + '" placeholder="Search listings..." oninput="_listingsQ=this.value;render()"></div>'
+    + '<div class="sw"><span class="si">&#x1F50D;</span><input id="search-listings" value="' + esc(_listingsQ) + '" placeholder="Search listings..." oninput="_listingsQ=this.value;render()"><button class="s-clr" onclick="const i=this.previousElementSibling;i.value=\'\';i.dispatchEvent(new Event(\'input\'))" tabindex="-1">\xd7</button></div>'
     + viewToggle
     + '<button class="btn red" onclick="if(confirm(\'Clear all active listings?\'))clearListings()">&#x2715; Clear</button>'
     + '</div>'
@@ -4305,7 +4308,7 @@ function parseTemplateCSV(text) {
     if (set)  metaParts.push(set);
     if (serial) metaParts.push(serial.startsWith('/') ? serial : '/' + serial);
     if (metaParts.length) nameParts.push(metaParts.join(' '));
-    var name = nameParts.join(' / ') || 'Unnamed Card';
+    var name = nameParts.join(' ') || 'Unnamed Card';
 
     _templateCsvRows.push({
       _id: 'TC' + r, _confirmed: false,
@@ -4566,7 +4569,7 @@ function parseSalesTemplateCSV(text) {
     if (set)    meta.push(set);
     if (serial) meta.push(serial.startsWith('/') ? serial : '/' + serial);
     if (meta.length) nameParts.push(meta.join(' '));
-    var title = nameParts.join(' / ') || 'Unnamed Card';
+    var title = nameParts.join(' ') || 'Unnamed Card';
 
     var is_auto = /\bauto\b|\bautograph\b/i.test(tags) || /\bauto\b|\bautograph\b/i.test(variation);
 
