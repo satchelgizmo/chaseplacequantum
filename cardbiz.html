@@ -888,22 +888,72 @@ function buildEditActions(saveFn, cancelFn) {
 // ── Sale-purchase fuzzy scoring (shared by relinkPanel + activeListings) ──
 function scoreSalePurchase(s, p) {
   let score = 0;
-  const sl = (s.player||'').toLowerCase();
-  const pl = (p.player||'').toLowerCase();
-  if (sl && pl && sl === pl) score += 30;
-  else if (sl && pl && (sl.includes(pl) || pl.includes(sl))) score += 15;
-  if (s.year && p.year && s.year === p.year) score += 15;
-  if (s.set && p.set && s.set.toLowerCase() === p.set.toLowerCase()) score += 15;
-  if (s.serial && p.serial && s.serial === p.serial) score += 10;
+
+  const sPlayer = (s.player||'').toLowerCase().trim();
+  const pPlayer = (p.player||'').toLowerCase().trim();
+  const sSerial = (s.serial||'').replace(/[^0-9]/g,'');
+  const pSerial = (p.serial||'').replace(/[^0-9]/g,'');
+  const sVar    = (s.variation||'').toLowerCase().trim();
+  const pVar    = (p.variation||'').toLowerCase().trim();
+  const sYear   = (s.year||'').trim();
+  const pYear   = (p.year||'').trim();
+  const sSet    = (s.set||'').toLowerCase().trim();
+  const pSet    = (p.set||'').toLowerCase().trim();
+
+  // ── Serial number ── highest-value signal: unique card identifier
+  if (sSerial && pSerial) {
+    if (sSerial === pSerial) score += 55;
+    else return -999; // different serial = definitive mismatch, never link
+  }
+
+  // ── Player ──
+  if (sPlayer && pPlayer) {
+    if (sPlayer === pPlayer) score += 30;
+    else if (sPlayer.includes(pPlayer) || pPlayer.includes(sPlayer)) score += 12;
+    else return -999; // player present on both but doesn't match → reject
+  } else if (sPlayer && pPlayer) {
+    // one side missing — no bonus, no penalty
+  }
+
+  // ── Year ──
+  if (sYear && pYear) {
+    if (sYear === pYear) score += 15;
+    else score -= 25; // year mismatch is a strong signal against
+  }
+
+  // ── Set ──
+  if (sSet && pSet) {
+    if (sSet === pSet) score += 20;
+    else if (sSet.includes(pSet) || pSet.includes(sSet)) score += 8;
+  }
+
+  // ── Variation / Parallel ── critical differentiator for same-player cards
+  if (sVar && pVar) {
+    if (sVar === pVar) score += 22;
+    else if (sVar.includes(pVar) || pVar.includes(sVar)) score += 10;
+    else score -= 10; // different variation is a meaningful mismatch signal
+  }
+
+  // ── Category / Type ──
   if (s.type && p.type && s.type === p.type) score += 8;
-  if (s.is_auto && p.is_auto) score += 5;
-  if (s.grade && p.grade && s.grade === p.grade) score += 5;
-  // Title word overlap
+
+  // ── Grade / Condition ──
+  if (s.grade && p.grade) {
+    if (s.grade === p.grade) score += 8;
+    // no penalty — grade description wording varies (PSA 10 vs PSA10 etc.)
+  }
+
+  // ── Auto flag ──
+  if (s.is_auto && p.is_auto) score += 6;
+  else if (s.is_auto && !p.is_auto) score -= 8;
+
+  // ── Title word overlap (fallback when structured fields are sparse) ──
   const sw = new Set((s.title||'').toLowerCase().split(/\W+/).filter(w=>w.length>3));
   const pw = new Set((p.name||'').toLowerCase().split(/\W+/).filter(w=>w.length>3));
   let overlap = 0;
   sw.forEach(w => { if (pw.has(w)) overlap++; });
-  score += Math.min(overlap * 3, 15);
+  score += Math.min(overlap * 2, 10); // reduced weight — structured fields dominate
+
   return score;
 }
 
@@ -912,7 +962,7 @@ function getTopCandidates(sale, n=10) {
   return purchases
     .filter(p => !sp.has(p.id) || p.id === sale.linkedPid)
     .map(p => ({ pid: p.id, score: scoreSalePurchase(sale, getP(p.id)) }))
-    .filter(c => c.score > 25)
+    .filter(c => c.score > 20)
     .sort((a,b) => b.score - a.score)
     .slice(0, n);
 }
@@ -1547,16 +1597,37 @@ function toggleBuysCsvArea() {
   }
 }
 
-function _csvSplitRow(line) {
+function _csvSplitRow(line, delim) {
+  delim = delim || ',';
   var cells = [], cur = '', inQ = false;
   for (var i = 0; i < line.length; i++) {
     var c = line[i];
     if (c === '"') { if (inQ && line[i+1]==='"') { cur+='"'; i++; } else inQ=!inQ; }
-    else if (c === ',' && !inQ) { cells.push(cur.trim()); cur = ''; }
+    else if (c === delim && !inQ) { cells.push(cur.trim()); cur = ''; }
     else { cur += c; }
   }
   cells.push(cur.trim());
   return cells;
+}
+
+function _detectDelim(firstLine) {
+  var tabs   = (firstLine.match(/\t/g)  || []).length;
+  var commas = (firstLine.match(/,/g)   || []).length;
+  return tabs > commas ? '\t' : ',';
+}
+
+// Exact-first column matcher — tries exact normalized match, then falls back to
+// the original substring scan (used by eBay flex parsers, not templates).
+function _exactCols(header) {
+  return function(names) {
+    for (var ni = 0; ni < names.length; ni++) {
+      var want = names[ni].replace(/[^a-z0-9]/g, '');
+      for (var hi = 0; hi < header.length; hi++) {
+        if (header[hi].replace(/[^a-z0-9]/g, '') === want) return hi;
+      }
+    }
+    return -1;
+  };
 }
 
 function _csvCols(header) {
@@ -1965,7 +2036,10 @@ function renderSells(){
       <div class="sc"><div class="sc-lbl">Linked</div><div class="sc-val">${linked.length}</div><div class="sc-sub">${linkRate}% link rate</div></div>
       <div class="sc"><div class="sc-lbl">Unlinked</div><div class="sc-val r">${allSales.length-linked.length}</div><div class="sc-sub">need matching</div></div>
     </div>
-    ${allSales.length-linked.length>0?`<div style="margin-bottom:16px"><button class="btn pri" onclick="autoLinkAll()" title="Automatically match each unlinked sale to its best available purchase using scoring — review &amp; adjust afterward">⚡ Auto-link ${allSales.length-linked.length} unlinked sale${allSales.length-linked.length===1?'':'s'}</button></div>`:''}
+    <div style="margin-bottom:16px;display:flex;gap:8px;flex-wrap:wrap">
+      ${allSales.length-linked.length>0?`<button class="btn pri" onclick="autoLinkAll()" title="Automatically match each unlinked sale to its best available purchase using scoring — review &amp; adjust afterward">⚡ Auto-link ${allSales.length-linked.length} unlinked sale${allSales.length-linked.length===1?'':'s'}</button>`:''}
+      ${linked.length>0?`<button class="btn red" onclick="unlinkAllSales()" title="Remove all purchase links from all sales">✕ Unlink All (${linked.length})</button>`:''}
+    </div>
     ${tabBar}
     <div class="fb">
       ${buildSearchInput('sells','Search sales…')}
@@ -2728,6 +2802,14 @@ function saveSaleFinFields(sid){
 // LINKING / UNLINKING
 // ─────────────────────────────────────────────
 function linkSale(sid,pid){ editS(sid,{linkedPid:pid}); toast('Linked ✓'); render(); }
+function unlinkAllSales(){
+  const linked = sales.filter(s => getS(s.id).linkedPid);
+  if (!linked.length) { toast('No linked sales to unlink'); return; }
+  if (!confirm('Unlink ALL ' + linked.length + ' linked sales from their purchases?\n\nThis cannot be undone in bulk — you will need to re-run Auto-link or link them individually.')) return;
+  for (const s of linked) editS(s.id, {linkedPid: null});
+  toast('Unlinked ' + linked.length + ' sales ✓');
+  render();
+}
 function unlinkSale(sid){
   const prev=getS(sid).linkedPid;
   editS(sid,{linkedPid:null});
@@ -2758,13 +2840,14 @@ function autoLinkAll() {
   // Purchases already claimed by existing links
   const usedPids = new Set(soldPids());
 
-  // Score every unlinked-sale × available-purchase pair
+  // Score every unlinked-sale × available-purchase pair.
+  // Only consider a pair if score ≥ 50 (player + at least one strong differentiator).
   const pairs = [];
   for (const s of unlinkedSales) {
     for (const p of purchases) {
       if (usedPids.has(p.id)) continue;
       const score = scoreSalePurchase(s, getP(p.id));
-      if (score > 25) pairs.push({ sid: s.id, pid: p.id, score });
+      if (score >= 50) pairs.push({ sid: s.id, pid: p.id, score });
     }
   }
 
