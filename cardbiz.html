@@ -3149,7 +3149,7 @@ function showLookupResult(pid,r){
 // ─────────────────────────────────────────────
 
 // Build the standardized card name from parsed fields:
-// "PLAYER / CARD PARALLEL / VARIATION SERIAL YEAR SET NAME"
+// "PLAYER CARD PARALLEL VARIATION SERIAL YEAR SET NAME"
 function buildStandardName(p) {
   if (!p.player) return p.name || '';
   // Segment 3: flags + serial + year + set
@@ -3161,11 +3161,11 @@ function buildStandardName(p) {
   if (p.set) rest.push(p.set);
   if (p.comp) rest.push(p.comp);
   if (p.series) rest.push(p.series);
-  // Build segments: Player / [Card Parallel] / [Variation Serial Year Set]
+  // Build segments: Player [Card Parallel] [Variation Serial Year Set]
   const segments = [p.player];
   if (p.variation) segments.push(p.variation);
   if (rest.length) segments.push(rest.join(' '));
-  return segments.join(' / ');
+  return segments.join(' ');
 }
 
 // ─────────────────────────────────────────────
