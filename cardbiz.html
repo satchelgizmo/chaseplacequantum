@@ -1445,7 +1445,9 @@ let _salesCsvRows = [];
 let _salesSkipped = 0;
 let _templateCsvRows = [];
 let _templateSkipped = 0;
-let _importTab = 'template'; // 'template' | 'purchases' | 'sales'
+let _salesTemplateRows = [];
+let _salesTemplateSkipped = 0;
+let _importTab = 'template'; // 'template' | 'sales-template' | 'purchases' | 'sales'
 
 function renderBuys(){
   const sp=soldPids();
@@ -3766,7 +3768,7 @@ function renderImport() {
     } else {
       tabContent = `
         <div style="background:var(--surf2);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:14px">
-          <div style="font-size:12px;font-weight:700;margin-bottom:4px">Template Columns</div>
+          <div style="font-size:12px;font-weight:700;margin-bottom:4px">Purchase Template Columns</div>
           <div style="font-size:11px;color:var(--dim);font-family:var(--mono);line-height:1.7;margin-bottom:10px">
             Date Purchased · Purchase Price · Quantity · Player · Year · Set · Variation · Serial Number · Category · Condition · Slab Serial # · Estimated Value · Notes · Tags · Image · Back Image
           </div>
@@ -3778,6 +3780,29 @@ function renderImport() {
         <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
           <button class="btn pri sm" onclick="parseTemplateCSV()">⚡ Parse</button>
           <button class="btn ghost sm" onclick="document.getElementById('imp-paste-template').value=''">Clear</button>
+        </div>`;
+    }
+  } else if (tab === 'sales-template') {
+    if (_salesTemplateRows.length) {
+      tabContent = `<div id="stmpl-csv-review">${_renderSalesTemplateCsvReview()}</div>`;
+    } else {
+      tabContent = `
+        <div style="background:var(--surf2);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:14px">
+          <div style="font-size:12px;font-weight:700;margin-bottom:4px">Sales Template Columns</div>
+          <div style="font-size:11px;color:var(--dim);font-family:var(--mono);line-height:1.7;margin-bottom:10px">
+            Date Sold · Player · Year · Set · Variation · Number · Category · Condition · Slab Serial # · Tags · Platform · Buyer · Sale Price · Shipping Charged · Platform Fee · Shipping Cost · Other Costs · Net Proceeds · Purchase Price · Profit / Loss · ROI % · Hold Days · Date Purchased · Order # · Notes · Image
+          </div>
+          <div style="font-size:10px;color:var(--faint);font-family:var(--mono);margin-bottom:10px">
+            Calculated columns (Profit / Loss, ROI %, Hold Days, Net Proceeds) are optional — they'll be computed when the sale is matched to an inventory purchase.
+          </div>
+          <button class="btn sm" style="background:rgba(0,229,170,.08);border-color:rgba(0,229,170,.25);color:var(--green)" onclick="downloadSalesTemplate()">⬇ Download Blank Template</button>
+        </div>
+        ${dropZone('sales-template')}
+        <textarea id="imp-paste-sales-template" rows="8" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:10px;border-radius:var(--r2);font-size:11px;font-family:var(--mono);outline:none;resize:vertical;box-sizing:border-box"
+          placeholder="Paste your filled sales template CSV here…&#10;&#10;Required: Date Sold, Sale Price&#10;Optional: all other columns (any subset, any order)"></textarea>
+        <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
+          <button class="btn pri sm" onclick="parseSalesTemplateCSV()">⚡ Parse</button>
+          <button class="btn ghost sm" onclick="document.getElementById('imp-paste-sales-template').value=''">Clear</button>
         </div>`;
     }
   } else if (tab === 'purchases') {
@@ -3817,9 +3842,10 @@ function renderImport() {
 
     <!-- TABS -->
     <div style="display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap">
-      ${tabBtn('template','📋 Template Import')}
-      ${tabBtn('purchases','🛒 eBay / Custom CSV')}
-      ${tabBtn('sales','💰 Import Sales')}
+      ${tabBtn('template','📋 Purchases')}
+      ${tabBtn('sales-template','💰 Sales')}
+      ${tabBtn('purchases','🛒 eBay Purchases CSV')}
+      ${tabBtn('sales','💸 eBay Sales CSV')}
     </div>
 
     <!-- TAB CONTENT -->
@@ -4026,6 +4052,8 @@ function _handleImportFile(file, type) {
 function _dispatchImportText(text, type) {
   if (type === 'template') {
     parseTemplateCSV(text);
+  } else if (type === 'sales-template') {
+    parseSalesTemplateCSV(text);
   } else if (type === 'purchases') {
     parseBuysCSV(text);
   } else {
@@ -4264,6 +4292,295 @@ function confirmAllTemplateCsv() {
   }
   toast('Added ' + count + ' card' + (count === 1 ? '' : 's') + ' ✓');
   _templateCsvRows = [];
+  render();
+}
+
+// ─────────────────────────────────────────────
+// SALES TEMPLATE IMPORT
+// ─────────────────────────────────────────────
+const SALES_TEMPLATE_HEADERS = [
+  'Date Sold','Player','Year','Set','Variation','Number','Category','Condition',
+  'Slab Serial #','Tags','Platform','Buyer','Sale Price','Shipping Charged',
+  'Platform Fee','Shipping Cost','Other Costs','Net Proceeds',
+  'Purchase Price','Profit / Loss','ROI %','Hold Days',
+  'Date Purchased','Order #','Notes','Image'
+];
+
+function downloadSalesTemplate() {
+  var sample = [
+    'Apr 22 2026','Patrick Mahomes','2020','Panini Prizm','Gold Prizm','10',
+    'NFL','PSA 10','12345678','auto','eBay','buyer123',
+    '450.00','0.00','63.00','8.50','0.00','378.50',
+    '125.00','253.50','202.8','730',
+    'Apr 27 2025','09-12345-67890','Great transaction','https://i.ebayimg.com/example.jpg'
+  ];
+  var csv = SALES_TEMPLATE_HEADERS.map(function(h){ return '"' + h + '"'; }).join(',')
+    + '\n'
+    + sample.map(function(v){ return '"' + v + '"'; }).join(',');
+  var blob = new Blob([csv], {type:'text/csv'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = 'cardbiz-sales-template.csv'; a.click();
+  URL.revokeObjectURL(url);
+  toast('Sales template downloaded ✓');
+}
+
+function parseSalesTemplateCSV(text) {
+  if (!text) {
+    var ta = document.getElementById('imp-paste-sales-template');
+    if (!ta || !ta.value.trim()) { toast('Paste CSV data first'); return; }
+    text = ta.value.trim();
+  }
+  text = text.trim();
+  var lines = text.split(/\r?\n/).filter(function(l){ return l.trim(); });
+  if (lines.length < 2) { toast('Need a header row and at least one data row'); return; }
+
+  var header = _csvSplitRow(lines[0]).map(function(h){ return h.toLowerCase().replace(/['"]/g,'').trim(); });
+  var col = _csvCols(header);
+
+  var iDateSold    = col(['date sold','datesold','sale date','saledate','date']);
+  var iPlayer      = col(['player']);
+  var iYear        = col(['year']);
+  var iSet         = col(['set']);
+  var iVar         = col(['variation','parallel']);
+  var iSerial      = col(['number','serial number','serialnumber','serial#','serial','card#','card number']);
+  var iCat         = col(['category','type','sport']);
+  var iCond        = col(['condition','grade']);
+  var iSlab        = col(['slab serial #','slabserial#','slabserial','slab serial','cert','certnumber','cert#']);
+  var iTags        = col(['tags','tag']);
+  var iPlatform    = col(['platform','marketplace','channel']);
+  var iBuyer       = col(['buyer','buyerusername','buyername']);
+  var iSalePrice   = col(['sale price','saleprice','price','amount']);
+  var iShipCharged = col(['shipping charged','shipcharged','buyer shipping','buyershipping','shipping to buyer']);
+  var iPlatFee     = col(['platform fee','platformfee','ebay fee','ebayfee','fees','fee']);
+  var iShipCost    = col(['shipping cost','shippingcost','ship cost','shipcost','postage']);
+  var iOtherCost   = col(['other costs','othercosts','other cost','othercost']);
+  var iNetProceeds = col(['net proceeds','netproceeds','net revenue','netrevenue','net']);
+  var iPurchPrice  = col(['purchase price','purchaseprice','cost paid','costpaid','bought for']);
+  var iProfitLoss  = col(['profit / loss','profit/loss','profitloss','profit loss','p&l','p/l']);
+  var iROI         = col(['roi %','roi%','roi']);
+  var iHoldDays    = col(['hold days','holddays','days held','daysheld']);
+  var iDatePurch   = col(['date purchased','datepurchased','purchase date','purchasedate','bought date']);
+  var iOrderNum    = col(['order #','order#','ordernumber','orderid','order number','order id']);
+  var iNotes       = col(['notes','note','comments']);
+  var iImg         = col(['image','img','imageurl','photo','picture']);
+
+  _salesTemplateRows = [];
+  _salesTemplateSkipped = 0;
+
+  for (var r = 1; r < lines.length; r++) {
+    var cells = _csvSplitRow(lines[r]);
+    if (cells.every(function(c){ return !c.trim(); })) { _salesTemplateSkipped++; continue; }
+
+    function g(idx) { return idx >= 0 ? (cells[idx] || '').replace(/['"]/g,'').trim() : ''; }
+    function gn(idx) { return parseFloat(g(idx).replace(/[^0-9.]/g,'')) || 0; }
+
+    var dateSold   = g(iDateSold);
+    var player     = g(iPlayer);
+    var year       = g(iYear);
+    var set        = g(iSet);
+    var variation  = g(iVar);
+    var serial     = g(iSerial).replace(/[^0-9\/]/g,'');
+    var type       = g(iCat);
+    var grade      = g(iCond);
+    var slabSerial = g(iSlab);
+    var tags       = g(iTags);
+    var platform   = g(iPlatform);
+    var buyer      = g(iBuyer);
+    var salePrice  = gn(iSalePrice);
+    var shipCharged= gn(iShipCharged);
+    var platFee    = gn(iPlatFee);
+    var shipCost   = gn(iShipCost);
+    var otherCost  = gn(iOtherCost);
+    var purchPrice = gn(iPurchPrice);
+    var orderNum   = g(iOrderNum);
+    var notes      = g(iNotes);
+    var img        = g(iImg);
+    var datePurch  = g(iDatePurch);
+
+    // Net proceeds: use spreadsheet value if present, otherwise calculate
+    var netProceeds = gn(iNetProceeds);
+    if (!netProceeds && salePrice) {
+      netProceeds = (salePrice + shipCharged) - platFee - shipCost - otherCost;
+      netProceeds = Math.max(0, Math.round(netProceeds * 100) / 100);
+    }
+
+    // Build a display title from card fields
+    var nameParts = [];
+    if (player) nameParts.push(player);
+    if (variation && !/^base$/i.test(variation)) nameParts.push(variation);
+    var meta = [];
+    if (year)   meta.push(year);
+    if (set)    meta.push(set);
+    if (serial) meta.push(serial.startsWith('/') ? serial : '/' + serial);
+    if (meta.length) nameParts.push(meta.join(' '));
+    var title = nameParts.join(' / ') || 'Unnamed Card';
+
+    var is_auto = /\bauto\b|\bautograph\b/i.test(tags) || /\bauto\b|\bautograph\b/i.test(variation);
+
+    _salesTemplateRows.push({
+      _id: 'ST' + r, _confirmed: false,
+      title: title, player: player, year: year, set: set, variation: variation,
+      serial: serial, type: type, grade: grade, slabSerial: slabSerial,
+      tags: tags, platform: platform, buyer: buyer,
+      salePrice: salePrice, shipCharged: shipCharged, platFee: platFee,
+      shipCost: shipCost, otherCost: otherCost, netProceeds: netProceeds,
+      purchPrice: purchPrice, datePurch: datePurch,
+      orderNum: orderNum, notes: notes, img: img,
+      dateSold: dateSold, is_auto: is_auto,
+    });
+  }
+
+  if (!_salesTemplateRows.length) { toast('No valid rows found'); return; }
+  _importTab = 'sales-template';
+  render();
+  toast('Parsed ' + _salesTemplateRows.length + ' sale' + (_salesTemplateRows.length === 1 ? '' : 's')
+    + (_salesTemplateSkipped ? ' (' + _salesTemplateSkipped + ' blank rows skipped)' : ''));
+}
+
+function _renderSalesTemplateCsvReview() {
+  var pending   = _salesTemplateRows.filter(function(r){ return !r._confirmed; }).length;
+  var confirmed = _salesTemplateRows.length - pending;
+  var html = '<div style="font-size:12px;color:var(--dim);font-family:var(--mono);margin-bottom:8px">'
+    + _salesTemplateRows.length + ' sales parsed'
+    + (_salesTemplateSkipped ? '<span style="color:var(--orange);margin-left:8px">⚠ ' + _salesTemplateSkipped + ' blank rows skipped</span>' : '')
+    + '</div>'
+    + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">'
+    + '<div style="font-size:13px;font-weight:700">Review ' + _salesTemplateRows.length + ' Sales</div>'
+    + '<span id="stmpl-confirmed-ct" style="font-size:11px;font-family:var(--mono);color:var(--dim)">' + confirmed + ' confirmed</span>'
+    + '<button class="btn pri sm" style="margin-left:auto" onclick="confirmAllSalesTemplateCsv()">&#x2713; Import All</button>'
+    + '<button class="btn ghost sm" onclick="_salesTemplateRows=[];render()">&#x2715; Cancel</button>'
+    + '</div>'
+    + '<div id="stmpl-rows" style="display:grid;gap:8px">';
+  for (var i = 0; i < _salesTemplateRows.length; i++) {
+    html += _renderSalesTemplateCsvRow(i);
+  }
+  html += '</div>';
+  return html;
+}
+
+function _renderSalesTemplateCsvRow(i) {
+  var r = _salesTemplateRows[i];
+  var inp = function(field, label, w, type) {
+    var v = (r[field] === undefined ? '' : r[field]).toString();
+    return '<div style="min-width:' + (w || '80px') + ';flex:1">'
+      + '<label style="font-size:9px;color:var(--faint);font-family:var(--mono);text-transform:uppercase;display:block;margin-bottom:2px">' + label + '</label>'
+      + '<input ' + (type ? 'type="' + type + '"' : '') + ' style="width:100%;background:var(--surf3);border:1px solid var(--border);color:var(--text);padding:3px 6px;border-radius:3px;font-size:11px;font-family:var(--mono);outline:none" '
+      + 'value="' + esc(v) + '" oninput="_salesTemplateRows[' + i + '].' + field + '=(this.type===\'number\'?parseFloat(this.value)||0:this.value)">'
+      + '</div>';
+  };
+  var imgPrev = r.img
+    ? '<img src="' + esc(r.img) + '" style="width:48px;height:68px;object-fit:cover;border-radius:4px;flex-shrink:0" onerror="this.style.display=\'none\'">'
+    : '<div style="width:48px;height:68px;background:var(--surf3);border-radius:4px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:20px">🃏</div>';
+  var netColor = r.netProceeds > 0 ? 'var(--green)' : 'var(--dim)';
+  var confirmed = r._confirmed;
+  return '<div id="stmpl-row-' + i + '" style="background:var(--surf);border:1px solid ' + (confirmed ? 'var(--green)' : 'var(--border)') + ';border-radius:var(--r);padding:10px;opacity:' + (confirmed ? '.55' : '1') + '">'
+    + '<div style="display:flex;gap:10px;align-items:flex-start">'
+    + imgPrev
+    + '<div style="flex:1;min-width:0">'
+    // Title + net proceeds badge
+    + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">'
+    + '<div style="font-size:11px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1" title="' + esc(r.title) + '">' + esc(r.title) + '</div>'
+    + (r.salePrice ? '<span style="font-size:11px;font-family:var(--mono);color:var(--green);font-weight:700;flex-shrink:0">$' + r.salePrice.toFixed(2) + '</span>' : '')
+    + (r.netProceeds ? '<span style="font-size:10px;font-family:var(--mono);color:' + netColor + ';flex-shrink:0">net $' + r.netProceeds.toFixed(2) + '</span>' : '')
+    + '</div>'
+    // Card identity row
+    + '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:5px">'
+    + inp('player',    'Player',    '130px')
+    + inp('year',      'Year',      '55px')
+    + inp('set',       'Set',       '100px')
+    + inp('variation', 'Variation', '100px')
+    + inp('serial',    'Number',    '60px')
+    + inp('type',      'Category',  '80px')
+    + inp('grade',     'Condition', '90px')
+    + inp('slabSerial','Slab Serial #','100px')
+    + '</div>'
+    // Financial row
+    + '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:5px">'
+    + inp('dateSold',   'Date Sold',       '100px')
+    + inp('salePrice',  'Sale Price $',    '75px', 'number')
+    + inp('shipCharged','Ship Charged $',  '80px', 'number')
+    + inp('platFee',    'Platform Fee $',  '80px', 'number')
+    + inp('shipCost',   'Shipping Cost $', '85px', 'number')
+    + inp('otherCost',  'Other Costs $',   '80px', 'number')
+    + inp('netProceeds','Net Proceeds $',  '85px', 'number')
+    + '</div>'
+    // Match / reference row
+    + '<div style="display:flex;gap:5px;flex-wrap:wrap">'
+    + inp('platform',   'Platform',        '90px')
+    + inp('buyer',      'Buyer',           '100px')
+    + inp('orderNum',   'Order #',         '110px')
+    + inp('datePurch',  'Date Purchased',  '110px')
+    + inp('purchPrice', 'Purchase Price $','90px', 'number')
+    + inp('tags',       'Tags',            '100px')
+    + inp('notes',      'Notes',           '150px')
+    + '<div style="flex:2;min-width:160px">'
+    + '<label style="font-size:9px;color:var(--faint);font-family:var(--mono);text-transform:uppercase;display:block;margin-bottom:2px">Image URL</label>'
+    + '<input style="width:100%;background:var(--surf3);border:1px solid var(--border);color:var(--text);padding:3px 6px;border-radius:3px;font-size:10px;font-family:var(--mono);outline:none" '
+    + 'value="' + esc(r.img || '') + '" placeholder="https://…" oninput="_salesTemplateRows[' + i + '].img=this.value"></div>'
+    + '</div>'
+    + '</div>'
+    + '<div style="display:flex;flex-direction:column;gap:5px;flex-shrink:0;padding-top:24px">'
+    + (confirmed
+        ? '<span style="font-size:10px;color:var(--green);font-family:var(--mono)">&#x2714; added</span>'
+        : '<button class="btn xs" onclick="confirmSalesTemplateCsvRow(' + i + ')">+ Add</button>')
+    + '<button class="btn xs red" onclick="_salesTemplateRows.splice(' + i + ',1);document.getElementById(\'stmpl-csv-review\').innerHTML=_renderSalesTemplateCsvReview()">&#x2715;</button>'
+    + '</div>'
+    + '</div></div>';
+}
+
+function confirmSalesTemplateCsvRow(i) {
+  var r = _salesTemplateRows[i];
+  if (!r || r._confirmed) return;
+  var newId = 'S' + Date.now().toString(36).slice(-6) + i;
+  sales.push({
+    id: newId,
+    title: r.title,
+    date: r.dateSold || '',
+    price: parseFloat(r.salePrice) || 0,
+    qty: 1,
+    itemNum: '',
+    recordNum: '',
+    orderNum: r.orderNum || '',
+    type: r.type || '',
+    player: r.player || '',
+    year: r.year || '',
+    set: r.set || '',
+    variation: r.variation || '',
+    serial: r.serial || '',
+    grade: r.grade || '',
+    is_auto: !!r.is_auto,
+    buyer: r.buyer || '',
+    platform: r.platform || '',
+    buyerShip: parseFloat(r.shipCharged) || 0,
+    totalBuyerPaid: (parseFloat(r.salePrice) || 0) + (parseFloat(r.shipCharged) || 0),
+    fees: parseFloat(r.platFee) || 0,
+    shippingCost: parseFloat(r.shipCost) || 0,
+    otherCosts: parseFloat(r.otherCost) || 0,
+    netRevenue: parseFloat(r.netProceeds) || 0,
+    slabSerial: r.slabSerial || '',
+    tags: r.tags || '',
+    notes: r.notes || '',
+    img: r.img || '',
+    linkedPid: null,
+    candidates: [],
+  });
+  persistSales();
+  _salesTemplateRows[i]._confirmed = true;
+  var rowEl = document.getElementById('stmpl-row-' + i);
+  if (rowEl) rowEl.outerHTML = _renderSalesTemplateCsvRow(i);
+  var ct = document.getElementById('stmpl-confirmed-ct');
+  if (ct) ct.textContent = _salesTemplateRows.filter(function(r){ return r._confirmed; }).length + ' confirmed';
+  toast('Added: ' + r.title.slice(0, 40) + (r.title.length > 40 ? '…' : ''));
+}
+
+function confirmAllSalesTemplateCsv() {
+  var count = 0;
+  for (var i = 0; i < _salesTemplateRows.length; i++) {
+    if (!_salesTemplateRows[i]._confirmed) { confirmSalesTemplateCsvRow(i); count++; }
+  }
+  toast('Added ' + count + ' sale' + (count === 1 ? '' : 's') + ' ✓');
+  _salesTemplateRows = [];
   render();
 }
 
