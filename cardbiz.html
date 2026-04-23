@@ -1302,7 +1302,7 @@ function renderDash(){
       <table><thead><tr><th></th><th>TITLE</th><th>DATE</th><th>PRICE</th><th>MATCH</th></tr></thead>
       <tbody>${sales.slice(0,DASH_RECENT_SALES).map(s=>{const ss=getS(s.id);const lp=ss.linkedPid?getP(ss.linkedPid):null;
         return`<tr onclick="showSale('${s.id}')" style="cursor:pointer">
-          <td class="cic">${thumb(lp?.img||'')}</td>
+          <td class="cic">${thumb(ss.img||lp?.img||'')}</td>
           <td><div class="cn">${esc(ss.title)}</div></td>
           <td><span class="pr d">${ss.date}</span></td>
           <td><span class="pr g">${f$(ss.price)}</span></td>
@@ -2086,7 +2086,7 @@ function renderSells(){
           :page_items.map(ss=>{
             const lp=ss.linkedPid?getP(ss.linkedPid):null;
             const np=lp?netProfit(ss.price,ss.qty||1,lp.cost,ss.fees||0):null;
-            const imgSrc=lp?.img||'';
+            const imgSrc=ss.img||lp?.img||'';
             const imgTag=imgSrc?`<img class="lg-card-img" src="${esc(imgSrc)}" onerror="this.parentNode.innerHTML='<div class=lg-card-img-ph>&#x1F0CF;</div>'">`:`<div class="lg-card-img-ph">&#x1F0CF;</div>`;
             return`<div class="lg-card" onclick="showSale('${ss.id}')" style="cursor:pointer">
               ${imgTag}
@@ -2120,7 +2120,7 @@ function renderSells(){
         const np=lp?netProfit(ss.price,ss.qty||1,lp.cost,fee):null;
         const roi=lp&&lp.cost>0?(np/lp.cost*100).toFixed(0)+'%':null;
         return`<tr onclick="showSale('${ss.id}')" style="cursor:pointer">
-          <td class="cic">${thumb(lp?.img||'')}</td>
+          <td class="cic">${thumb(ss.img||lp?.img||'')}</td>
           <td><div class="cn">${esc(ss.title)}</div><div class="cm">#${esc(ss.recordNum)}</div></td>
           <td>${ss.player?`<span style="font-family:var(--mono);font-size:12px;font-weight:600;color:var(--text)">${esc(ss.player)}</span>`:''} ${parsedTags(ss,true)}</td>
           <td>${typeBadge(ss.type)}</td>
