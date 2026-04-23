@@ -885,6 +885,17 @@ function buildEditActions(saveFn, cancelFn) {
   </div>`;
 }
 
+// ── Color extraction for parallel matching ──
+const _COLOR_WORDS = ['red','orange','yellow','gold','green','teal','aqua','blue','purple','pink','black','white','silver','bronze','rainbow','cosmic','neon','rose'];
+function _extractColor(str) {
+  if (!str) return '';
+  const s = str.toLowerCase();
+  for (const c of _COLOR_WORDS) {
+    if (new RegExp('\\b' + c + '\\b').test(s)) return c;
+  }
+  return '';
+}
+
 // ── Sale-purchase fuzzy scoring (shared by relinkPanel + activeListings) ──
 function scoreSalePurchase(s, p) {
   let score = 0;
@@ -932,6 +943,16 @@ function scoreSalePurchase(s, p) {
     if (sVar === pVar) score += 22;
     else if (sVar.includes(pVar) || pVar.includes(sVar)) score += 10;
     else score -= 10; // different variation is a meaningful mismatch signal
+  }
+
+  // ── Color ── extracted from variation; strong differentiator for parallels
+  // "Orange /25" vs "Pink Refractor" are clearly different cards even if same player+set
+  // But "Pink Lava" ≠ "Pink Refractor" so same color is only a moderate bonus, not definitive
+  const sColor = _extractColor(sVar) || _extractColor((s.title||'').toLowerCase());
+  const pColor = _extractColor(pVar) || _extractColor((p.name||'').toLowerCase());
+  if (sColor && pColor) {
+    if (sColor === pColor) score += 12;
+    else score -= 20; // color mismatch is a strong signal these are different parallels
   }
 
   // ── Category / Type ──
@@ -2650,7 +2671,7 @@ function buildSalePanel(sid){
   const editing=_panelEdit['main'];
   return`
     <div class="pn-head">
-      ${lp?.img?`<img class="pn-img" src="${esc(lp.img)}" onerror="this.style.display='none'">`:`<div class="pn-img" style="display:flex;align-items:center;justify-content:center;font-size:32px">🃏</div>`}
+      ${(s.img||lp?.img)?`<img class="pn-img" src="${esc(s.img||lp.img)}" onerror="this.style.display='none'">`:`<div class="pn-img" style="display:flex;align-items:center;justify-content:center;font-size:32px">🃏</div>`}
       <div style="flex:1;min-width:0">
         <div class="pn-title">${esc(s.title)}</div>
         <div class="pn-meta">${esc(s.date)} · Order #${esc(s.recordNum)}</div>
@@ -2704,11 +2725,25 @@ function buildSalePanel(sid){
 
 function buildSaleReadView(sid){
   const s=getS(sid);
-  return`<div style="margin-bottom:12px">${editableTags('s',sid,s)}</div>
-  <div class="field-grid">
-    <div class="field-item"><label>Player</label><div class="field-val">${esc(s.player||'—')}</div></div>
-    <div class="field-item"><label>Type</label><div class="field-val">${typeBadge(s.type)}</div></div>
-  </div>`;
+  const row=(label,val,mono)=>val?`<div class="field-item"><label>${label}</label><div class="field-val${mono?' mono':''}">${esc(val)}</div></div>`:'';
+  return`
+    ${s.img?`<div style="margin-bottom:10px;text-align:center"><img src="${esc(s.img)}" style="max-height:130px;max-width:100%;border-radius:6px;object-fit:contain" onerror="this.style.display='none'"></div>`:''}
+    <div style="margin-bottom:6px;padding:6px 8px;background:var(--surf2);border-radius:var(--r);border:1px solid var(--border)">
+      <div style="font-size:9px;font-family:var(--mono);color:var(--faint);letter-spacing:.8px;text-transform:uppercase;margin-bottom:3px">Original Title</div>
+      <div style="font-size:11px;font-family:var(--mono);color:var(--text);line-height:1.45;word-break:break-word">${esc(s.title||'—')}</div>
+    </div>
+    <div style="margin-bottom:12px">${editableTags('s',sid,s)}</div>
+    <div class="field-grid">
+      <div class="field-item"><label>Player</label><div class="field-val">${esc(s.player||'—')}</div></div>
+      <div class="field-item"><label>Type</label><div class="field-val">${typeBadge(s.type)}</div></div>
+      ${row('Grade / Cond',s.grade,true)}
+      ${row('Slab Serial #',s.slabSerial,true)}
+      ${row('Platform',s.platform,false)}
+      ${row('Buyer',s.buyer,false)}
+      ${row('Order #',s.orderNum,true)}
+      ${s.tags?`<div class="field-item" style="grid-column:1/-1"><label>Tags</label><div class="field-val" style="font-size:11px">${esc(s.tags)}</div></div>`:''}
+      ${s.notes?`<div class="field-item" style="grid-column:1/-1"><label>Notes</label><div class="field-val" style="font-size:11px;white-space:pre-wrap">${esc(s.notes)}</div></div>`:''}
+    </div>`;
 }
 
 function buildSaleEditForm(sid){
@@ -2721,7 +2756,12 @@ function buildSaleEditForm(sid){
     <div class="field-item"><label>Set</label><input class="field-input" id="es-set-${sid}" value="${esc(s.set||'')}"></div>
     <div class="field-item"><label>Variation</label><input class="field-input" id="es-var-${sid}" value="${esc(s.variation||'')}"></div>
     <div class="field-item"><label>Serial /</label><input class="field-input mono" id="es-serial-${sid}" value="${esc(s.serial||'')}"></div>
-    <div class="field-item"><label>Grade</label><input class="field-input mono" id="es-grade-${sid}" value="${esc(s.grade||'')}"></div>
+    <div class="field-item"><label>Grade / Cond</label><input class="field-input mono" id="es-grade-${sid}" value="${esc(s.grade||'')}"></div>
+    <div class="field-item"><label>Slab Serial #</label><input class="field-input mono" id="es-slab-${sid}" value="${esc(s.slabSerial||'')}"></div>
+    <div class="field-item"><label>Platform</label><input class="field-input" id="es-plat-${sid}" value="${esc(s.platform||'')}"></div>
+    <div class="field-item"><label>Buyer</label><input class="field-input" id="es-buyer-${sid}" value="${esc(s.buyer||'')}"></div>
+    <div class="field-item"><label>Order #</label><input class="field-input mono" id="es-order-${sid}" value="${esc(s.orderNum||'')}"></div>
+    <div class="field-item" style="grid-column:1/-1"><label>Tags</label><input class="field-input" id="es-tags-${sid}" value="${esc(s.tags||'')}" style="width:100%"></div>
     <div class="field-item">
       <label>Type</label>
       <select class="field-input" id="es-type-${sid}">
@@ -2729,8 +2769,12 @@ function buildSaleEditForm(sid){
       </select>
     </div>
   </div>
+  ${buildFullWidthInput('Image URL', `es-img-${sid}`, s.img||'')}
+  <div style="margin-bottom:10px">
+    <label style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:.8px;text-transform:uppercase;display:block;margin-bottom:4px">Notes</label>
+    <textarea id="es-notes-${sid}" style="width:100%;min-height:56px;background:var(--surf2);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:11px;padding:6px 8px;border-radius:var(--r);resize:vertical;outline:none;box-sizing:border-box">${esc(s.notes||'')}</textarea>
+  </div>
   ${buildEditActions(`saveSaleFields('${sid}')`, `toggleSaleEdit('${sid}','main')`)}`;
-
 }
 
 function buildSaleFinReadView(sid,pnl,lp){
@@ -2770,14 +2814,21 @@ function toggleSaleEdit(sid, section){
 function saveSaleFields(sid){
   const g = id => document.getElementById(id)?.value ?? '';
   editS(sid, {
-    title:     g(`es-title-${sid}`),
-    player:    g(`es-player-${sid}`),
-    year:      g(`es-year-${sid}`),
-    set:       g(`es-set-${sid}`),
-    variation: g(`es-var-${sid}`),
-    serial:    g(`es-serial-${sid}`),
-    grade:     g(`es-grade-${sid}`),
-    type:      g(`es-type-${sid}`),
+    title:      g(`es-title-${sid}`),
+    player:     g(`es-player-${sid}`),
+    year:       g(`es-year-${sid}`),
+    set:        g(`es-set-${sid}`),
+    variation:  g(`es-var-${sid}`),
+    serial:     g(`es-serial-${sid}`),
+    grade:      g(`es-grade-${sid}`),
+    slabSerial: g(`es-slab-${sid}`),
+    platform:   g(`es-plat-${sid}`),
+    buyer:      g(`es-buyer-${sid}`),
+    orderNum:   g(`es-order-${sid}`),
+    tags:       g(`es-tags-${sid}`),
+    img:        g(`es-img-${sid}`),
+    notes:      g(`es-notes-${sid}`),
+    type:       g(`es-type-${sid}`),
   });
   _panelEdit['main']=false;
   document.getElementById('pn').innerHTML=buildSalePanel(sid);
@@ -2881,14 +2932,24 @@ function autoLinkAll() {
 function openRelinkPanel(sid){
   const s=getS(sid);
   const cands=getTopCandidates(s, 10);
+  const saleExtras = [
+    s.platform ? `<span style="color:var(--dim)">Platform:</span> ${esc(s.platform)}` : '',
+    s.buyer    ? `<span style="color:var(--dim)">Buyer:</span> ${esc(s.buyer)}` : '',
+    s.orderNum ? `<span style="color:var(--dim)">Order #:</span> ${esc(s.orderNum)}` : '',
+    s.grade    ? `<span style="color:var(--dim)">Cond:</span> ${esc(s.grade)}` : '',
+    s.slabSerial ? `<span style="color:var(--dim)">Slab #:</span> ${esc(s.slabSerial)}` : '',
+    s.notes    ? `<span style="color:var(--dim)">Notes:</span> ${esc(s.notes.slice(0,80))}${s.notes.length>80?'…':''}` : '',
+  ].filter(Boolean).join(' · ');
   openPanel(`
     <div class="pn-head">
+      ${s.img?`<img class="pn-img" src="${esc(s.img)}" onerror="this.style.display='none'">`:`<div class="pn-img" style="display:flex;align-items:center;justify-content:center;font-size:32px">🃏</div>`}
       <div style="flex:1;min-width:0">
         <div class="pn-title">Link Purchase to Sale</div>
-        <div class="pn-meta">${esc(s.title)}</div>
+        <div class="pn-meta" style="word-break:break-word">${esc(s.title)}</div>
         <div style="margin-top:4px">${parsedTags(s)}</div>
+        ${saleExtras?`<div style="font-size:10px;font-family:var(--mono);color:var(--faint);margin-top:4px;line-height:1.6">${saleExtras}</div>`:''}
       </div>
-      <button class="btn ghost sm" style="margin-right:6px;flex-shrink:0" onclick="showSale('${sid}')">← Back to Sale</button>
+      <button class="btn ghost sm" style="margin-right:6px;flex-shrink:0" onclick="showSale('${sid}')">← Back</button>
       <button class="pn-close" onclick="closePanel()">✕</button>
     </div>
     <div class="pn-body">
