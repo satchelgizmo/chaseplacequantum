@@ -969,11 +969,13 @@ function scoreSalePurchase(s, p) {
   else if (s.is_auto && !p.is_auto) score -= 8;
 
   // ── Title word overlap (fallback when structured fields are sparse) ──
-  const sw = new Set((s.title||'').toLowerCase().split(/\W+/).filter(w=>w.length>3));
+  // Prefer ebayTitle — it's the full original listing title, much richer than auto-generated title
+  const sTitle = (s.ebayTitle || s.title || '').toLowerCase();
+  const sw = new Set(sTitle.split(/\W+/).filter(w=>w.length>3));
   const pw = new Set((p.name||'').toLowerCase().split(/\W+/).filter(w=>w.length>3));
   let overlap = 0;
   sw.forEach(w => { if (pw.has(w)) overlap++; });
-  score += Math.min(overlap * 2, 10); // reduced weight — structured fields dominate
+  score += Math.min(overlap * 2, 10);
 
   return score;
 }
@@ -2728,10 +2730,10 @@ function buildSaleReadView(sid){
   const row=(label,val,mono)=>val?`<div class="field-item"><label>${label}</label><div class="field-val${mono?' mono':''}">${esc(val)}</div></div>`:'';
   return`
     ${s.img?`<div style="margin-bottom:10px;text-align:center"><img src="${esc(s.img)}" style="max-height:130px;max-width:100%;border-radius:6px;object-fit:contain" onerror="this.style.display='none'"></div>`:''}
-    <div style="margin-bottom:6px;padding:6px 8px;background:var(--surf2);border-radius:var(--r);border:1px solid var(--border)">
-      <div style="font-size:9px;font-family:var(--mono);color:var(--faint);letter-spacing:.8px;text-transform:uppercase;margin-bottom:3px">Original Title</div>
-      <div style="font-size:11px;font-family:var(--mono);color:var(--text);line-height:1.45;word-break:break-word">${esc(s.title||'—')}</div>
-    </div>
+    ${s.ebayTitle?`<div style="margin-bottom:6px;padding:6px 8px;background:var(--surf2);border-radius:var(--r);border:1px solid var(--border)">
+      <div style="font-size:9px;font-family:var(--mono);color:var(--faint);letter-spacing:.8px;text-transform:uppercase;margin-bottom:3px">Original eBay Title</div>
+      <div style="font-size:11px;font-family:var(--mono);color:var(--text);line-height:1.45;word-break:break-word">${esc(s.ebayTitle)}</div>
+    </div>`:''}
     <div style="margin-bottom:12px">${editableTags('s',sid,s)}</div>
     <div class="field-grid">
       <div class="field-item"><label>Player</label><div class="field-val">${esc(s.player||'—')}</div></div>
@@ -2770,6 +2772,7 @@ function buildSaleEditForm(sid){
     </div>
   </div>
   ${buildFullWidthInput('Image URL', `es-img-${sid}`, s.img||'')}
+  ${buildFullWidthInput('Original eBay Title', `es-ebaytitle-${sid}`, s.ebayTitle||'')}
   <div style="margin-bottom:10px">
     <label style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:.8px;text-transform:uppercase;display:block;margin-bottom:4px">Notes</label>
     <textarea id="es-notes-${sid}" style="width:100%;min-height:56px;background:var(--surf2);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:11px;padding:6px 8px;border-radius:var(--r);resize:vertical;outline:none;box-sizing:border-box">${esc(s.notes||'')}</textarea>
@@ -2827,6 +2830,7 @@ function saveSaleFields(sid){
     orderNum:   g(`es-order-${sid}`),
     tags:       g(`es-tags-${sid}`),
     img:        g(`es-img-${sid}`),
+    ebayTitle:  g(`es-ebaytitle-${sid}`),
     notes:      g(`es-notes-${sid}`),
     type:       g(`es-type-${sid}`),
   });
@@ -2945,7 +2949,7 @@ function openRelinkPanel(sid){
       ${s.img?`<img class="pn-img" src="${esc(s.img)}" onerror="this.style.display='none'">`:`<div class="pn-img" style="display:flex;align-items:center;justify-content:center;font-size:32px">🃏</div>`}
       <div style="flex:1;min-width:0">
         <div class="pn-title">Link Purchase to Sale</div>
-        <div class="pn-meta" style="word-break:break-word">${esc(s.title)}</div>
+        <div class="pn-meta" style="word-break:break-word">${esc(s.ebayTitle||s.title)}</div>
         <div style="margin-top:4px">${parsedTags(s)}</div>
         ${saleExtras?`<div style="font-size:10px;font-family:var(--mono);color:var(--faint);margin-top:4px;line-height:1.6">${saleExtras}</div>`:''}
       </div>
@@ -4447,7 +4451,7 @@ const SALES_TEMPLATE_HEADERS = [
   'Slab Serial #','Tags','Platform','Buyer','Sale Price','Shipping Charged',
   'Platform Fee','Shipping Cost','Other Costs','Net Proceeds',
   'Purchase Price','Profit / Loss','ROI %','Hold Days',
-  'Date Purchased','Order #','Notes','Image'
+  'Date Purchased','Order #','Notes','Original eBay Title','Image'
 ];
 
 function downloadSalesTemplate() {
@@ -4456,7 +4460,9 @@ function downloadSalesTemplate() {
     'NFL','PSA 10','12345678','auto','eBay','buyer123',
     '450.00','0.00','63.00','8.50','0.00','378.50',
     '125.00','253.50','202.8','730',
-    'Apr 27 2025','09-12345-67890','Great transaction','https://i.ebayimg.com/example.jpg'
+    'Apr 27 2025','09-12345-67890','Great transaction',
+    'Patrick Mahomes 2020 Panini Prizm Gold Prizm /10 PSA 10 Football Card',
+    'https://i.ebayimg.com/example.jpg'
   ];
   var csv = SALES_TEMPLATE_HEADERS.map(function(h){ return '"' + h + '"'; }).join(',')
     + '\n'
@@ -4507,6 +4513,7 @@ function parseSalesTemplateCSV(text) {
   var iDatePurch   = col(['date purchased','datepurchased','purchase date','purchasedate','bought date']);
   var iOrderNum    = col(['order #','order#','ordernumber','orderid','order number','order id']);
   var iNotes       = col(['notes','note','comments']);
+  var iEbayTitle   = col(['original ebay title','ebay title','ebay listing title','listing title','original title','ebaylisting']);
   var iImg         = col(['image','img','imageurl','photo','picture']);
 
   _salesTemplateRows = [];
@@ -4539,6 +4546,7 @@ function parseSalesTemplateCSV(text) {
     var purchPrice = gn(iPurchPrice);
     var orderNum   = g(iOrderNum);
     var notes      = g(iNotes);
+    var ebayTitle  = g(iEbayTitle);
     var img        = g(iImg);
     var datePurch  = g(iDatePurch);
 
@@ -4570,7 +4578,7 @@ function parseSalesTemplateCSV(text) {
       salePrice: salePrice, shipCharged: shipCharged, platFee: platFee,
       shipCost: shipCost, otherCost: otherCost, netProceeds: netProceeds,
       purchPrice: purchPrice, datePurch: datePurch,
-      orderNum: orderNum, notes: notes, img: img,
+      orderNum: orderNum, notes: notes, ebayTitle: ebayTitle, img: img,
       dateSold: dateSold, is_auto: is_auto,
     });
   }
@@ -4705,6 +4713,7 @@ function confirmSalesTemplateCsvRow(i) {
     slabSerial: r.slabSerial || '',
     tags: r.tags || '',
     notes: r.notes || '',
+    ebayTitle: r.ebayTitle || '',
     img: r.img || '',
     linkedPid: null,
     candidates: [],
