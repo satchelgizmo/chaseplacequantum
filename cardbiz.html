@@ -92,6 +92,8 @@ td{padding:8px 10px;vertical-align:middle}
 .cic{width:46px;padding:5px 6px}
 .ct{width:36px;height:50px;border-radius:4px;object-fit:cover;background:var(--surf2);display:block}
 .ctp{width:36px;height:50px;background:var(--surf2);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:16px}
+#img-tip{display:none;position:fixed;z-index:9999;pointer-events:none;background:var(--surf);border:1px solid var(--border2);border-radius:10px;padding:5px;box-shadow:0 8px 36px rgba(0,0,0,.7)}
+#img-tip img{width:200px;height:auto;display:block;border-radius:7px;max-height:280px;object-fit:contain}
 .cn{font-weight:600;font-size:12.5px;line-height:1.4}
 .cm{font-size:10px;color:var(--dim);font-family:var(--mono);margin-top:1px}
 
@@ -1033,7 +1035,7 @@ function typeBadge(t, mismatch) {
   return `<span class="tb ${cls}"${warn}>${esc(t||'?')}</span>`;
 }
 function thumb(url,cls='ct') {
-  if (url&&url.startsWith('http')) return `<img class="${cls}" src="${esc(url)}" loading="lazy" onerror="this.parentElement.innerHTML='<div class=ctp>🃏</div>'">`;
+  if (url&&url.startsWith('http')) return `<img class="${cls}" src="${esc(url)}" data-img="${esc(url)}" loading="lazy" onerror="this.removeAttribute('data-img');this.parentElement.innerHTML='<div class=ctp>🃏</div>'">`;
   return `<div class="ctp">🃏</div>`;
 }
 function setTagSearch(val){
@@ -2364,8 +2366,10 @@ function buildPurchaseEditForm(pid){
   <div style="display:flex;gap:14px;margin:10px 0">
     <label class="cb-row"><input type="checkbox" id="ef-auto-${pid}" ${p.is_auto?'checked':''}> Auto</label>
     <label class="cb-row"><input type="checkbox" id="ef-rc-${pid}" ${p.is_rc?'checked':''}> RC / Rookie</label>
-    <label class="cb-row"><input type="checkbox" id="ef-lot-${pid}" ${p.is_lot?'checked':''}> Lot</label>
-    ${p.is_lot?`<div class="field-item" style="flex:0 0 80px"><label style="font-size:9px;color:var(--faint)">Lot Qty</label><input class="field-input mono" id="ef-lotqty-${pid}" value="${p.lotQty||1}" style="width:60px"></div>`:''}
+    <label class="cb-row"><input type="checkbox" id="ef-lot-${pid}" ${p.is_lot?'checked':''} onchange="document.getElementById('ef-lot-detail-${pid}').style.display=this.checked?'flex':'none'"> Lot</label>
+    <div id="ef-lot-detail-${pid}" style="display:${p.is_lot?'flex':'none'};align-items:center;gap:6px">
+      <div class="field-item" style="flex:0 0 80px"><label style="font-size:9px;color:var(--faint)">Lot Qty</label><input class="field-input mono" id="ef-lotqty-${pid}" value="${p.lotQty||2}" style="width:60px"></div>
+    </div>
   </div>
   <div class="field-item" style="margin-bottom:10px">
     <label style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:.8px;text-transform:uppercase;display:block;margin-bottom:4px">Notes</label>
@@ -2394,15 +2398,36 @@ function buildFinReadView(pid,pnl,rev,totalFee,netPnl){
 
 function buildFinEditForm(pid){
   const p=getP(pid);
+  const lotTotal=p.costRaw||p.cost||0;
+  const lotQty=p.lotQty||2;
+  const perCard=lotQty>0?parseFloat((lotTotal/lotQty).toFixed(4)):(p.cost||0);
   return`<div class="field-grid">
-    <div class="field-item"><label>Cost Per Card ($)</label><input class="field-input mono" type="number" step="0.01" id="ef-cost-${pid}" value="${p.cost||0}"></div>
+    ${p.is_lot?`
+    <div class="field-item" style="grid-column:1/-1;padding:8px;background:var(--surf2);border-radius:var(--r);border:1px solid var(--border)">
+      <label style="font-size:9px;color:var(--gold)">LOT PRICING</label>
+      <div style="display:grid;grid-template-columns:1fr 24px 1fr;gap:8px;align-items:end;margin-top:6px">
+        <div><label style="font-size:9px;color:var(--faint)">Total Lot Cost ($)</label>
+          <input class="field-input mono" type="number" step="0.01" id="ef-lotcost-${pid}" value="${lotTotal}"
+            oninput="const q=parseInt(document.getElementById('ef-lotqty2-${pid}').value)||1;document.getElementById('ef-cost-${pid}').value=(this.value/q).toFixed(4)">
+        </div>
+        <div style="text-align:center;padding-top:18px;color:var(--faint)">÷</div>
+        <div><label style="font-size:9px;color:var(--faint)">Cards in Lot</label>
+          <input class="field-input mono" type="number" step="1" min="1" id="ef-lotqty2-${pid}" value="${lotQty}"
+            oninput="const t=parseFloat(document.getElementById('ef-lotcost-${pid}').value)||0;document.getElementById('ef-cost-${pid}').value=(t/Math.max(1,this.value)).toFixed(4)">
+        </div>
+      </div>
+    </div>
+    <div class="field-item" style="grid-column:1/-1">
+      <label>Cost Per Card ($) <span style="font-size:9px;color:var(--faint)">(auto-computed)</span></label>
+      <input class="field-input mono" type="number" step="0.0001" id="ef-cost-${pid}" value="${perCard}" style="color:var(--gold)">
+    </div>`
+    :`<div class="field-item"><label>Cost Per Card ($)</label><input class="field-input mono" type="number" step="0.01" id="ef-cost-${pid}" value="${p.cost||0}"></div>`}
     <div class="field-item"><label>Quantity</label><input class="field-input mono" type="number" min="1" id="ef-qty-${pid}" value="${p.qty||1}"></div>
     <div class="field-item"><label>Order #</label><input class="field-input mono" id="ef-ordernum-${pid}" value="${esc(p.orderNum||'')}"></div>
     <div class="field-item"><label>Seller</label><input class="field-input" id="ef-seller-${pid}" value="${esc(p.seller||'')}"></div>
     <div class="field-item"><label>Date</label><input class="field-input mono" id="ef-date-${pid}" value="${esc(p.date||'')}"></div>
   </div>
   ${buildEditActions(`saveFinFields('${pid}')`, `togglePanelEdit('${pid}','fin')`)}`;
-
 }
 
 function togglePanelEdit(pid, section){
@@ -2414,8 +2439,12 @@ function togglePanelEdit(pid, section){
 function savePurchaseFields(pid){
   const g = id => document.getElementById(id)?.value ?? '';
   const cb = id => document.getElementById(id)?.checked ?? false;
+  const p = getP(pid);
   const newName = g(`ef-name-${pid}`);
-  editP(pid, {
+  const isLot = cb(`ef-lot-${pid}`);
+  const lotQty = Math.max(1, parseInt(g(`ef-lotqty-${pid}`)) || 1);
+  const lotTotal = p.costRaw || p.cost || 0;
+  const update = {
     name:      newName,
     player:    g(`ef-player-${pid}`),
     year:      g(`ef-year-${pid}`),
@@ -2427,10 +2456,15 @@ function savePurchaseFields(pid){
     img:       g(`ef-img-${pid}`),
     is_auto:   cb(`ef-auto-${pid}`),
     is_rc:     cb(`ef-rc-${pid}`),
-    is_lot:    cb(`ef-lot-${pid}`),
-    lotQty:    parseInt(g(`ef-lotqty-${pid}`)) || 1,
+    is_lot:    isLot,
+    lotQty:    lotQty,
     notes:     g(`ef-notes-${pid}`),
-  });
+  };
+  if (isLot && lotTotal > 0) {
+    update.costRaw = lotTotal;
+    update.cost = parseFloat((lotTotal / lotQty).toFixed(4));
+  }
+  editP(pid, update);
   _panelEdit['main'] = false;
   toast('Card info saved ✓');
   if(page==='card'){render();return;}
@@ -2440,13 +2474,25 @@ function savePurchaseFields(pid){
 
 function saveFinFields(pid){
   const g = id => document.getElementById(id)?.value ?? '';
-  editP(pid, {
-    cost:     parseFloat(g(`ef-cost-${pid}`)) || 0,
+  const p = getP(pid);
+  const cost = parseFloat(g(`ef-cost-${pid}`)) || 0;
+  const update = {
+    cost,
     qty:      Math.max(1, parseInt(g(`ef-qty-${pid}`)) || 1),
     orderNum: g(`ef-ordernum-${pid}`),
     seller:   g(`ef-seller-${pid}`),
     date:     g(`ef-date-${pid}`),
-  });
+  };
+  if (p.is_lot) {
+    const lotTotal = parseFloat(g(`ef-lotcost-${pid}`));
+    const lotQty = Math.max(1, parseInt(g(`ef-lotqty2-${pid}`)) || 1);
+    if (!isNaN(lotTotal) && lotTotal > 0) {
+      update.costRaw = lotTotal;
+      update.lotQty = lotQty;
+      update.cost = parseFloat((lotTotal / lotQty).toFixed(4));
+    }
+  }
+  editP(pid, update);
   _panelEdit['fin'] = false;
   toast('Financials saved ✓');
   if(page==='card'){render();return;}
@@ -2809,7 +2855,16 @@ function buildSalePanel(sid){
   const editing=_panelEdit['main'];
   return`
     <div class="pn-head">
-      ${(s.img||lp?.img)?`<img class="pn-img" src="${esc(s.img||lp?.img||'')}" onerror="this.style.display='none'">`:`<div class="pn-img" style="display:flex;align-items:center;justify-content:center;font-size:32px">🃏</div>`}
+      <div style="display:flex;gap:5px;flex-shrink:0">
+        <div style="text-align:center">
+          <div style="font-size:7px;font-family:var(--mono);color:var(--faint);letter-spacing:.6px;margin-bottom:2px">SALE</div>
+          ${s.img?`<img class="pn-img" src="${esc(s.img)}" data-img="${esc(s.img)}" onerror="this.style.display='none'">`:`<div class="pn-img" style="display:flex;align-items:center;justify-content:center;font-size:24px">🃏</div>`}
+        </div>
+        ${lp?.img?`<div style="text-align:center">
+          <div style="font-size:7px;font-family:var(--mono);color:var(--faint);letter-spacing:.6px;margin-bottom:2px">PURCHASE</div>
+          <img class="pn-img" src="${esc(lp.img)}" data-img="${esc(lp.img)}" onerror="this.style.display='none'">
+        </div>`:''}
+      </div>
       <div style="flex:1;min-width:0">
         <div class="pn-title">${esc(s.title)}</div>
         <div class="pn-meta">${esc(s.date)} · Order #${esc(s.recordNum)}</div>
@@ -2846,7 +2901,7 @@ function buildSalePanel(sid){
         </div>
         ${linkedPids.length
           ? linkedPids.map(pid=>{const lpp=getP(pid);if(!lpp)return'';return`<div class="mc active" onclick="closePanel();showPurchase('${pid}')" style="cursor:pointer;margin-bottom:6px">
-              ${lpp.img?`<img class="mc-img" src="${esc(lpp.img)}" onerror="this.style.display='none'">` :''}
+              ${lpp.img?`<img class="mc-img" src="${esc(lpp.img)}" data-img="${esc(lpp.img)}" onerror="this.removeAttribute('data-img');this.style.display='none'">` :''}
               <div class="mc-info"><div class="mc-name">${esc(lpp.name)}</div>
               <div class="mc-detail">${esc(lpp.date)} · paid ${f$(lpp.cost)}${lpp.seller?` from ${esc(lpp.seller)}`:''}</div></div>
               <button class="btn xs red" onclick="event.stopPropagation();unlinkSale('${sid}','${pid}');showSale('${sid}')">unlink</button>
@@ -2858,7 +2913,7 @@ function buildSalePanel(sid){
         <div class="ps-title">Suggested Purchases</div>
         ${cands.filter(c=>!linkedPids.includes(c.pid)).slice(0,5).map(c=>{const cp=getP(c.pid);if(!cp?.name)return'';
           return`<div class="mc candidate" onclick="linkSale('${sid}','${c.pid}');showSale('${sid}')">
-            ${cp.img?`<img class="mc-img" src="${esc(cp.img)}" onerror="this.style.display='none'">` :''}
+            ${cp.img?`<img class="mc-img" src="${esc(cp.img)}" data-img="${esc(cp.img)}" onerror="this.removeAttribute('data-img');this.style.display='none'">` :''}
             <div class="mc-info"><div class="mc-name">${esc(cp.name)}</div>
             <div class="mc-detail">${esc(cp.date)} · ${f$(cp.cost)}</div>${parsedTags(cp)}</div>
             <div><div class="mc-score ${scoreClass(c.score)}">${scoreLabel(c.score)}</div>
@@ -3116,7 +3171,7 @@ function openRelinkPanel(sid){
         <div class="ps-title">Currently Linked (${cands_linkedPids.length})</div>
         ${cands_linkedPids.length
           ? cands_linkedPids.map(pid=>{const lpp=getP(pid);if(!lpp)return'';return`<div class="mc active" style="margin-bottom:6px">
-              ${lpp.img?`<img class="mc-img" src="${esc(lpp.img)}" onerror="this.style.display='none'">`:''}<div class="mc-info"><div class="mc-name">${esc(lpp.name)}</div><div class="mc-detail">${esc(lpp.date)} · ${f$(lpp.cost)}</div></div>
+              ${lpp.img?`<img class="mc-img" src="${esc(lpp.img)}" data-img="${esc(lpp.img)}" onerror="this.removeAttribute('data-img');this.style.display='none'">`:''}<div class="mc-info"><div class="mc-name">${esc(lpp.name)}</div><div class="mc-detail">${esc(lpp.date)} · ${f$(lpp.cost)}</div></div>
               <button class="btn xs red" onclick="unlinkSale('${sid}','${pid}');openRelinkPanel('${sid}')">Remove</button></div>`;}).join('')
           : `<div style="color:var(--faint);font-size:12px;font-family:var(--mono)">No purchase linked.</div>`}
       </div>
@@ -3124,7 +3179,7 @@ function openRelinkPanel(sid){
         <div style="font-size:10px;font-family:var(--mono);color:var(--faint);margin-bottom:8px;line-height:1.7">Match confidence: <span style="color:var(--green)">■ 70+ strong</span> · <span style="color:var(--gold)">■ 50–69 possible</span> · <span style="color:var(--orange)">■ &lt;50 weak</span></div>
         ${cands.map(c=>{const cp=getP(c.pid);if(!cp?.name)return'';const isL=cands_linkedPids.includes(c.pid);
           return`<div class="mc ${isL?'active':'candidate'}">
-            ${cp.img?`<img class="mc-img" src="${esc(cp.img)}" onerror="this.style.display='none'">` :''}
+            ${cp.img?`<img class="mc-img" src="${esc(cp.img)}" data-img="${esc(cp.img)}" onerror="this.removeAttribute('data-img');this.style.display='none'">` :''}
             <div class="mc-info"><div class="mc-name">${esc(cp.name)}</div>
             <div class="mc-detail">${esc(cp.date)} · ${f$(cp.cost)}</div>${parsedTags(cp)}</div>
             <div style="text-align:right;flex-shrink:0">
@@ -5938,6 +5993,35 @@ function doImportChecklist() {
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && document.getElementById('ov')?.classList.contains('open')) closePanel();
 });
+
+// Image hover preview popup
+(function(){
+  const tip = document.createElement('div');
+  tip.id = 'img-tip';
+  tip.innerHTML = '<img>';
+  document.body.appendChild(tip);
+  const img = tip.querySelector('img');
+  let hideTimer;
+  document.addEventListener('mouseover', e => {
+    const el = e.target.closest('[data-img]');
+    if (!el) return;
+    clearTimeout(hideTimer);
+    img.src = el.dataset.img;
+    tip.style.display = 'block';
+    const r = el.getBoundingClientRect();
+    const tipW = 210, margin = 8;
+    let left = r.right + margin;
+    if (left + tipW > window.innerWidth) left = r.left - tipW - margin;
+    tip.style.left = Math.max(4, left) + 'px';
+    tip.style.top = Math.min(r.top, window.innerHeight - 300) + 'px';
+  });
+  document.addEventListener('mouseout', e => {
+    const el = e.target.closest('[data-img]');
+    if (!el) return;
+    hideTimer = setTimeout(() => { tip.style.display = 'none'; }, 80);
+  });
+})();
+
 render();
 initApiKeyField();
 </script></body></html>
