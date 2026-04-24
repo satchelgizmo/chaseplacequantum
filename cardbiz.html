@@ -2855,16 +2855,9 @@ function buildSalePanel(sid){
   const editing=_panelEdit['main'];
   return`
     <div class="pn-head">
-      <div style="display:flex;gap:5px;flex-shrink:0">
-        <div style="text-align:center">
-          <div style="font-size:7px;font-family:var(--mono);color:var(--faint);letter-spacing:.6px;margin-bottom:2px">SALE</div>
-          ${s.img?`<img class="pn-img" src="${esc(s.img)}" data-img="${esc(s.img)}" onerror="this.style.display='none'">`:`<div class="pn-img" style="display:flex;align-items:center;justify-content:center;font-size:24px">🃏</div>`}
-        </div>
-        ${lp?.img?`<div style="text-align:center">
-          <div style="font-size:7px;font-family:var(--mono);color:var(--faint);letter-spacing:.6px;margin-bottom:2px">PURCHASE</div>
-          <img class="pn-img" src="${esc(lp.img)}" data-img="${esc(lp.img)}" onerror="this.style.display='none'">
-        </div>`:''}
-      </div>
+      ${s.img?`<img class="pn-img" src="${esc(s.img)}" onerror="this.style.display='none'">`
+        :lp?.img?`<img class="pn-img" src="${esc(lp.img)}" onerror="this.style.display='none'">`
+        :`<div class="pn-img" style="display:flex;align-items:center;justify-content:center;font-size:32px">🃏</div>`}
       <div style="flex:1;min-width:0">
         <div class="pn-title">${esc(s.title)}</div>
         <div class="pn-meta">${esc(s.date)} · Order #${esc(s.recordNum)}</div>
@@ -2926,9 +2919,21 @@ function buildSalePanel(sid){
 
 function buildSaleReadView(sid){
   const s=getS(sid);
+  const lp=(()=>{const pids=getLinkedPids(sid);return pids.length?getP(pids[0]):null;})();
   const row=(label,val,mono)=>val?`<div class="field-item"><label>${label}</label><div class="field-val${mono?' mono':''}">${esc(val)}</div></div>`:'';
+  const hasAnyImg = s.img || lp?.img;
   return`
-    ${s.img?`<div style="margin-bottom:10px;text-align:center"><img src="${esc(s.img)}" style="max-height:130px;max-width:100%;border-radius:6px;object-fit:contain" onerror="this.style.display='none'"></div>`:''}
+    ${hasAnyImg?`<div style="display:flex;gap:10px;margin-bottom:12px;align-items:flex-start">
+      ${s.img?`<div style="flex:1;text-align:center">
+        <div style="font-size:8px;font-family:var(--mono);color:var(--faint);letter-spacing:.8px;text-transform:uppercase;margin-bottom:4px">SALE IMAGE</div>
+        <img src="${esc(s.img)}" style="max-height:140px;max-width:100%;border-radius:6px;object-fit:contain" onerror="this.closest('div').style.display='none'">
+      </div>`:''}
+      ${lp?.img?`<div style="flex:1;text-align:center">
+        <div style="font-size:8px;font-family:var(--mono);color:var(--faint);letter-spacing:.8px;text-transform:uppercase;margin-bottom:4px">PURCHASE IMAGE</div>
+        <img src="${esc(lp.img)}" style="max-height:140px;max-width:100%;border-radius:6px;object-fit:contain" onerror="this.closest('div').style.display='none'">
+      </div>`:''}
+    </div>`:''}
+
     ${s.ebayTitle?`<div style="margin-bottom:6px;padding:6px 8px;background:var(--surf2);border-radius:var(--r);border:1px solid var(--border)">
       <div style="font-size:9px;font-family:var(--mono);color:var(--faint);letter-spacing:.8px;text-transform:uppercase;margin-bottom:3px">Original eBay Title</div>
       <div style="font-size:11px;font-family:var(--mono);color:var(--text);line-height:1.45;word-break:break-word">${esc(s.ebayTitle)}</div>
@@ -6003,10 +6008,12 @@ document.addEventListener('keydown', e => {
   const img = tip.querySelector('img');
   let hideTimer;
   document.addEventListener('mouseover', e => {
-    const el = e.target.closest('[data-img]');
-    if (!el) return;
+    const el = e.target;
+    if (el.tagName !== 'IMG') return;
+    const src = el.src;
+    if (!src || !src.startsWith('http')) return;
     clearTimeout(hideTimer);
-    img.src = el.dataset.img;
+    img.src = src;
     tip.style.display = 'block';
     const r = el.getBoundingClientRect();
     const tipW = 210, margin = 8;
@@ -6016,8 +6023,10 @@ document.addEventListener('keydown', e => {
     tip.style.top = Math.min(r.top, window.innerHeight - 300) + 'px';
   });
   document.addEventListener('mouseout', e => {
-    const el = e.target.closest('[data-img]');
-    if (!el) return;
+    const el = e.target;
+    if (el.tagName !== 'IMG') return;
+    const src = el.src;
+    if (!src || !src.startsWith('http')) return;
     hideTimer = setTimeout(() => { tip.style.display = 'none'; }, 80);
   });
 })();
