@@ -586,8 +586,10 @@ function persistCustomPlayers(){try{localStorage.setItem('cb_custom_players',JSO
 // Backup export/import
 function exportBackup() {
   const data = {
-    version: 1,
+    version: 2,
     exported: new Date().toISOString(),
+    purchases: purchases,
+    sales: sales,
     purchaseEdits: purchaseEdits,
     saleEdits: saleEdits,
     valueLookups: valueLookups,
@@ -610,13 +612,15 @@ function importBackup(file) {
   reader.onload = function(e) {
     try {
       const data = JSON.parse(e.target.result);
+      if (Array.isArray(data.purchases) && data.purchases.length) { purchases = data.purchases; persistPurchases(); }
+      if (Array.isArray(data.sales) && data.sales.length) { sales = data.sales; persistSales(); }
       if (data.purchaseEdits) { purchaseEdits = data.purchaseEdits; try{localStorage.setItem('cb_purchaseEdits',JSON.stringify(purchaseEdits));}catch(ex){} }
       if (data.saleEdits) { saleEdits = data.saleEdits; try{localStorage.setItem('cb_saleEdits',JSON.stringify(saleEdits));}catch(ex){} }
       if (data.valueLookups) { valueLookups = data.valueLookups; persistLookups(); }
       if (data.activeListings) { activeListings = data.activeListings; persistListings(); }
-      const pe = Object.keys(purchaseEdits).length;
-      const se = Object.keys(saleEdits).length;
-      toast(`Backup restored — ${pe} purchase edits, ${se} sale edits loaded`);
+      const pCount = purchases.length, sCount = sales.length;
+      const pe = Object.keys(purchaseEdits).length, se = Object.keys(saleEdits).length;
+      toast(`Backup restored — ${pCount} purchases, ${sCount} sales, ${pe} purchase edits, ${se} sale edits`);
       render();
     } catch(ex) {
       toast('Import failed: invalid backup file');
