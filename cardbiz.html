@@ -751,18 +751,18 @@ function applySort(items, key) {
     else if (col==='title')  { av=a.title||''; bv=b.title||''; }
     else if (col==='total')  { av=a.price*(a.qty||1); bv=b.price*(b.qty||1); }
     else if (col==='pnl') {
-      const lpa=a.linkedPid?getP(a.linkedPid):null;
-      const lpb=b.linkedPid?getP(b.linkedPid):null;
-      av=lpa?netProfit(a.price,a.qty||1,lpa.cost,a.fees||0):-Infinity;
-      bv=lpb?netProfit(b.price,b.qty||1,lpb.cost,b.fees||0):-Infinity;
+      const ca=getLinkedPids(a.id).reduce((s,p)=>s+(getP(p)?.cost||0),0);
+      const cb=getLinkedPids(b.id).reduce((s,p)=>s+(getP(p)?.cost||0),0);
+      av=ca?netProfit(a.price,a.qty||1,ca,a.fees||0):-Infinity;
+      bv=cb?netProfit(b.price,b.qty||1,cb,b.fees||0):-Infinity;
     }
     else if (col==='roi') {
-      const lpa=a.linkedPid?getP(a.linkedPid):null;
-      const lpb=b.linkedPid?getP(b.linkedPid):null;
-      av=lpa&&lpa.cost>0?netProfit(a.price,a.qty||1,lpa.cost,a.fees||0)/lpa.cost*100:-Infinity;
-      bv=lpb&&lpb.cost>0?netProfit(b.price,b.qty||1,lpb.cost,b.fees||0)/lpb.cost*100:-Infinity;
+      const ca=getLinkedPids(a.id).reduce((s,p)=>s+(getP(p)?.cost||0),0);
+      const cb=getLinkedPids(b.id).reduce((s,p)=>s+(getP(p)?.cost||0),0);
+      av=ca>0?netProfit(a.price,a.qty||1,ca,a.fees||0)/ca*100:-Infinity;
+      bv=cb>0?netProfit(b.price,b.qty||1,cb,b.fees||0)/cb*100:-Infinity;
     }
-    else if (col==='match')  { av=a.linkedPid?1:0; bv=b.linkedPid?1:0; }
+    else if (col==='match')  { av=getLinkedPids(a.id).length?1:0; bv=getLinkedPids(b.id).length?1:0; }
     else { av=a[col]??''; bv=b[col]??''; }
     if (typeof av==='string') return dir * av.localeCompare(bv);
     return dir * (av - bv);
@@ -787,20 +787,30 @@ let _invPageIds = [];
 // ─────────────────────────────────────────────
 // COMPUTED
 // ─────────────────────────────────────────────
+
+// Normalize to array — migrates legacy single linkedPid transparently
+function getLinkedPids(sid) {
+  const s = getS(sid);
+  if (Array.isArray(s.linkedPids) && s.linkedPids.length) return s.linkedPids;
+  return s.linkedPid ? [s.linkedPid] : [];
+}
+
 function soldPids() {
   const s = new Set();
-  for (const sale of sales) { const lp = saleEdits[sale.id]?.linkedPid ?? sale.linkedPid; if (lp) s.add(lp); }
+  for (const sale of sales) { for (const pid of getLinkedPids(sale.id)) s.add(pid); }
   return s;
 }
-function salesForPid(pid) { return sales.filter(s => (saleEdits[s.id]?.linkedPid ?? s.linkedPid) === pid); }
+function salesForPid(pid) { return sales.filter(s => getLinkedPids(s.id).includes(pid)); }
 function totalRev() { return sales.reduce((a,s)=>a+getS(s.id).price*(getS(s.id).qty||1),0); }
 function totalCost() { return purchases.reduce((a,p)=>a+getP(p.id).cost,0); }
 function linkedPnl() {
   let r = 0;
   for (const s of sales) {
-    const ss = getS(s.id); const lp = ss.linkedPid;
-    if (!lp) continue;
-    r += netProfit(ss.price, ss.qty||1, getP(lp).cost, ss.fees||0);
+    const ss = getS(s.id);
+    const pids = getLinkedPids(s.id);
+    if (!pids.length) continue;
+    const cost = pids.reduce((sum, pid) => sum + (getP(pid)?.cost || 0), 0);
+    r += netProfit(ss.price, ss.qty||1, cost, ss.fees||0);
   }
   return r;
 }
@@ -985,8 +995,9 @@ function scoreSalePurchase(s, p) {
 
 function getTopCandidates(sale, n=10) {
   const sp = soldPids();
+  const alreadyLinked = new Set(getLinkedPids(sale.id));
   return purchases
-    .filter(p => !sp.has(p.id) || p.id === sale.linkedPid)
+    .filter(p => !sp.has(p.id) || alreadyLinked.has(p.id))
     .map(p => ({ pid: p.id, score: scoreSalePurchase(sale, getP(p.id)) }))
     .filter(c => c.score > 20)
     .sort((a,b) => b.score - a.score)
@@ -1215,9 +1226,9 @@ function renderPag(total,cur,key){
 function renderDash(){
   const sp=soldPids();
   const pnl=linkedPnl(),rev=totalRev(),cost=totalCost();
-  const linked=sales.filter(s=>(saleEdits[s.id]?.linkedPid??s.linkedPid)).length;
+  const linked=sales.filter(s=>getLinkedPids(s.id).length>0).length;
   const unlinked=sales.length-linked;
-  const soldCost=sales.reduce((a,s)=>{const lp=(saleEdits[s.id]?.linkedPid??s.linkedPid);return lp?a+getP(lp).cost:a;},0);
+  const soldCost=sales.reduce((a,s)=>{const pids=getLinkedPids(s.id);return a+pids.reduce((sum,pid)=>sum+(getP(pid)?.cost||0),0);},0);
   const roi=soldCost>0?((pnl/soldCost)*100).toFixed(0)+'%':'—';
   const _MN={Jan:1,Feb:2,Mar:3,Apr:4,May:5,Jun:6,Jul:7,Aug:8,Sep:9,Oct:10,Nov:11,Dec:12};
   function _parseDate(d){if(!d)return null;let m;if((m=d.match(/^([A-Za-z]{3})-(\d{1,2})-(\d{2,4})$/))!==null){const yr=m[3].length===2?2000+parseInt(m[3]):parseInt(m[3]);return{yr,mo:_MN[m[1]]||0,dy:parseInt(m[2])};}if((m=d.match(/^([A-Za-z]{3})\s+(\d{1,2}),\s*(\d{4})$/))!==null){return{yr:parseInt(m[3]),mo:_MN[m[1]]||0,dy:parseInt(m[2])};}return null;}
@@ -1229,7 +1240,7 @@ function renderDash(){
   const topPl=Object.entries(plrev).sort((a,b)=>b[1]-a[1]).slice(0,DASH_TOP_PLAYERS);
   const maxPl=topPl[0]?.[1]||1;
   const plroiMap={};
-  for(const s of sales){const ss=getS(s.id);const pl=ss.player;if(!pl||pl.length<3||!ss.linkedPid)continue;const pp=getP(ss.linkedPid);const np=netProfit(ss.price,ss.qty||1,pp.cost,ss.fees||0);if(!plroiMap[pl])plroiMap[pl]={net:0,cost:0};plroiMap[pl].net+=np;plroiMap[pl].cost+=pp.cost;}
+  for(const s of sales){const ss=getS(s.id);const pl=ss.player;const pids=getLinkedPids(s.id);if(!pl||pl.length<3||!pids.length)continue;const cost=pids.reduce((sum,pid)=>sum+(getP(pid)?.cost||0),0);const np=netProfit(ss.price,ss.qty||1,cost,ss.fees||0);if(!plroiMap[pl])plroiMap[pl]={net:0,cost:0};plroiMap[pl].net+=np;plroiMap[pl].cost+=cost;}
   const topPlROI=Object.entries(plroiMap).filter(([,v])=>v.cost>0).map(([pl,v])=>[pl,v.net/v.cost*100]).sort((a,b)=>b[1]-a[1]).slice(0,DASH_TOP_PLAYERS);
   const maxPlROI=Math.max(...topPlROI.map(([,v])=>Math.abs(v)),1);
   return`
@@ -1300,13 +1311,13 @@ function renderDash(){
     <div style="font-size:13px;font-weight:700;margin-bottom:10px">Recent Sales</div>
     <div style="background:var(--surf);border:1px solid var(--border);border-radius:var(--r);overflow:hidden">
       <table><thead><tr><th></th><th>TITLE</th><th>DATE</th><th>PRICE</th><th>MATCH</th></tr></thead>
-      <tbody>${sales.slice(0,DASH_RECENT_SALES).map(s=>{const ss=getS(s.id);const lp=ss.linkedPid?getP(ss.linkedPid):null;
+      <tbody>${sales.slice(0,DASH_RECENT_SALES).map(s=>{const ss=getS(s.id);const pids=getLinkedPids(s.id);const lp=pids.length?getP(pids[0]):null;
         return`<tr onclick="showSale('${s.id}')" style="cursor:pointer">
           <td class="cic">${thumb(ss.img||lp?.img||'')}</td>
           <td><div class="cn">${esc(ss.title)}</div></td>
           <td><span class="pr d">${ss.date}</span></td>
           <td><span class="pr g">${f$(ss.price)}</span></td>
-          <td>${ss.linkedPid?`<span class="sb linked">✓ linked</span>`:`<span class="sb unlinked">unlinked</span>`}</td>
+          <td>${pids.length?`<span class="sb linked">✓ linked</span>`:`<span class="sb unlinked">unlinked</span>`}</td>
         </tr>`;}).join('')}</tbody></table>
     </div>
   </div>`;
@@ -2042,13 +2053,13 @@ function renderSells(){
   let items=sales.map(s=>getS(s.id));
   if(f.q){const q=f.q;items=items.filter(s=>matchesSQ(s,q));}
   if(f.type) items=items.filter(s=>s.type===f.type);
-  if(f.linked==='yes') items=items.filter(s=>s.linkedPid);
-  if(f.linked==='no')  items=items.filter(s=>!s.linkedPid);
+  if(f.linked==='yes') items=items.filter(s=>getLinkedPids(s.id).length>0);
+  if(f.linked==='no')  items=items.filter(s=>getLinkedPids(s.id).length===0);
   items=applySortS(items,'sells');
   const pn=pgNum.sells||0,total=items.length;
   const page_items=items.slice(pn*_pageSize,(pn+1)*_pageSize);
   const allSales=sales.map(s=>getS(s.id));
-  const linked=allSales.filter(s=>s.linkedPid);
+  const linked=allSales.filter(s=>getLinkedPids(s.id).length>0);
   const linkRate=allSales.length?Math.round(linked.length/allSales.length*100):0;
   const tabBar=`<div style="display:flex;gap:8px;margin-bottom:14px;align-items:center">
     <button class="btn ${sellsTab==='sales'?'pri':'ghost'}" onclick="sellsTab='sales';render()" title="All eBay sold orders — link each to a purchase to compute P&L">📋 Sales Log (${sales.length})</button>
@@ -2084,8 +2095,9 @@ function renderSells(){
       ?`<div class="cards-grid">${page_items.length===0
           ?`<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--faint);font-family:var(--mono)">No sales found</div>`
           :page_items.map(ss=>{
-            const lp=ss.linkedPid?getP(ss.linkedPid):null;
-            const np=lp?netProfit(ss.price,ss.qty||1,lp.cost,ss.fees||0):null;
+            const _lPids=getLinkedPids(ss.id);const lp=_lPids.length?getP(_lPids[0]):null;
+            const _lCost=_lPids.reduce((s,p)=>(s+(getP(p)?.cost||0)),0);
+            const np=_lPids.length?netProfit(ss.price,ss.qty||1,_lCost,ss.fees||0):null;
             const imgSrc=ss.img||lp?.img||'';
             const imgTag=imgSrc?`<img class="lg-card-img" src="${esc(imgSrc)}" onerror="this.parentNode.innerHTML='<div class=lg-card-img-ph>&#x1F0CF;</div>'">`:`<div class="lg-card-img-ph">&#x1F0CF;</div>`;
             return`<div class="lg-card" onclick="showSale('${ss.id}')" style="cursor:pointer">
@@ -2115,10 +2127,11 @@ function renderSells(){
         ${buildSortTh('sells','roi','ROI%')}
       </tr></thead>
       <tbody>${page_items.map(ss=>{
-        const lp=ss.linkedPid?getP(ss.linkedPid):null;
+        const _lPids=getLinkedPids(ss.id);const lp=_lPids.length?getP(_lPids[0]):null;
+        const _lCost=_lPids.reduce((s,p)=>(s+(getP(p)?.cost||0)),0);
         const fee=ss.fees||0;
-        const np=lp?netProfit(ss.price,ss.qty||1,lp.cost,fee):null;
-        const roi=lp&&lp.cost>0?(np/lp.cost*100).toFixed(0)+'%':null;
+        const np=_lPids.length?netProfit(ss.price,ss.qty||1,_lCost,fee):null;
+        const roi=_lCost>0?(np/_lCost*100).toFixed(0)+'%':null;
         return`<tr onclick="showSale('${ss.id}')" style="cursor:pointer">
           <td class="cic">${thumb(ss.img||lp?.img||'')}</td>
           <td><div class="cn">${esc(ss.title)}</div><div class="cm">#${esc(ss.recordNum)}</div></td>
@@ -2150,13 +2163,13 @@ function renderPnlView(){
   const f=filt.pnl;
   const flips=[];
   for(const s of sales){
-    const ss=getS(s.id);if(!ss.linkedPid)continue;
-    const pp=getP(ss.linkedPid);
+    const ss=getS(s.id);const pids=getLinkedPids(s.id);if(!pids.length)continue;
+    const pp=getP(pids[0]); // primary purchase for display
+    const totalCost=pids.reduce((sum,pid)=>sum+(getP(pid)?.cost||0),0);
     const rev=ss.price*(ss.qty||1);
-    flips.push({sale:ss,purchase:pp,rev,pnl:rev-pp.cost});
+    flips.push({sale:ss,purchase:pp,totalCost,rev,pnl:rev-totalCost});
   }
-  // Compute net profit for each flip using the exact fee recorded on the sale
-  for(const fl of flips){fl.fee=fl.sale.fees||0;fl.netPnl=fl.rev-(fl.purchase.cost*(fl.sale.qty||1))-fl.fee;}
+  for(const fl of flips){fl.fee=fl.sale.fees||0;fl.netPnl=fl.rev-fl.totalCost-fl.fee;}
   let items=flips;
   if(f.q){const q=f.q;items=items.filter(fl=>matchesSQ(fl.sale,q)||matchesQ(fl.purchase,q));}
   const sk=sortState.pnl; items=[...items].sort((a,b)=>{
@@ -2174,7 +2187,7 @@ function renderPnlView(){
   const pn=pgNum.pnl||0,total=items.length;
   const page_items=items.slice(pn*PS,(pn+1)*PS);
   const allNetPnl=flips.reduce((a,f)=>a+(f.netPnl||0),0);
-  const allCogs=flips.reduce((a,fl)=>a+(fl.purchase.cost*(fl.sale.qty||1)),0);
+  const allCogs=flips.reduce((a,fl)=>a+fl.totalCost,0);
   const allRev=flips.reduce((a,fl)=>a+fl.rev,0);
   const allFees=flips.reduce((a,fl)=>a+(fl.fee||0),0);
   const winners=flips.filter(f=>(f.netPnl||0)>0),losers=flips.filter(f=>(f.netPnl||0)<=0);
@@ -2306,6 +2319,7 @@ function buildPurchasePanel(pid){
           <button class="btn pri" onclick="closePanel();lookupCard('${pid}')">💡 Value Lookup</button>
           <button class="btn" onclick="closePanel();buildListing('${pid}')">📝 Build Listing</button>
           ${p.itemId?`<a href="https://www.ebay.com/itm/${esc(p.itemId)}" target="_blank" class="btn" style="text-decoration:none">🔗 eBay</a>`:''}
+          ${p.is_lot?`<button class="btn" onclick="openSplitLot('${pid}')">✂ Split Lot</button>`:''}
           <button class="btn red" onclick="deletePurchase('${pid}')">🗑 Remove</button>
         </div>
       </div>
@@ -2465,8 +2479,10 @@ function deletePurchase(pid){
   if(!confirm('Remove "'+p.name.slice(0,60)+'" from inventory?\nThis cannot be undone.'))return;
   // Unlink any sales that pointed to this purchase
   sales.forEach(s => {
-    if ((saleEdits[s.id]?.linkedPid ?? s.linkedPid) === pid) {
-      editS(s.id, {linkedPid: null});
+    const lPids = getLinkedPids(s.id);
+    if (lPids.includes(pid)) {
+      const newPids = lPids.filter(p => p !== pid);
+      editS(s.id, {linkedPids: newPids, linkedPid: newPids[0] || null});
     }
   });
   const idx=purchases.findIndex(x=>x.id===pid);
@@ -2478,6 +2494,121 @@ function deletePurchase(pid){
   toast('Card removed');
   if(page==='card'){nav('inv');return;}
   closePanel();
+  render();
+}
+
+// ─────────────────────────────────────────────
+// SPLIT LOT
+// ─────────────────────────────────────────────
+function openSplitLot(pid) {
+  const p = getP(pid);
+  const n = p.lotQty || 2;
+  const perCard = p.costRaw ? (p.costRaw / n) : p.cost;
+  const S = (s, esc) => esc ? s.replace(/"/g,'&quot;') : s;
+
+  var rows = '';
+  for (var i = 0; i < n; i++) {
+    rows += '<div style="display:grid;grid-template-columns:1fr auto auto;gap:6px;align-items:center;margin-bottom:6px">'
+      + '<input class="sl-name field-input" value="' + esc(p.player||p.name) + '" placeholder="Card name" style="font-size:12px">'
+      + '<input class="sl-cost field-input mono" type="number" step="0.01" min="0" value="' + perCard.toFixed(2) + '" placeholder="Cost" style="width:72px;font-size:12px">'
+      + '<button style="background:none;border:none;color:var(--faint);cursor:pointer;font-size:14px;padding:0 4px" onclick="this.closest(\'div\').remove()" title="Remove row">✕</button>'
+      + '</div>';
+  }
+
+  openPanel(
+    '<div class="pn-head"><div class="pn-title">Split Lot into Individual Cards</div><button class="pn-close" onclick="closePanel()">✕</button></div>'
+    + '<div class="pn-body"><div style="display:grid;gap:12px">'
+    + '<div style="padding:8px 10px;background:var(--surf2);border-radius:var(--r);border:1px solid var(--border);font-size:11px;font-family:var(--mono);color:var(--dim)">'
+    + 'Original lot: <strong>' + esc(p.name) + '</strong> · ' + n + ' cards · ' + f$(p.costRaw||p.cost) + ' total'
+    + '</div>'
+    + '<div style="font-size:10px;font-family:var(--mono);color:var(--faint)">Edit each card name and cost. Add or remove rows as needed. The original lot entry will be deleted.</div>'
+    + '<div id="sl-rows" style="max-height:50vh;overflow-y:auto;padding-right:4px">' + rows + '</div>'
+    + '<button class="btn ghost sm" style="align-self:flex-start" onclick="_addSplitRow(' + perCard.toFixed(2) + ')">+ Add Row</button>'
+    + '<div style="display:flex;gap:8px;margin-top:4px">'
+    + '<button class="btn pri" onclick="saveSplitLot(\'' + pid + '\')">✔ Split & Create</button>'
+    + '<button class="btn ghost" onclick="closePanel()">Cancel</button>'
+    + '</div></div></div>'
+  );
+}
+
+function _addSplitRow(defaultCost) {
+  const c = document.getElementById('sl-rows');
+  if (!c) return;
+  const d = document.createElement('div');
+  d.style.cssText = 'display:grid;grid-template-columns:1fr auto auto;gap:6px;align-items:center;margin-bottom:6px';
+  d.innerHTML = '<input class="sl-name field-input" placeholder="Card name" style="font-size:12px">'
+    + '<input class="sl-cost field-input mono" type="number" step="0.01" min="0" value="' + (defaultCost||0).toFixed(2) + '" style="width:72px;font-size:12px">'
+    + '<button style="background:none;border:none;color:var(--faint);cursor:pointer;font-size:14px;padding:0 4px" onclick="this.closest(\'div\').remove()" title="Remove">✕</button>';
+  c.appendChild(d);
+  d.querySelector('.sl-name').focus();
+}
+
+function saveSplitLot(pid) {
+  const p = getP(pid);
+  const nameEls = document.querySelectorAll('#sl-rows .sl-name');
+  const costEls = document.querySelectorAll('#sl-rows .sl-cost');
+  if (!nameEls.length) { toast('Add at least one card'); return; }
+
+  const cards = [];
+  for (var i = 0; i < nameEls.length; i++) {
+    const name = nameEls[i].value.trim();
+    const cost = parseFloat(costEls[i].value) || 0;
+    if (!name) { toast('Each card needs a name'); return; }
+    cards.push({ name, cost });
+  }
+
+  // Create individual purchase entries, inheriting all fields from the lot
+  const newIds = [];
+  for (const card of cards) {
+    const newId = 'M' + Date.now().toString(36).slice(-5) + Math.floor(Math.random()*9999);
+    newIds.push(newId);
+    purchases.push({
+      id: newId,
+      name: card.name,
+      date: p.date || '',
+      cost: card.cost,
+      costRaw: card.cost,
+      lotQty: 1, qty: 1,
+      img: p.img || '',
+      itemId: p.itemId || '',
+      orderNum: p.orderNum || '',
+      seller: p.seller || '',
+      type: p.type || '',
+      player: p.player || '',
+      year: p.year || '',
+      brand: p.brand || '',
+      set: p.set || '',
+      comp: p.comp || '',
+      variation: p.variation || '',
+      serial: p.serial || '',
+      grade: p.grade || '',
+      is_auto: p.is_auto || false,
+      is_rc: p.is_rc || false,
+      is_lot: false,
+      notes: p.notes || '',
+      candidates: [],
+    });
+  }
+
+  // Re-link any sales that were linked to the lot → link to first new card (user can re-assign)
+  const linkedSales = salesForPid(pid);
+  if (linkedSales.length && newIds.length) {
+    for (const s of linkedSales) {
+      const curPids = getLinkedPids(s.id).filter(p => p !== pid);
+      const updatedPids = [...curPids, newIds[0]];
+      editS(s.id, { linkedPids: updatedPids, linkedPid: updatedPids[0] || null });
+    }
+  }
+
+  // Delete the original lot
+  const idx = purchases.findIndex(x => x.id === pid);
+  if (idx >= 0) purchases.splice(idx, 1);
+  delete purchaseEdits[pid];
+  try { localStorage.setItem('cb_purchaseEdits', JSON.stringify(purchaseEdits)); } catch(e) {}
+
+  persistPurchases();
+  closePanel();
+  toast('Split into ' + cards.length + ' cards ✓');
   render();
 }
 
@@ -2670,13 +2801,15 @@ function showSale(sid){
 
 function buildSalePanel(sid){
   const s=getS(sid);
-  const lp=s.linkedPid?getP(s.linkedPid):null;
-  const pnl=lp?(s.price*(s.qty||1))-lp.cost:null;
+  const linkedPids=getLinkedPids(sid);
+  const lp=linkedPids.length?getP(linkedPids[0]):null; // primary, for image
+  const totalLinkedCost=linkedPids.reduce((sum,pid)=>(sum+(getP(pid)?.cost||0)),0);
+  const pnl=linkedPids.length?(s.price*(s.qty||1))-totalLinkedCost:null;
   const cands=getTopCandidates(s, 10);
   const editing=_panelEdit['main'];
   return`
     <div class="pn-head">
-      ${(s.img||lp?.img)?`<img class="pn-img" src="${esc(s.img||lp.img)}" onerror="this.style.display='none'">`:`<div class="pn-img" style="display:flex;align-items:center;justify-content:center;font-size:32px">🃏</div>`}
+      ${(s.img||lp?.img)?`<img class="pn-img" src="${esc(s.img||lp?.img||'')}" onerror="this.style.display='none'">`:`<div class="pn-img" style="display:flex;align-items:center;justify-content:center;font-size:32px">🃏</div>`}
       <div style="flex:1;min-width:0">
         <div class="pn-title">${esc(s.title)}</div>
         <div class="pn-meta">${esc(s.date)} · Order #${esc(s.recordNum)}</div>
@@ -2700,23 +2833,30 @@ function buildSalePanel(sid){
           <button class="edit-btn" onclick="toggleSaleEdit('${sid}','fin')">${_panelEdit['fin']?'✕ Cancel':'✏ Edit'}</button>
         </div>
         <div id="sf-fin-${sid}">
-          ${_panelEdit['fin'] ? buildSaleFinEditForm(sid) : buildSaleFinReadView(sid,pnl,lp)}
+          ${_panelEdit['fin'] ? buildSaleFinEditForm(sid) : buildSaleFinReadView(sid,pnl,totalLinkedCost,linkedPids.length)}
         </div>
       </div>
 
       <div class="ps">
-        <div class="ps-title">Linked Purchase <button class="edit-btn" onclick="openRelinkPanel('${sid}')">🔗 Change</button></div>
-        ${lp?`<div class="mc active" onclick="closePanel();showPurchase('${lp.id}')" style="cursor:pointer">
-          ${lp.img?`<img class="mc-img" src="${esc(lp.img)}" onerror="this.style.display='none'">` :''}
-          <div class="mc-info"><div class="mc-name">${esc(lp.name)}</div>
-          <div class="mc-detail">${esc(lp.date)} · paid ${f$(lp.cost)} from ${esc(lp.seller)}</div></div>
-          <button class="btn xs red" onclick="event.stopPropagation();unlinkSale('${sid}');showSale('${sid}')">unlink</button>
-        </div>`:`<div class="alert warn">No purchase linked. <a href="#" onclick="openRelinkPanel('${sid}');return false" style="color:var(--gold)">Find a match →</a></div>`}
+        <div class="ps-title">Linked Purchases (${linkedPids.length})
+          <span style="display:flex;gap:5px">
+            <button class="edit-btn" onclick="openRelinkPanel('${sid}')">🔗 Add Link</button>
+            <button class="edit-btn" onclick="createPurchaseFromSale('${sid}')">⊕ Create</button>
+          </span>
+        </div>
+        ${linkedPids.length
+          ? linkedPids.map(pid=>{const lpp=getP(pid);if(!lpp)return'';return`<div class="mc active" onclick="closePanel();showPurchase('${pid}')" style="cursor:pointer;margin-bottom:6px">
+              ${lpp.img?`<img class="mc-img" src="${esc(lpp.img)}" onerror="this.style.display='none'">` :''}
+              <div class="mc-info"><div class="mc-name">${esc(lpp.name)}</div>
+              <div class="mc-detail">${esc(lpp.date)} · paid ${f$(lpp.cost)}${lpp.seller?` from ${esc(lpp.seller)}`:''}</div></div>
+              <button class="btn xs red" onclick="event.stopPropagation();unlinkSale('${sid}','${pid}');showSale('${sid}')">unlink</button>
+            </div>`;}).join('')
+          : `<div class="alert warn">No purchase linked. <a href="#" onclick="openRelinkPanel('${sid}');return false" style="color:var(--gold)">Find a match →</a> or <a href="#" onclick="createPurchaseFromSale('${sid}');return false" style="color:var(--gold)">create one</a></div>`}
       </div>
 
-      ${cands.length&&!s.linkedPid?`<div class="ps">
-        <div class="ps-title">Auto-Detected Candidates</div>
-        ${cands.map(c=>{const cp=getP(c.pid);if(!cp?.name)return'';
+      ${cands.length?`<div class="ps">
+        <div class="ps-title">Suggested Purchases</div>
+        ${cands.filter(c=>!linkedPids.includes(c.pid)).slice(0,5).map(c=>{const cp=getP(c.pid);if(!cp?.name)return'';
           return`<div class="mc candidate" onclick="linkSale('${sid}','${c.pid}');showSale('${sid}')">
             ${cp.img?`<img class="mc-img" src="${esc(cp.img)}" onerror="this.style.display='none'">` :''}
             <div class="mc-info"><div class="mc-name">${esc(cp.name)}</div>
@@ -2725,7 +2865,6 @@ function buildSalePanel(sid){
             <button class="btn xs" style="margin-top:4px">Link</button></div>
           </div>`;}).join('')}
       </div>`:''}
-    </div>`;
 }
 
 function buildSaleReadView(sid){
@@ -2783,18 +2922,18 @@ function buildSaleEditForm(sid){
   ${buildEditActions(`saveSaleFields('${sid}')`, `toggleSaleEdit('${sid}','main')`)}`;
 }
 
-function buildSaleFinReadView(sid,pnl,lp){
+function buildSaleFinReadView(sid,pnl,totalLinkedCost,linkedCount){
   const s=getS(sid);
   const fee_=s.fees||0;
-  const np_=lp?netProfit(s.price,s.qty||1,lp.cost,fee_):null;
+  const np_=linkedCount?netProfit(s.price,s.qty||1,totalLinkedCost,fee_):null;
   return`<div class="field-grid">
     <div class="field-item"><label>Sale Price</label><div class="field-val pr g">${f$(s.price)}</div></div>
     <div class="field-item"><label>Quantity</label><div class="field-val">${s.qty||1}</div></div>
     <div class="field-item"><label>Gross Revenue</label><div class="field-val pr g">${f$(s.price*(s.qty||1))}</div></div>
     ${fee_?`<div class="field-item"><label>eBay Fees</label><div class="field-val pr r">−${f$(fee_)}</div></div>`:''}
     ${s.buyerShip?`<div class="field-item"><label>Buyer Paid Ship</label><div class="field-val pr g">+${f$(s.buyerShip)}</div></div>`:''}
-    ${lp?`<div class="field-item"><label>Cost Basis</label><div class="field-val pr o">−${f$(lp.cost)}</div></div>`:''}
-    ${np_!==null?`<div class="field-item"><label>Net Profit</label><div class="field-val pr ${np_>=0?'g':'r'}" style="font-weight:700">${f$(np_)} (${lp.cost>0?((np_/lp.cost)*100).toFixed(0)+'%':'—'} ROI)</div></div>`:''}
+    ${linkedCount?`<div class="field-item"><label>Cost Basis${linkedCount>1?' ('+linkedCount+')'':''}</label><div class="field-val pr o">−${f$(totalLinkedCost)}</div></div>`:''}
+    ${np_!==null?`<div class="field-item"><label>Net Profit</label><div class="field-val pr ${np_>=0?'g':'r'}" style="font-weight:700">${f$(np_)} (${totalLinkedCost>0?((np_/totalLinkedCost)*100).toFixed(0)+'%':'—'} ROI)</div></div>`:''}
     <div class="field-item"><label>Sale Date</label><div class="field-val">${esc(s.date)}</div></div>
   </div>`;
 }
@@ -2859,27 +2998,37 @@ function saveSaleFinFields(sid){
 // ─────────────────────────────────────────────
 // LINKING / UNLINKING
 // ─────────────────────────────────────────────
-function linkSale(sid,pid){ editS(sid,{linkedPid:pid}); toast('Linked ✓'); render(); }
+function linkSale(sid, pid) {
+  const pids = getLinkedPids(sid);
+  if (pids.includes(pid)) { toast('Already linked to this purchase'); return; }
+  const newPids = [...pids, pid];
+  editS(sid, { linkedPids: newPids, linkedPid: newPids[0] });
+  toast('Linked ✓');
+  render();
+}
 function unlinkAllSales(){
-  const linked = sales.filter(s => getS(s.id).linkedPid);
+  const linked = sales.filter(s => getLinkedPids(s.id).length > 0);
   if (!linked.length) { toast('No linked sales to unlink'); return; }
   if (!confirm('Unlink ALL ' + linked.length + ' linked sales from their purchases?\n\nThis cannot be undone in bulk — you will need to re-run Auto-link or link them individually.')) return;
-  for (const s of linked) editS(s.id, {linkedPid: null});
+  for (const s of linked) editS(s.id, {linkedPids: [], linkedPid: null});
   toast('Unlinked ' + linked.length + ' sales ✓');
   render();
 }
-function unlinkSale(sid){
-  const prev=getS(sid).linkedPid;
-  editS(sid,{linkedPid:null});
-  window._lastUnlink={sid,pid:prev};
+function unlinkSale(sid, pid) {
+  const pids = getLinkedPids(sid);
+  const prevPids = [...pids];
+  const newPids = pid ? pids.filter(p => p !== pid) : [];
+  editS(sid, {linkedPids: newPids, linkedPid: newPids[0] || null});
+  window._lastUnlink = {sid, prevPids};
   const el=document.getElementById('toast');
   if(el){el.style.pointerEvents='auto';el.style.cursor='pointer';el.onclick=_lastUnlinkUndo;}
-  toast('Unlinked — tap to undo',4000);
+  toast('Unlinked — tap to undo', 4000);
   render();
 }
 function _lastUnlinkUndo(){
   if(window._lastUnlink){
-    editS(window._lastUnlink.sid,{linkedPid:window._lastUnlink.pid});
+    const {sid, prevPids} = window._lastUnlink;
+    editS(sid, {linkedPids: prevPids, linkedPid: prevPids[0] || null});
     window._lastUnlink=null;
     const el=document.getElementById('toast');
     if(el){el.onclick=null;el.style.pointerEvents='none';el.style.cursor='';}
@@ -2892,7 +3041,7 @@ function _lastUnlinkUndo(){
 // AUTO-LINK ALL
 // ─────────────────────────────────────────────
 function autoLinkAll() {
-  const unlinkedSales = sales.map(s => getS(s.id)).filter(s => !s.linkedPid);
+  const unlinkedSales = sales.map(s => getS(s.id)).filter(s => getLinkedPids(s.id).length === 0);
   if (unlinkedSales.length === 0) { toast('All sales are already linked ✓'); return; }
 
   // Purchases already claimed by existing links
@@ -2928,7 +3077,7 @@ function autoLinkAll() {
 
   if (!confirm(`Auto-link ${links.length} of ${unlinkedSales.length} unlinked sales to their best-matching purchases?\n\nYou can review and adjust any links afterward.`)) return;
 
-  for (const lk of links) editS(lk.sid, { linkedPid: lk.pid });
+  for (const lk of links) { const prev=getLinkedPids(lk.sid); const np=[...prev,lk.pid]; editS(lk.sid,{linkedPids:np,linkedPid:np[0]}); }
   toast(`Auto-linked ${links.length} sale${links.length===1?'':'s'} ✓`);
   render();
 }
@@ -2938,6 +3087,7 @@ function autoLinkAll() {
 // ─────────────────────────────────────────────
 function openRelinkPanel(sid){
   const s=getS(sid);
+  const cands_linkedPids=getLinkedPids(sid);
   const cands=getTopCandidates(s, 10);
   const saleExtras = [
     s.platform ? `<span style="color:var(--dim)">Platform:</span> ${esc(s.platform)}` : '',
@@ -2961,16 +3111,16 @@ function openRelinkPanel(sid){
     </div>
     <div class="pn-body">
       <div class="ps">
-        <div class="ps-title">Current Link</div>
-        ${s.linkedPid?`<div class="mc active" style="margin-bottom:8px">
-          ${getP(s.linkedPid)?.img?`<img class="mc-img" src="${esc(getP(s.linkedPid).img)}" onerror="this.style.display='none'">` :''}
-          <div class="mc-info"><div class="mc-name">${esc(getP(s.linkedPid)?.name||'')}</div></div>
-          <button class="btn xs red" onclick="unlinkSale('${sid}');openRelinkPanel('${sid}')">Remove</button>
-        </div>`:`<div style="color:var(--faint);font-size:12px;font-family:var(--mono)">No purchase linked.</div>`}
+        <div class="ps-title">Currently Linked (${cands_linkedPids.length})</div>
+        ${cands_linkedPids.length
+          ? cands_linkedPids.map(pid=>{const lpp=getP(pid);if(!lpp)return'';return`<div class="mc active" style="margin-bottom:6px">
+              ${lpp.img?`<img class="mc-img" src="${esc(lpp.img)}" onerror="this.style.display='none'">`:''}<div class="mc-info"><div class="mc-name">${esc(lpp.name)}</div><div class="mc-detail">${esc(lpp.date)} · ${f$(lpp.cost)}</div></div>
+              <button class="btn xs red" onclick="unlinkSale('${sid}','${pid}');openRelinkPanel('${sid}')">Remove</button></div>`;}).join('')
+          : `<div style="color:var(--faint);font-size:12px;font-family:var(--mono)">No purchase linked.</div>`}
       </div>
       ${cands.length?`<div class="ps"><div class="ps-title">Top Candidates</div>
         <div style="font-size:10px;font-family:var(--mono);color:var(--faint);margin-bottom:8px;line-height:1.7">Match confidence: <span style="color:var(--green)">■ 70+ strong</span> · <span style="color:var(--gold)">■ 50–69 possible</span> · <span style="color:var(--orange)">■ &lt;50 weak</span></div>
-        ${cands.map(c=>{const cp=getP(c.pid);if(!cp?.name)return'';const isL=s.linkedPid===c.pid;
+        ${cands.map(c=>{const cp=getP(c.pid);if(!cp?.name)return'';const isL=cands_linkedPids.includes(c.pid);
           return`<div class="mc ${isL?'active':'candidate'}">
             ${cp.img?`<img class="mc-img" src="${esc(cp.img)}" onerror="this.style.display='none'">` :''}
             <div class="mc-info"><div class="mc-name">${esc(cp.name)}</div>
@@ -3010,14 +3160,15 @@ function renderRelinkResultsHtml(sid,q){
            (pp.set||'').toLowerCase().includes(qq)||(pp.year||'').includes(qq);
   }).slice(0,25);
   if(!results.length)return`<div style="color:var(--faint);font-size:12px;font-family:var(--mono)">No purchases found</div>`;
-  return results.map(p=>{const pp=getP(p.id);const isL=s.linkedPid===p.id;
+  const curPids=getLinkedPids(sid);
+  return results.map(p=>{const pp=getP(p.id);const isL=curPids.includes(p.id);
     return`<div class="sr-item ${isL?'linked-item':''}">
       ${pp.img?`<img class="sr-img" src="${esc(pp.img)}" onerror="this.style.display='none'">`:`<div class="sr-img" style="display:flex;align-items:center;justify-content:center;font-size:14px">🃏</div>`}
       <div class="sr-info"><div class="sr-name">${esc(pp.name)}</div>
       <div class="sr-meta">${esc(pp.date)} · ${f$(pp.cost)} · ${esc(pp.seller)}</div>${parsedTags(pp)}</div>
       <div class="sr-actions">
-        ${isL?`<button class="btn xs red" onclick="unlinkSale('${sid}');openRelinkPanel('${sid}')">Unlink</button>`
-             :`<button class="btn xs" onclick="linkSale('${sid}','${p.id}');showSale('${sid}')">Link</button>`}
+        ${isL?`<button class="btn xs red" onclick="unlinkSale('${sid}','${p.id}');openRelinkPanel('${sid}')">Unlink</button>`
+             :`<button class="btn xs" onclick="linkSale('${sid}','${p.id}');openRelinkPanel('${sid}')">Link</button>`}
       </div>
     </div>`;}).join('');
 }
@@ -4718,6 +4869,7 @@ function confirmSalesTemplateCsvRow(i) {
     notes: r.notes || '',
     ebayTitle: r.ebayTitle || '',
     img: r.img || '',
+    linkedPids: [],
     linkedPid: null,
     candidates: [],
   });
@@ -4934,6 +5086,7 @@ function confirmSalesCsvRow(i) {
     totalBuyerPaid: parseFloat(r.totalBuyerPaid) || 0,
     fees: parseFloat(r.fees) || 0,
     netRevenue: parseFloat(r.netRevenue) || 0,
+    linkedPids: [],
     linkedPid: null,
     candidates: []
   });
@@ -5176,7 +5329,7 @@ function bulkDeleteSelected() {
   if(!confirm(`Remove ${ids.length} card${ids.length===1?'':'s'} from inventory?\nThis cannot be undone.`))return;
   ids.forEach(pid=>{
     sales.forEach(s=>{
-      if((saleEdits[s.id]?.linkedPid??s.linkedPid)===pid) editS(s.id,{linkedPid:null});
+      const _lp=getLinkedPids(s.id);if(_lp.includes(pid)){const _np=_lp.filter(p=>p!==pid);editS(s.id,{linkedPids:_np,linkedPid:_np[0]||null});}
     });
     const idx=purchases.findIndex(x=>x.id===pid);
     if(idx>=0)purchases.splice(idx,1);
@@ -5420,13 +5573,40 @@ function showListingResult(pid,text){
 // MANUAL ADD — PURCHASE
 // ─────────────────────────────────────────────
 var _addPurchaseFromListing = '';
+var _createPurchaseForSaleId = '';
+
+function createPurchaseFromSale(sid) {
+  const s = getS(sid);
+  _createPurchaseForSaleId = sid;
+  openAddPurchase({
+    name:      s.ebayTitle || s.title || '',
+    img:       s.img || '',
+    cost:      '',       // user fills in purchase price
+    player:    s.player || '',
+    year:      s.year   || '',
+    set:       s.set    || '',
+    variation: s.variation || '',
+    serial:    s.serial || '',
+    grade:     s.grade  || '',
+    type:      s.type   || '',
+    _fromSale: true,
+  });
+}
 
 function openAddPurchase(prefill) {
   _addPurchaseFromListing = (prefill && prefill.fromListingId) ? prefill.fromListingId : '';
-  var name  = (prefill && prefill.name)  ? prefill.name  : '';
-  var img   = (prefill && prefill.img)   ? prefill.img   : '';
-  var cost  = (prefill && prefill.cost)  ? String(prefill.cost) : '';
-  var itemId = (prefill && prefill.itemId) ? prefill.itemId : '';
+  if (!(prefill && prefill._fromSale)) _createPurchaseForSaleId = '';
+  var name      = (prefill && prefill.name)      ? prefill.name      : '';
+  var img       = (prefill && prefill.img)       ? prefill.img       : '';
+  var cost      = (prefill && prefill.cost)      ? String(prefill.cost) : '';
+  var itemId    = (prefill && prefill.itemId)    ? prefill.itemId    : '';
+  var pPlayer   = (prefill && prefill.player)    ? prefill.player    : '';
+  var pYear     = (prefill && prefill.year)      ? prefill.year      : '';
+  var pSet      = (prefill && prefill.set)       ? prefill.set       : '';
+  var pVar      = (prefill && prefill.variation) ? prefill.variation : '';
+  var pSerial   = (prefill && prefill.serial)    ? prefill.serial    : '';
+  var pGrade    = (prefill && prefill.grade)     ? prefill.grade     : '';
+  var pType     = (prefill && prefill.type)      ? prefill.type      : '';
   var typeOpts = ['Soccer','Pokémon','NFL','MLB','Marvel','NBA','Yu-Gi-Oh','Other'].map(function(t){
     return '<option value="' + t + '">' + t + '</option>';
   }).join('');
@@ -5460,34 +5640,34 @@ function openAddPurchase(prefill) {
 
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
     + '<div><label style="font-size:10px;font-family:var(--mono);color:var(--dim);display:block;margin-bottom:3px">TYPE</label>'
-    + '<select id="ap-type" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:var(--r2);font-size:12px;font-family:var(--ui);outline:none"><option value="">— select —</option>' + typeOpts + '</select>'
+    + '<select id="ap-type" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:var(--r2);font-size:12px;font-family:var(--ui);outline:none"><option value="">— select —</option>' + typeOpts.replace('>' + pType + '<', ' selected>' + pType + '<') + '</select>'
     + '</div>'
     + '<div><label style="font-size:10px;font-family:var(--mono);color:var(--dim);display:block;margin-bottom:3px">PLAYER / SUBJECT</label>'
-    + '<input id="ap-player" placeholder="e.g. Erling Haaland" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:var(--r2);font-size:12px;font-family:var(--ui);outline:none">'
+    + '<input id="ap-player" value="' + esc(pPlayer) + '" placeholder="e.g. Erling Haaland" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:var(--r2);font-size:12px;font-family:var(--ui);outline:none">'
     + '</div></div>'
 
     + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">'
     + '<div><label style="font-size:10px;font-family:var(--mono);color:var(--dim);display:block;margin-bottom:3px">YEAR</label>'
-    + '<input id="ap-year" placeholder="2024" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:var(--r2);font-size:12px;font-family:var(--mono);outline:none">'
+    + '<input id="ap-year" value="' + esc(pYear) + '" placeholder="2024" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:var(--r2);font-size:12px;font-family:var(--mono);outline:none">'
     + '</div>'
     + '<div><label style="font-size:10px;font-family:var(--mono);color:var(--dim);display:block;margin-bottom:3px">BRAND</label>'
     + '<input id="ap-brand" placeholder="Panini" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:var(--r2);font-size:12px;font-family:var(--ui);outline:none">'
     + '</div>'
     + '<div><label style="font-size:10px;font-family:var(--mono);color:var(--dim);display:block;margin-bottom:3px">SET</label>'
-    + '<input id="ap-set" placeholder="Prizm" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:var(--r2);font-size:12px;font-family:var(--ui);outline:none">'
+    + '<input id="ap-set" value="' + esc(pSet) + '" placeholder="Prizm" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:var(--r2);font-size:12px;font-family:var(--ui);outline:none">'
     + '</div></div>'
 
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
     + '<div><label style="font-size:10px;font-family:var(--mono);color:var(--dim);display:block;margin-bottom:3px">VARIATION / PARALLEL</label>'
-    + '<input id="ap-var" placeholder="Gold Prizm" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:var(--r2);font-size:12px;font-family:var(--ui);outline:none">'
+    + '<input id="ap-var" value="' + esc(pVar) + '" placeholder="Gold Prizm" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:var(--r2);font-size:12px;font-family:var(--ui);outline:none">'
     + '</div>'
     + '<div><label style="font-size:10px;font-family:var(--mono);color:var(--dim);display:block;margin-bottom:3px">SERIAL / PRINT RUN</label>'
-    + '<input id="ap-serial" placeholder="e.g. 10 (for /10)" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:var(--r2);font-size:12px;font-family:var(--mono);outline:none">'
+    + '<input id="ap-serial" value="' + esc(pSerial) + '" placeholder="e.g. 10 (for /10)" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:var(--r2);font-size:12px;font-family:var(--mono);outline:none">'
     + '</div></div>'
 
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
     + '<div><label style="font-size:10px;font-family:var(--mono);color:var(--dim);display:block;margin-bottom:3px">GRADE</label>'
-    + '<input id="ap-grade" placeholder="PSA 10, BGS 9.5, Raw..." style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:var(--r2);font-size:12px;font-family:var(--mono);outline:none">'
+    + '<input id="ap-grade" value="' + esc(pGrade) + '" placeholder="PSA 10, BGS 9.5, Raw..." style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:var(--r2);font-size:12px;font-family:var(--mono);outline:none">'
     + '</div>'
     + '<div><label style="font-size:10px;font-family:var(--mono);color:var(--dim);display:block;margin-bottom:3px">IMAGE URL</label>'
     + '<input id="ap-img" value="' + esc(img) + '" placeholder="https://..." style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:var(--r2);font-size:12px;font-family:var(--mono);outline:none">'
@@ -5556,6 +5736,15 @@ function saveNewPurchase() {
   if (_addPurchaseFromListing && lastId) {
     linkListingTo(_addPurchaseFromListing, lastId);
     _addPurchaseFromListing = '';
+  }
+  if (_createPurchaseForSaleId && lastId) {
+    linkSale(_createPurchaseForSaleId, lastId);
+    var _sid = _createPurchaseForSaleId;
+    _createPurchaseForSaleId = '';
+    persistPurchases();
+    toast('Purchase created and linked ✓');
+    showSale(_sid);
+    return;
   }
   closePanel();
   toast(qty > 1 ? 'Added ' + qty + ' copies: ' + name.slice(0, 30) : 'Added: ' + name.slice(0, 40));
@@ -5656,6 +5845,7 @@ function saveNewSale() {
     serial: g('as-serial').trim(),
     grade: g('as-grade').trim(),
     is_auto: false,
+    linkedPids: [],
     linkedPid: null,
     candidates: []
   });
