@@ -2865,6 +2865,8 @@ function buildSalePanel(sid){
             <button class="btn xs" style="margin-top:4px">Link</button></div>
           </div>`;}).join('')}
       </div>`:''}
+    </div>
+  `;
 }
 
 function buildSaleReadView(sid){
@@ -2932,7 +2934,7 @@ function buildSaleFinReadView(sid,pnl,totalLinkedCost,linkedCount){
     <div class="field-item"><label>Gross Revenue</label><div class="field-val pr g">${f$(s.price*(s.qty||1))}</div></div>
     ${fee_?`<div class="field-item"><label>eBay Fees</label><div class="field-val pr r">−${f$(fee_)}</div></div>`:''}
     ${s.buyerShip?`<div class="field-item"><label>Buyer Paid Ship</label><div class="field-val pr g">+${f$(s.buyerShip)}</div></div>`:''}
-    ${linkedCount?`<div class="field-item"><label>Cost Basis${linkedCount>1?' ('+linkedCount+')'':''}</label><div class="field-val pr o">−${f$(totalLinkedCost)}</div></div>`:''}
+    ${linkedCount?`<div class="field-item"><label>Cost Basis${linkedCount>1?' ('+linkedCount+')':''}</label><div class="field-val pr o">−${f$(totalLinkedCost)}</div></div>`:''}
     ${np_!==null?`<div class="field-item"><label>Net Profit</label><div class="field-val pr ${np_>=0?'g':'r'}" style="font-weight:700">${f$(np_)} (${totalLinkedCost>0?((np_/totalLinkedCost)*100).toFixed(0)+'%':'—'} ROI)</div></div>`:''}
     <div class="field-item"><label>Sale Date</label><div class="field-val">${esc(s.date)}</div></div>
   </div>`;
