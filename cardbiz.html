@@ -612,18 +612,39 @@ function importBackup(file) {
   reader.onload = function(e) {
     try {
       const data = JSON.parse(e.target.result);
-      if (Array.isArray(data.purchases) && data.purchases.length) { purchases = data.purchases; persistPurchases(); }
-      if (Array.isArray(data.sales) && data.sales.length) { sales = data.sales; persistSales(); }
+      const isV1 = (data.version === 1) || (!data.purchases && !data.sales);
+      let missingData = false;
+
+      if (Array.isArray(data.purchases) && data.purchases.length) {
+        purchases = data.purchases; persistPurchases();
+      } else {
+        missingData = true;
+      }
+      if (Array.isArray(data.sales) && data.sales.length) {
+        sales = data.sales; persistSales();
+      }
       if (data.purchaseEdits) { purchaseEdits = data.purchaseEdits; try{localStorage.setItem('cb_purchaseEdits',JSON.stringify(purchaseEdits));}catch(ex){} }
       if (data.saleEdits) { saleEdits = data.saleEdits; try{localStorage.setItem('cb_saleEdits',JSON.stringify(saleEdits));}catch(ex){} }
       if (data.valueLookups) { valueLookups = data.valueLookups; persistLookups(); }
       if (data.activeListings) { activeListings = data.activeListings; persistListings(); }
-      const pCount = purchases.length, sCount = sales.length;
+
       const pe = Object.keys(purchaseEdits).length, se = Object.keys(saleEdits).length;
-      toast(`Backup restored — ${pCount} purchases, ${sCount} sales, ${pe} purchase edits, ${se} sale edits`);
+      if (missingData) {
+        const why = isV1 ? 'This is a v1 backup — it only contains edits, not the raw purchase/sale records.' : 'purchases/sales array was empty in this file.';
+        openPanel(`<div class="pn-head"><div class="pn-title" style="color:var(--orange)">⚠ Partial Restore</div><button class="pn-close" onclick="closePanel()">✕</button></div>
+          <div style="padding:20px 24px;display:grid;gap:14px">
+            <div class="alert warn" style="font-size:12px;line-height:1.7">${esc(why)}<br><br>
+              <strong>${pe} purchase edits and ${se} sale edits were restored</strong> (player overrides, linked PIDs, tags, etc.).<br><br>
+              Your actual inventory and sales records were <strong>not</strong> in this backup file — you will need to re-import your purchase CSV and sales CSV to restore them. Your edits will automatically re-apply on top once those records are present.
+            </div>
+            <button class="btn pri" onclick="closePanel()">Got it</button>
+          </div>`);
+      } else {
+        toast(`Backup restored — ${purchases.length} purchases, ${sales.length} sales, ${pe} purchase edits, ${se} sale edits`);
+      }
       render();
     } catch(ex) {
-      toast('Import failed: invalid backup file');
+      toast('Import failed: ' + ex.message);
     }
   };
   reader.readAsText(file);
