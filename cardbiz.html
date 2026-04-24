@@ -6010,6 +6010,7 @@ document.addEventListener('keydown', e => {
   document.addEventListener('mouseover', e => {
     const el = e.target;
     if (el.tagName !== 'IMG') return;
+    if (el.classList.contains('lg-card-img')) return;
     const src = el.src;
     if (!src || !src.startsWith('http')) return;
     clearTimeout(hideTimer);
@@ -6025,6 +6026,7 @@ document.addEventListener('keydown', e => {
   document.addEventListener('mouseout', e => {
     const el = e.target;
     if (el.tagName !== 'IMG') return;
+    if (el.classList.contains('lg-card-img')) return;
     const src = el.src;
     if (!src || !src.startsWith('http')) return;
     hideTimer = setTimeout(() => { tip.style.display = 'none'; }, 80);
