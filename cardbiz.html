@@ -226,6 +226,33 @@ select.recat-sel:hover{border-color:var(--gold)}
 .bar-lbl{font-size:10px;font-family:var(--mono);color:var(--dim);margin-bottom:2px;display:flex;justify-content:space-between}
 .bar-track{height:5px;background:var(--surf2);border-radius:3px;overflow:hidden}
 .bar-fill{height:100%;border-radius:3px;transition:width .5s}
+/* Dashboard trend chart */
+.trend-wrap{display:flex;gap:3px;align-items:flex-end;height:90px;padding-bottom:22px;position:relative}
+.trend-col{display:flex;flex-direction:column;align-items:center;gap:2px;flex:1;min-width:0;height:100%;justify-content:flex-end;cursor:pointer}
+.trend-bars{width:100%;flex:1;display:flex;flex-direction:column;justify-content:flex-end;position:relative;border-radius:3px 3px 0 0;overflow:hidden}
+.trend-rev{width:100%;background:rgba(0,229,170,.18);position:absolute;bottom:0;border-radius:3px 3px 0 0}
+.trend-pnl{width:100%;position:absolute;bottom:0;border-radius:3px 3px 0 0;opacity:.9}
+.trend-lbl{font-size:7px;font-family:var(--mono);color:var(--faint);text-align:center;white-space:nowrap;position:absolute;bottom:0;width:100%}
+/* Sortable dash table */
+.dash-tbl{width:100%;border-collapse:collapse;font-size:11px}
+.dash-tbl th{font-size:8px;font-family:var(--mono);color:var(--faint);letter-spacing:.8px;text-transform:uppercase;padding:7px 8px;text-align:right;border-bottom:1px solid var(--border);cursor:pointer;user-select:none;white-space:nowrap}
+.dash-tbl th:first-child{text-align:left}
+.dash-tbl th:hover{color:var(--text)}
+.dash-tbl th.sort-active{color:var(--gold)}
+.dash-tbl td{padding:6px 8px;border-bottom:1px solid var(--border);text-align:right;font-family:var(--mono);font-size:11px}
+.dash-tbl td:first-child{text-align:left;font-family:inherit;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dash-tbl tr:last-child td{border-bottom:none}
+.dash-tbl tbody tr:hover{background:var(--surf2);cursor:pointer}
+/* Category bars */
+.cat-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.cat-lbl{width:90px;flex-shrink:0;font-size:10px;font-family:var(--mono);color:var(--dim);text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cat-bars{flex:1;display:flex;flex-direction:column;gap:2px}
+.cat-bar{height:6px;border-radius:3px;min-width:3px}
+.cat-stats{width:130px;flex-shrink:0;display:flex;gap:6px;justify-content:flex-end;font-size:9px;font-family:var(--mono)}
+/* Inventory aging rows */
+.aging-row{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)}
+.aging-row:last-child{border-bottom:none}
+.aging-days{flex-shrink:0;font-size:10px;font-family:var(--mono);font-weight:700;padding:2px 6px;border-radius:3px;background:var(--surf2)}
 
 /* ── REVENUE CALENDAR ── */
 .rev-cal-wrap{max-height:380px;overflow-y:auto;padding-right:2px}
@@ -570,6 +597,7 @@ let currentCardPid = '', _cardPhotoIdx = 0;
 let sortState = { inv: {col:'date',dir:-1}, buys: {col:'date',dir:-1}, sells: {col:'date',dir:-1}, pnl: {col:'pnl',dir:1}, imp: {col:'date',dir:-1} };
 let sellsTab = 'sales'; // 'sales' | 'pnl'
 let _dashPlayerMode = 'rev'; // 'rev' | 'roi'
+let _dashPlayerSort = 'pnl'; // column to sort player table by
 // persist market lookups: pid -> {avgPrice, lowPrice, highPrice, confidence, recentSales, ts}
 let valueLookups = JSON.parse(localStorage.getItem('cb_lookups')||'{}');
 function persistLookups() { try { localStorage.setItem('cb_lookups', JSON.stringify(valueLookups)); } catch(e){} }
@@ -1259,95 +1287,304 @@ function renderDash(){
   const roi=soldCost>0?((pnl/soldCost)*100).toFixed(0)+'%':'—';
   const _MN={Jan:1,Feb:2,Mar:3,Apr:4,May:5,Jun:6,Jul:7,Aug:8,Sep:9,Oct:10,Nov:11,Dec:12};
   function _parseDate(d){if(!d)return null;let m;if((m=d.match(/^([A-Za-z]{3})-(\d{1,2})-(\d{2,4})$/))!==null){const yr=m[3].length===2?2000+parseInt(m[3]):parseInt(m[3]);return{yr,mo:_MN[m[1]]||0,dy:parseInt(m[2])};}if((m=d.match(/^([A-Za-z]{3})\s+(\d{1,2}),\s*(\d{4})$/))!==null){return{yr:parseInt(m[3]),mo:_MN[m[1]]||0,dy:parseInt(m[2])};}return null;}
-  const monthly={};
-  const daily={};
-  for(const s of sales){const ss=getS(s.id);const raw=ss.date||'';const amt=ss.price*(ss.qty||1);const pd=_parseDate(raw);if(pd&&pd.mo){const ym=`${pd.yr}-${String(pd.mo).padStart(2,'0')}`;monthly[ym]=(monthly[ym]||0)+amt;const dk=`${pd.yr}-${String(pd.mo).padStart(2,'0')}-${String(pd.dy).padStart(2,'0')}`;daily[dk]=(daily[dk]||0)+amt;}else if(raw){const m=raw.slice(0,7);if(m)monthly[m]=(monthly[m]||0)+amt;}}
-  const plrev={};
-  for(const s of sales){const ss=getS(s.id);const pl=ss.player;if(!pl||pl.length<3)continue;plrev[pl]=(plrev[pl]||0)+ss.price*(ss.qty||1);}
-  const topPl=Object.entries(plrev).sort((a,b)=>b[1]-a[1]).slice(0,DASH_TOP_PLAYERS);
-  const maxPl=topPl[0]?.[1]||1;
-  const plroiMap={};
-  for(const s of sales){const ss=getS(s.id);const pl=ss.player;const pids=getLinkedPids(s.id);if(!pl||pl.length<3||!pids.length)continue;const cost=pids.reduce((sum,pid)=>sum+(getP(pid)?.cost||0),0);const np=netProfit(ss.price,ss.qty||1,cost,ss.fees||0);if(!plroiMap[pl])plroiMap[pl]={net:0,cost:0};plroiMap[pl].net+=np;plroiMap[pl].cost+=cost;}
-  const topPlROI=Object.entries(plroiMap).filter(([,v])=>v.cost>0).map(([pl,v])=>[pl,v.net/v.cost*100]).sort((a,b)=>b[1]-a[1]).slice(0,DASH_TOP_PLAYERS);
-  const maxPlROI=Math.max(...topPlROI.map(([,v])=>Math.abs(v)),1);
-  return`
-  <div class="topbar"><div class="pg-title">Dashboard</div></div>
-  <div class="content">
-    <div class="sg">
-      <div class="sc"><div class="sc-lbl">Purchases</div><div class="sc-val o">${purchases.length.toLocaleString()}</div><div class="sc-sub">cards bought</div></div>
-      <div class="sc"><div class="sc-lbl">Total Cost</div><div class="sc-val">${f$(cost)}</div><div class="sc-sub">per-card prices</div></div>
-      <div class="sc"><div class="sc-lbl">Sales</div><div class="sc-val o">${sales.length}</div><div class="sc-sub">${sales.reduce((a,s)=>a+getS(s.id).qty,0)} units</div></div>
-      <div class="sc"><div class="sc-lbl">Revenue</div><div class="sc-val g">${f$(rev)}</div><div class="sc-sub">gross</div></div>
-      <div class="sc"><div class="sc-lbl">Net P&L (after fees)</div><div class="sc-val ${pnl>=0?'g':'r'}">${f$(pnl)}</div><div class="sc-sub">${linked} linked flips</div></div>
-      ${(()=>{const invMkt=purchases.filter(p=>!sp.has(p.id)).reduce((a,p)=>a+(valueLookups[p.id]?.avgPrice||0),0);const hasStale=purchases.some(p=>!sp.has(p.id)&&valueLookups[p.id]?.ts&&Math.floor((Date.now()-valueLookups[p.id].ts)/86400000)>7);return`<div class="sc"><div class="sc-lbl">Inventory</div><div class="sc-val b">${purchases.length-sp.size}</div><div class="sc-sub">${f$(invCost())} cost${invMkt?` · ${f$(invMkt)} est. market`:''}${hasStale?`<span style="color:var(--orange)"> (some values stale)</span>`:''}`;})()}</div></div>
-      <div class="sc"><div class="sc-lbl">Unlinked Sales</div><div class="sc-val ${unlinked>0?'r':'g'}">${unlinked}</div><div class="sc-sub">need matching</div></div>
-      <div class="sc"><div class="sc-lbl">Link Rate</div><div class="sc-val">${Math.round(linked/Math.max(sales.length,1)*100)}%</div><div class="sc-sub">${linked}/${sales.length}</div></div>
-      <div class="sc"><div class="sc-lbl">Total ROI</div><div class="sc-val ${pnl>=0?'g':'r'}">${roi}</div><div class="sc-sub">net ÷ cost sold</div></div>
-    </div>
-    ${(()=>{
-      const now_mc=new Date();
-      if(!_calYear)_calYear=now_mc.getFullYear();
-      if(!_calMonth)_calMonth=now_mc.getMonth()+1;
-      const mcYr=_calYear,mcMo=_calMonth;
-      const mcYm=`${mcYr}-${String(mcMo).padStart(2,'0')}`;
-      const mcLabel=new Date(mcYr,mcMo-1,1).toLocaleString('default',{month:'long',year:'numeric'});
-      const mcFirstDow=new Date(mcYr,mcMo-1,1).getDay();
-      const mcDim=new Date(mcYr,mcMo,0).getDate();
-      const mcIncome=monthly[mcYm]||0;
-      const mcPrevMo=mcMo===1?12:mcMo-1,mcPrevYr=mcMo===1?mcYr-1:mcYr;
-      const mcNextMo=mcMo===12?1:mcMo+1,mcNextYr=mcMo===12?mcYr+1:mcYr;
-      const todayStr=`${now_mc.getFullYear()}-${String(now_mc.getMonth()+1).padStart(2,'0')}-${String(now_mc.getDate()).padStart(2,'0')}`;
-      let mcCells='';
-      for(let i=0;i<mcFirstDow;i++)mcCells+=`<div class="mini-cal-day empty-d"></div>`;
-      for(let d=1;d<=mcDim;d++){const k=`${mcYm}-${String(d).padStart(2,'0')}`;const sAmt=daily[k]||0;const isToday=k===todayStr;mcCells+=`<div class="mini-cal-day${isToday?' today':sAmt>0?' has-data':''}" onclick="showCalDay('${k}','${mcLabel.toUpperCase()}')"><span class="mini-cal-dnum">${d}</span>${sAmt>0?`<span class="mini-cal-damt">${f$(sAmt)}</span>`:''}</div>`;}
-      return`<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:20px">
-      <div>
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-          <div style="font-size:13px;font-weight:700">Monthly Calendar</div>
-          <button class="btn sm ghost" onclick="nav('cal')" style="font-size:11px">Full Calendar →</button>
-        </div>
-        <div class="mini-cal-wrap">
-          <div class="mini-cal-hdr">
-            <div class="mini-cal-nav">
-              <button class="mini-cal-nbtn" onclick="_calMonth=${mcPrevMo};_calYear=${mcPrevYr};render()">◀</button>
-              <span class="mini-cal-title">${mcLabel}</span>
-              <button class="mini-cal-nbtn" onclick="_calMonth=${mcNextMo};_calYear=${mcNextYr};render()">▶</button>
-            </div>
-            ${mcIncome?`<span style="font-size:11px;font-family:var(--mono);color:var(--green);font-weight:700">${f$(mcIncome)}</span>`:''}
-          </div>
-          <div class="mini-cal-dow">${['S','M','T','W','T','F','S'].map(d=>`<span>${d}</span>`).join('')}</div>
-          <div class="mini-cal-grid">${mcCells}</div>
-        </div>
-      </div>
-      <div>
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-          <div style="font-size:13px;font-weight:700">${_dashPlayerMode==='rev'?'Top Players by Revenue':'Top Players by ROI%'}</div>
-          <div style="display:flex;gap:4px">
-            <button class="btn xs ${_dashPlayerMode==='rev'?'pri':'ghost'}" onclick="_dashPlayerMode='rev';render()" title="Sort by total revenue">Revenue</button>
-            <button class="btn xs ${_dashPlayerMode==='roi'?'pri':'ghost'}" onclick="_dashPlayerMode='roi';render()" title="Sort by return on investment %">ROI%</button>
-          </div>
-        </div>
-        <div style="background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:14px">
-          ${_dashPlayerMode==='rev'
-            ?(topPl.length>=2?topPl.map(([pl,rv])=>`<div class="bar-wrap"><div class="bar-lbl"><span>${esc(pl)}</span><span style="color:var(--gold)">${f$(rv)}</span></div><div class="bar-track"><div class="bar-fill" style="width:${(rv/maxPl*100).toFixed(1)}%;background:var(--gold)"></div></div></div>`).join(''):`<div style="color:var(--faint);font-size:11px;font-family:var(--mono)">Add player names to sales to see revenue by player.</div>`)
-            :(topPlROI.length>=1?topPlROI.map(([pl,roi])=>`<div class="bar-wrap"><div class="bar-lbl"><span>${esc(pl)}</span><span style="color:${roi>=0?'var(--green)':'var(--red)'};font-family:var(--mono);font-weight:700">${roi.toFixed(0)}%</span></div><div class="bar-track"><div class="bar-fill" style="width:${(Math.abs(roi)/maxPlROI*100).toFixed(1)}%;background:${roi>=0?'var(--green)':'var(--red)'}"></div></div></div>`).join(''):`<div style="color:var(--faint);font-size:11px;font-family:var(--mono)">Link sales to purchases to see ROI by player.</div>`)}
-        </div>
-      </div>
-    </div>`;
-    })()}
-    <div style="font-size:13px;font-weight:700;margin-bottom:10px">Recent Sales</div>
-    <div style="background:var(--surf);border:1px solid var(--border);border-radius:var(--r);overflow:hidden">
-      <table><thead><tr><th></th><th>TITLE</th><th>DATE</th><th>PRICE</th><th>MATCH</th></tr></thead>
-      <tbody>${sales.slice(0,DASH_RECENT_SALES).map(s=>{const ss=getS(s.id);const pids=getLinkedPids(s.id);const lp=pids.length?getP(pids[0]):null;
-        return`<tr onclick="showSale('${s.id}')" style="cursor:pointer">
-          <td class="cic">${thumb(ss.img||lp?.img||'')}</td>
-          <td><div class="cn">${esc(ss.title)}</div></td>
-          <td><span class="pr d">${ss.date}</span></td>
-          <td><span class="pr g">${f$(ss.price)}</span></td>
-          <td>${pids.length?`<span class="sb linked">✓ linked</span>`:`<span class="sb unlinked">unlinked</span>`}</td>
-        </tr>`;}).join('')}</tbody></table>
-    </div>
-  </div>`;
+  function _toTs(pd){return pd?new Date(pd.yr,pd.mo-1,pd.dy).getTime():null;}
+
+  // ── Build per-player, per-category, per-set maps ──────────────
+  const plMap={};  // player -> {inv:{n,cost}, sold:{n,rev,pnl,cost}, hold:[days]}
+  const catMap={}; // type   -> same shape
+  const setMap={};  // set    -> same shape
+  function _ensure(m,k){if(!m[k])m[k]={inv:{n:0,cost:0},sold:{n:0,rev:0,pnl:0,cost:0},hold:[]};return m[k];}
+
+  // Inventory pass
+  for(const p of purchases){
+    if(sp.has(p.id))continue;
+    const pp=getP(p.id);
+    const pl=pp.player||''; const ty=pp.type||'Other'; const st=pp.set||'';
+    if(pl.length>=2){const e=_ensure(plMap,pl);e.inv.n++;e.inv.cost+=pp.cost||0;}
+    {const e=_ensure(catMap,ty);e.inv.n++;e.inv.cost+=pp.cost||0;}
+    if(st){const e=_ensure(setMap,st);e.inv.n++;e.inv.cost+=pp.cost||0;}
+  }
+
+  // Sales pass
+  const monthly={},daily={},pnlMonthly={};
+  let totalHoldDays=0,holdCount=0,avgSalePrice=0;
+  for(const s of sales){
+    const ss=getS(s.id);
+    const raw=ss.date||'';const amt=ss.price*(ss.qty||1);
+    const pd=_parseDate(raw);
+    avgSalePrice+=ss.price;
+    if(pd&&pd.mo){
+      const ym=pd.yr+'-'+String(pd.mo).padStart(2,'0');
+      monthly[ym]=(monthly[ym]||0)+amt;
+      const dk=ym+'-'+String(pd.dy).padStart(2,'0');
+      daily[dk]=(daily[dk]||0)+amt;
+    }
+    const pids=getLinkedPids(s.id);
+    const sCost=pids.reduce((sum,pid)=>sum+(getP(pid)?.cost||0),0);
+    const np=pids.length?netProfit(ss.price,ss.qty||1,sCost,ss.fees||0):null;
+    if(pd&&pd.mo){
+      const ym=pd.yr+'-'+String(pd.mo).padStart(2,'0');
+      if(np!==null)pnlMonthly[ym]=(pnlMonthly[ym]||0)+np;
+    }
+    // Hold time
+    if(pids.length&&pd){
+      const buyPd=_parseDate(getP(pids[0])?.date||'');
+      if(buyPd){const days=Math.round((_toTs(pd)-_toTs(buyPd))/86400000);if(days>=0){totalHoldDays+=days;holdCount++;}}
+    }
+    const pl=ss.player||''; const ty=ss.type||'Other'; const st=ss.set||'';
+    if(pl.length>=2){
+      const e=_ensure(plMap,pl);
+      e.sold.n+=(ss.qty||1);e.sold.rev+=amt;
+      if(np!==null){e.sold.pnl+=np;e.sold.cost+=sCost;}
+    }
+    {const e=_ensure(catMap,ty);e.sold.n+=(ss.qty||1);e.sold.rev+=amt;if(np!==null){e.sold.pnl+=np;e.sold.cost+=sCost;}}
+    if(st){const e=_ensure(setMap,st);e.sold.n+=(ss.qty||1);e.sold.rev+=amt;if(np!==null){e.sold.pnl+=np;e.sold.cost+=sCost;}}
+  }
+  const avgHold=holdCount>0?Math.round(totalHoldDays/holdCount):null;
+  const avgSale=sales.length>0?avgSalePrice/sales.length:0;
+
+  // ── Player table rows ─────────────────────────────────────────
+  const plRows=Object.entries(plMap).map(([pl,d])=>{
+    const roi=d.sold.cost>0?d.sold.pnl/d.sold.cost*100:null;
+    return{pl,inv:d.inv,sold:d.sold,roi};
+  });
+  const _sortFns={pnl:(a,b)=>b.sold.pnl-a.sold.pnl,rev:(a,b)=>b.sold.rev-a.sold.rev,
+    inv:(a,b)=>b.inv.cost-a.inv.cost,roi:(a,b)=>(b.roi||0)-(a.roi||0),n:(a,b)=>b.sold.n-a.sold.n};
+  plRows.sort(_sortFns[_dashPlayerSort]||_sortFns.pnl);
+
+  // ── Category data ─────────────────────────────────────────────
+  const catRows=Object.entries(catMap).sort((a,b)=>b[1].sold.rev-a[1].sold.rev);
+  const maxCatRev=Math.max(...catRows.map(([,d])=>d.sold.rev),1);
+  const maxCatInv=Math.max(...catRows.map(([,d])=>d.inv.cost),1);
+
+  // ── Top sets by P&L ───────────────────────────────────────────
+  const setRows=Object.entries(setMap)
+    .filter(([,d])=>d.sold.cost>0||d.sold.rev>0)
+    .map(([st,d])=>({st,rev:d.sold.rev,pnl:d.sold.pnl,n:d.sold.n,
+      roi:d.sold.cost>0?d.sold.pnl/d.sold.cost*100:null,invN:d.inv.n,invCost:d.inv.cost}))
+    .sort((a,b)=>b.pnl-a.pnl).slice(0,10);
+
+  // ── Inventory aging (unsold, oldest first) ─────────────────────
+  const agingCards=purchases.filter(p=>!sp.has(p.id)).map(p=>{
+    const pp=getP(p.id);
+    const pd=_parseDate(pp.date||'');
+    const days=pd?Math.round((Date.now()-_toTs(pd))/86400000):null;
+    return{pp,days};
+  }).filter(x=>x.days!==null).sort((a,b)=>b.days-a.days).slice(0,8);
+
+  // ── 12-month trend ────────────────────────────────────────────
+  const now=new Date();
+  const trendMonths=[];
+  for(let i=11;i>=0;i--){
+    const d=new Date(now.getFullYear(),now.getMonth()-i,1);
+    const ym=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+    const lbl=d.toLocaleString('default',{month:'short'});
+    trendMonths.push({ym,lbl,rev:monthly[ym]||0,pnl:pnlMonthly[ym]??null});
+  }
+  const maxTrendRev=Math.max(...trendMonths.map(m=>m.rev),1);
+  // ── Mini calendar cells ───────────────────────────────────────
+  const now_mc=new Date();
+  if(!_calYear)_calYear=now_mc.getFullYear();
+  if(!_calMonth)_calMonth=now_mc.getMonth()+1;
+  const mcYr=_calYear,mcMo=_calMonth;
+  const mcYm=mcYr+'-'+String(mcMo).padStart(2,'0');
+  const mcLabel=new Date(mcYr,mcMo-1,1).toLocaleString('default',{month:'long',year:'numeric'});
+  const mcFirstDow=new Date(mcYr,mcMo-1,1).getDay();
+  const mcDim=new Date(mcYr,mcMo,0).getDate();
+  const mcIncome=monthly[mcYm]||0;
+  const mcPrevMo=mcMo===1?12:mcMo-1,mcPrevYr=mcMo===1?mcYr-1:mcYr;
+  const mcNextMo=mcMo===12?1:mcMo+1,mcNextYr=mcMo===12?mcYr+1:mcYr;
+  const todayStr=now_mc.getFullYear()+'-'+String(now_mc.getMonth()+1).padStart(2,'0')+'-'+String(now_mc.getDate()).padStart(2,'0');
+  let mcCells='';
+  for(let i=0;i<mcFirstDow;i++)mcCells+='<div class="mini-cal-day empty-d"></div>';
+  for(let d=1;d<=mcDim;d++){const k=mcYm+'-'+String(d).padStart(2,'0');const sAmt=daily[k]||0;const isToday=k===todayStr;mcCells+='<div class="mini-cal-day'+(isToday?' today':sAmt>0?' has-data':'')+'" onclick="showCalDay(\''+k+'\',\''+mcLabel.toUpperCase()+'\')"><span class="mini-cal-dnum">'+d+'</span>'+(sAmt>0?'<span class="mini-cal-damt">'+f$(sAmt)+'</span>':'')+'</div>';}
+
+  // ── Trend chart bars ──────────────────────────────────────────
+  const trendBars=trendMonths.map(m=>{
+    const rh=m.rev>0?Math.max(4,Math.round(m.rev/maxTrendRev*72)):0;
+    const ph=m.pnl!==null&&m.rev>0?Math.round(Math.abs(m.pnl)/maxTrendRev*72):0;
+    const pc=m.pnl===null?'var(--faint)':m.pnl>=0?'var(--green)':'var(--red)';
+    const tip='Revenue: '+f$(m.rev)+(m.pnl!==null?' · P&L: '+f$(m.pnl):'');
+    return '<div class="trend-col" title="'+m.lbl+' — '+tip+'">'
+      +'<div class="trend-bars" style="height:72px">'
+      +(rh>0?'<div class="trend-rev" style="height:'+rh+'px"></div>':'')
+      +(ph>0?'<div class="trend-pnl" style="height:'+ph+'px;background:'+pc+'"></div>':'')
+      +'</div>'
+      +'<div class="trend-lbl">'+m.lbl+'</div>'
+      +'</div>';
+  }).join('');
+
+  // ── Player table rows HTML ────────────────────────────────────
+  const thS=k=>'<th class="'+(k===_dashPlayerSort?'sort-active':'')+'" onclick="_dashPlayerSort=\''+k+'\';render()">';
+  const plTableRows=plRows.slice(0,20).map(r=>{
+    const roiStr=r.roi!==null?r.roi.toFixed(0)+'%':'—';
+    const roiColor=r.roi===null?'var(--faint)':r.roi>=0?'var(--green)':'var(--red)';
+    return '<tr onclick="filt.inv.q=\''+r.pl.replace(/'/g,"\\'")+'\';\'+\'filt.sells.q=\''+r.pl.replace(/'/g,"\\'")+'\';nav(\'inv\');render()">'
+      +'<td title="'+esc(r.pl)+'">'+esc(r.pl)+'</td>'
+      +'<td>'+(r.inv.n?r.inv.n:'—')+'</td>'
+      +'<td style="color:var(--orange)">'+(r.inv.cost>0?f$(r.inv.cost):'—')+'</td>'
+      +'<td>'+(r.sold.n||'—')+'</td>'
+      +'<td style="color:var(--green)">'+(r.sold.rev>0?f$(r.sold.rev):'—')+'</td>'
+      +'<td style="color:'+(r.sold.pnl>=0?'var(--green)':'var(--red)')+'">'+f$(r.sold.pnl)+'</td>'
+      +'<td style="color:'+roiColor+';font-weight:700">'+roiStr+'</td>'
+      +'</tr>';
+  }).join('');
+
+  // ── Category rows HTML ────────────────────────────────────────
+  const catHtml=catRows.map(([ty,d])=>{
+    const revW=d.sold.rev>0?(d.sold.rev/maxCatRev*100).toFixed(1):0;
+    const invW=d.inv.cost>0?(d.inv.cost/maxCatInv*100).toFixed(1):0;
+    const roiStr=d.sold.cost>0?(d.sold.pnl/d.sold.cost*100).toFixed(0)+'%':'—';
+    const roiColor=d.sold.cost>0?(d.sold.pnl>=0?'var(--green)':'var(--red)'):'var(--faint)';
+    return '<div class="cat-row">'
+      +'<div class="cat-lbl">'+esc(ty)+'</div>'
+      +'<div class="cat-bars">'
+      +(revW>0?'<div class="cat-bar" style="width:'+revW+'%;background:rgba(0,229,170,.5)" title="Revenue '+f$(d.sold.rev)+'"></div>':'')
+      +(invW>0?'<div class="cat-bar" style="width:'+invW+'%;background:rgba(245,200,66,.35)" title="In stock '+f$(d.inv.cost)+'"></div>':'')
+      +'</div>'
+      +'<div class="cat-stats">'
+      +'<span style="color:var(--gold)" title="Inventory cost">'+f$(d.inv.cost)+'</span>'
+      +'<span style="color:var(--green)" title="Revenue">'+f$(d.sold.rev)+'</span>'
+      +'<span style="color:'+roiColor+';font-weight:700" title="ROI">'+roiStr+'</span>'
+      +'</div>'
+      +'</div>';
+  }).join('');
+
+  // ── Set performance rows ──────────────────────────────────────
+  const setHtml=setRows.map(r=>{
+    const roiStr=r.roi!==null?r.roi.toFixed(0)+'%':'—';
+    const roiColor=r.roi===null?'var(--faint)':r.roi>=0?'var(--green)':'var(--red)';
+    return '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border)">'
+      +'<div style="flex:1;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+esc(r.st)+'">'+esc(r.st)+'</div>'
+      +'<div style="font-size:10px;font-family:var(--mono);color:var(--faint);flex-shrink:0">×'+r.n+'</div>'
+      +'<div style="font-size:11px;font-family:var(--mono);color:var(--green);flex-shrink:0;width:72px;text-align:right">'+f$(r.rev)+'</div>'
+      +'<div style="font-size:11px;font-family:var(--mono);color:'+(r.pnl>=0?'var(--green)':'var(--red)')+';flex-shrink:0;width:72px;text-align:right">'+f$(r.pnl)+'</div>'
+      +'<div style="font-size:11px;font-family:var(--mono);color:'+roiColor+';font-weight:700;flex-shrink:0;width:46px;text-align:right">'+roiStr+'</div>'
+      +'</div>';
+  }).join('');
+
+  // ── Aging inventory ───────────────────────────────────────────
+  const agingHtml=agingCards.map(({pp,days})=>{
+    const urgColor=days>180?'var(--red)':days>90?'var(--orange)':'var(--faint)';
+    return '<div class="aging-row" onclick="showCardPage(\''+pp.id+'\')" style="cursor:pointer">'
+      +'<div class="aging-days" style="color:'+urgColor+'">'+days+'d</div>'
+      +'<div style="flex:1;min-width:0"><div style="font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(pp.player||pp.name)+'</div>'
+      +'<div style="font-size:9px;font-family:var(--mono);color:var(--faint)">'+esc(pp.set||pp.type||'')+(pp.variation?' · '+esc(pp.variation):'')+'</div></div>'
+      +'<div style="font-size:11px;font-family:var(--mono);color:var(--gold);flex-shrink:0">'+f$(pp.cost)+'</div>'
+      +'</div>';
+  }).join('');
+
+  return '<div class="topbar"><div class="pg-title">Dashboard</div></div>'
+  +'<div class="content">'
+
+  // Stats row
+  +'<div class="sg">'
+  +'<div class="sc"><div class="sc-lbl">Purchases</div><div class="sc-val o">'+purchases.length.toLocaleString()+'</div><div class="sc-sub">cards bought</div></div>'
+  +'<div class="sc"><div class="sc-lbl">Total Cost</div><div class="sc-val">'+f$(cost)+'</div><div class="sc-sub">per-card basis</div></div>'
+  +'<div class="sc"><div class="sc-lbl">Revenue</div><div class="sc-val g">'+f$(rev)+'</div><div class="sc-sub">'+sales.length+' sales</div></div>'
+  +'<div class="sc"><div class="sc-lbl">Net P&amp;L</div><div class="sc-val '+(pnl>=0?'g':'r')+'">'+f$(pnl)+'</div><div class="sc-sub">'+linked+' linked flips</div></div>'
+  +'<div class="sc"><div class="sc-lbl">Total ROI</div><div class="sc-val '+(pnl>=0?'g':'r')+'">'+roi+'</div><div class="sc-sub">net ÷ cost sold</div></div>'
+  +(()=>{const invMkt=purchases.filter(p=>!sp.has(p.id)).reduce((a,p)=>a+(valueLookups[p.id]?.avgPrice||0),0);return'<div class="sc"><div class="sc-lbl">Inventory</div><div class="sc-val b">'+(purchases.length-sp.size)+'</div><div class="sc-sub">'+f$(invCost())+' cost'+(invMkt?' · '+f$(invMkt)+' est.':'')+'</div></div>';})()
+  +'<div class="sc"><div class="sc-lbl">Avg Sale Price</div><div class="sc-val">'+f$(avgSale)+'</div><div class="sc-sub">per transaction</div></div>'
+  +(avgHold!==null?'<div class="sc"><div class="sc-lbl">Avg Hold Time</div><div class="sc-val '+(avgHold>60?'r':avgHold>30?'o':'g')+'">'+avgHold+'d</div><div class="sc-sub">buy → sell</div></div>':'')
+  +'<div class="sc"><div class="sc-lbl">Unlinked Sales</div><div class="sc-val '+(unlinked>0?'r':'g')+'">'+unlinked+'</div><div class="sc-sub">'+Math.round(linked/Math.max(sales.length,1)*100)+'% linked</div></div>'
+  +'</div>'
+
+  // 12-month P&L trend
+  +'<div style="background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:20px">'
+  +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
+  +'<div style="font-size:13px;font-weight:700">12-Month Revenue &amp; P&amp;L Trend</div>'
+  +'<div style="display:flex;gap:12px;font-size:9px;font-family:var(--mono);color:var(--faint)">'
+  +'<span><span style="display:inline-block;width:10px;height:8px;background:rgba(0,229,170,.18);border-radius:2px;margin-right:3px"></span>Revenue</span>'
+  +'<span><span style="display:inline-block;width:10px;height:8px;background:var(--green);border-radius:2px;margin-right:3px;opacity:.9"></span>P&amp;L</span>'
+  +'</div></div>'
+  +'<div class="trend-wrap">'+trendBars+'</div>'
+  +'</div>'
+
+  // Player intelligence table
+  +'<div style="background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:20px;overflow-x:auto">'
+  +'<div style="font-size:13px;font-weight:700;margin-bottom:10px">Player Intelligence <span style="font-size:10px;font-family:var(--mono);color:var(--faint);font-weight:400">— click column to sort · click row to filter</span></div>'
+  +(plRows.length?'<table class="dash-tbl"><thead><tr>'
+  +'<th style="text-align:left;cursor:default">Player</th>'
+  +thS('inv')+'In Stock</th>'
+  +thS('inv')+'Cost Basis</th>'
+  +thS('n')+'Sold</th>'
+  +thS('rev')+'Revenue</th>'
+  +thS('pnl')+'Net P&amp;L</th>'
+  +thS('roi')+'ROI%</th>'
+  +'</tr></thead><tbody>'+plTableRows+'</tbody></table>'
+  :'<div style="color:var(--faint);font-size:11px;font-family:var(--mono)">Add player names to sales and purchases to see breakdowns here.</div>')
+  +'</div>'
+
+  // Category breakdown + Set performance
+  +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:20px">'
+
+  // Category
+  +'<div style="background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:14px">'
+  +'<div style="font-size:13px;font-weight:700;margin-bottom:4px">Earnings by Category</div>'
+  +'<div style="display:flex;gap:12px;font-size:8px;font-family:var(--mono);color:var(--faint);margin-bottom:10px">'
+  +'<span style="color:rgba(0,229,170,.7)">■ Revenue</span>'
+  +'<span style="color:rgba(245,200,66,.6)">■ In Stock</span>'
+  +'<span>· right: stock cost / revenue / ROI</span>'
+  +'</div>'
+  +(catHtml||'<div style="color:var(--faint);font-size:11px;font-family:var(--mono)">No data yet.</div>')
+  +'</div>'
+
+  // Top sets
+  +'<div style="background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:14px">'
+  +'<div style="font-size:13px;font-weight:700;margin-bottom:4px">Top Sets by P&amp;L</div>'
+  +'<div style="display:flex;gap:16px;font-size:8px;font-family:var(--mono);color:var(--faint);margin-bottom:10px;justify-content:flex-end">'
+  +'<span>×qty</span><span style="width:72px;text-align:right">Revenue</span><span style="width:72px;text-align:right">P&amp;L</span><span style="width:46px;text-align:right">ROI%</span>'
+  +'</div>'
+  +(setHtml?'<div style="max-height:280px;overflow-y:auto">'+setHtml+'</div>'
+  :'<div style="color:var(--faint);font-size:11px;font-family:var(--mono)">Link sales to purchases to see set performance.</div>')
+  +'</div>'
+  +'</div>'
+
+  // Mini calendar + Inventory aging
+  +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:20px">'
+
+  // Calendar
+  +'<div>'
+  +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
+  +'<div style="font-size:13px;font-weight:700">Monthly Calendar</div>'
+  +'<button class="btn sm ghost" onclick="nav(\'cal\')" style="font-size:11px">Full Calendar →</button>'
+  +'</div>'
+  +'<div class="mini-cal-wrap">'
+  +'<div class="mini-cal-hdr"><div class="mini-cal-nav">'
+  +'<button class="mini-cal-nbtn" onclick="_calMonth='+mcPrevMo+';_calYear='+mcPrevYr+';render()">◀</button>'
+  +'<span class="mini-cal-title">'+mcLabel+'</span>'
+  +'<button class="mini-cal-nbtn" onclick="_calMonth='+mcNextMo+';_calYear='+mcNextYr+';render()">▶</button>'
+  +'</div>'+(mcIncome?'<span style="font-size:11px;font-family:var(--mono);color:var(--green);font-weight:700">'+f$(mcIncome)+'</span>':'')+'</div>'
+  +'<div class="mini-cal-dow">'+['S','M','T','W','T','F','S'].map(d=>'<span>'+d+'</span>').join('')+'</div>'
+  +'<div class="mini-cal-grid">'+mcCells+'</div>'
+  +'</div>'
+  +'</div>'
+
+  // Aging inventory
+  +'<div style="background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:14px">'
+  +'<div style="font-size:13px;font-weight:700;margin-bottom:4px">Inventory Aging</div>'
+  +'<div style="font-size:9px;font-family:var(--mono);color:var(--faint);margin-bottom:10px">Oldest unsold cards — '
+  +'<span style="color:var(--orange)">orange &gt;90d</span> · <span style="color:var(--red)">red &gt;180d</span></div>'
+  +(agingHtml||'<div style="color:var(--faint);font-size:11px;font-family:var(--mono)">No dated inventory found.</div>')
+  +'</div>'
+  +'</div>'
+
+  // Recent sales
+  +'<div style="font-size:13px;font-weight:700;margin-bottom:10px">Recent Sales</div>'
+  +'<div style="background:var(--surf);border:1px solid var(--border);border-radius:var(--r);overflow:hidden">'
+  +'<table><thead><tr><th></th><th>TITLE</th><th>DATE</th><th>PRICE</th><th>MATCH</th></tr></thead>'
+  +'<tbody>'+sales.slice(0,DASH_RECENT_SALES).map(s=>{const ss=getS(s.id);const pids=getLinkedPids(s.id);const lp=pids.length?getP(pids[0]):null;
+    return '<tr onclick="showSale(\''+s.id+'\')" style="cursor:pointer">'
+      +'<td class="cic">'+thumb(ss.img||lp?.img||'')+'</td>'
+      +'<td><div class="cn">'+esc(ss.title)+'</div></td>'
+      +'<td><span class="pr d">'+ss.date+'</span></td>'
+      +'<td><span class="pr g">'+f$(ss.price)+'</span></td>'
+      +'<td>'+(pids.length?'<span class="sb linked">✓ linked</span>':'<span class="sb unlinked">unlinked</span>')+'</td>'
+      +'</tr>';}).join('')
+  +'</tbody></table>'
+  +'</div>'
+  +'</div>';
 }
 
 // ─────────────────────────────────────────────
