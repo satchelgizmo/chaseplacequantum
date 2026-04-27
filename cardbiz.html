@@ -1288,42 +1288,32 @@ function renderPag(total,cur,key){
 }
 
 // ─────────────────────────────────────────────
-// DASHBOARD
+// DASHBOARD — shared computation
 // ─────────────────────────────────────────────
-function renderDash(){
-  const sp=soldPids();
-  const pnl=linkedPnl(),rev=totalRev(),cost=totalCost();
-  const linked=sales.filter(s=>getLinkedPids(s.id).length>0).length;
-  const unlinked=sales.length-linked;
-  const soldCost=sales.reduce((a,s)=>{const pids=getLinkedPids(s.id);return a+pids.reduce((sum,pid)=>sum+(getP(pid)?.cost||0),0);},0);
-  const roi=soldCost>0?((pnl/soldCost)*100).toFixed(0)+'%':'—';
+function _computeDash(){
   const _MN={Jan:1,Feb:2,Mar:3,Apr:4,May:5,Jun:6,Jul:7,Aug:8,Sep:9,Oct:10,Nov:11,Dec:12};
-  function _parseDate(d){if(!d)return null;let m;if((m=d.match(/^([A-Za-z]{3})-(\d{1,2})-(\d{2,4})$/))!==null){const yr=m[3].length===2?2000+parseInt(m[3]):parseInt(m[3]);return{yr,mo:_MN[m[1]]||0,dy:parseInt(m[2])};}if((m=d.match(/^([A-Za-z]{3})\s+(\d{1,2}),\s*(\d{4})$/))!==null){return{yr:parseInt(m[3]),mo:_MN[m[1]]||0,dy:parseInt(m[2])};}return null;}
-  function _toTs(pd){return pd?new Date(pd.yr,pd.mo-1,pd.dy).getTime():null;}
-
-  // ── Build per-player, per-category, per-set maps ──────────────
-  const plMap={};  // player -> {inv:{n,cost}, sold:{n,rev,pnl,cost}, hold:[days]}
-  const catMap={}; // type   -> same shape
-  const setMap={};  // set    -> same shape
-  function _ensure(m,k){if(!m[k])m[k]={inv:{n:0,cost:0},sold:{n:0,rev:0,pnl:0,cost:0},hold:[]};return m[k];}
-
-  // Inventory pass
+  function _pd(d){if(!d)return null;let m;if((m=d.match(/^([A-Za-z]{3})-(\d{1,2})-(\d{2,4})$/))!==null){const yr=m[3].length===2?2000+parseInt(m[3]):parseInt(m[3]);return{yr,mo:_MN[m[1]]||0,dy:parseInt(m[2])};}if((m=d.match(/^([A-Za-z]{3})\s+(\d{1,2}),\s*(\d{4})$/))!==null){return{yr:parseInt(m[3]),mo:_MN[m[1]]||0,dy:parseInt(m[2])};}return null;}
+  function _ts(pd){return pd?new Date(pd.yr,pd.mo-1,pd.dy).getTime():null;}
+  const sp=soldPids();
+  const plMap={},catMap={},setMap={},setMapM={};
+  function _ensure(m,k){if(!m[k])m[k]={inv:{n:0,cost:0},sold:{n:0,rev:0,pnl:0,cost:0}};return m[k];}
   for(const p of purchases){
     if(sp.has(p.id))continue;
     const pp=getP(p.id);
-    const pl=pp.player||''; const ty=pp.type||'Other'; const st=pp.set||'';
+    const pl=pp.player||'';const ty=pp.type||'Other';
+    const setKey=(pp.year?pp.year+' ':'')+pp.set;
+    const setKeyM=pp.set||'';
     if(pl.length>=2){const e=_ensure(plMap,pl);e.inv.n++;e.inv.cost+=pp.cost||0;}
     {const e=_ensure(catMap,ty);e.inv.n++;e.inv.cost+=pp.cost||0;}
-    if(st){const e=_ensure(setMap,st);e.inv.n++;e.inv.cost+=pp.cost||0;}
+    if(pp.set){_ensure(setMap,setKey).inv.n++;setMap[setKey].inv.cost+=pp.cost||0;}
+    if(setKeyM){_ensure(setMapM,setKeyM).inv.n++;setMapM[setKeyM].inv.cost+=pp.cost||0;}
   }
-
-  // Sales pass
   const monthly={},daily={},pnlMonthly={};
   let totalHoldDays=0,holdCount=0,avgSalePrice=0;
   for(const s of sales){
     const ss=getS(s.id);
     const raw=ss.date||'';const amt=ss.price*(ss.qty||1);
-    const pd=_parseDate(raw);
+    const pd=_pd(raw);
     avgSalePrice+=ss.price;
     if(pd&&pd.mo){
       const ym=pd.yr+'-'+String(pd.mo).padStart(2,'0');
@@ -1334,67 +1324,388 @@ function renderDash(){
     const pids=getLinkedPids(s.id);
     const sCost=pids.reduce((sum,pid)=>sum+(getP(pid)?.cost||0),0);
     const np=pids.length?netProfit(ss.price,ss.qty||1,sCost,ss.fees||0):null;
-    if(pd&&pd.mo){
-      const ym=pd.yr+'-'+String(pd.mo).padStart(2,'0');
-      if(np!==null)pnlMonthly[ym]=(pnlMonthly[ym]||0)+np;
-    }
-    // Hold time
-    if(pids.length&&pd){
-      const buyPd=_parseDate(getP(pids[0])?.date||'');
-      if(buyPd){const days=Math.round((_toTs(pd)-_toTs(buyPd))/86400000);if(days>=0){totalHoldDays+=days;holdCount++;}}
-    }
-    const pl=ss.player||''; const ty=ss.type||'Other'; const st=ss.set||'';
-    if(pl.length>=2){
-      const e=_ensure(plMap,pl);
-      e.sold.n+=(ss.qty||1);e.sold.rev+=amt;
-      if(np!==null){e.sold.pnl+=np;e.sold.cost+=sCost;}
-    }
+    if(pd&&pd.mo){const ym=pd.yr+'-'+String(pd.mo).padStart(2,'0');if(np!==null)pnlMonthly[ym]=(pnlMonthly[ym]||0)+np;}
+    if(pids.length&&pd){const buyPd=_pd(getP(pids[0])?.date||'');if(buyPd){const days=Math.round((_ts(pd)-_ts(buyPd))/86400000);if(days>=0){totalHoldDays+=days;holdCount++;}}}
+    const pl=ss.player||'';const ty=ss.type||'Other';
+    const setKey=(ss.year?ss.year+' ':'')+ss.set;
+    const setKeyM=ss.set||'';
+    if(pl.length>=2){const e=_ensure(plMap,pl);e.sold.n+=(ss.qty||1);e.sold.rev+=amt;if(np!==null){e.sold.pnl+=np;e.sold.cost+=sCost;}}
     {const e=_ensure(catMap,ty);e.sold.n+=(ss.qty||1);e.sold.rev+=amt;if(np!==null){e.sold.pnl+=np;e.sold.cost+=sCost;}}
-    if(st){const e=_ensure(setMap,st);e.sold.n+=(ss.qty||1);e.sold.rev+=amt;if(np!==null){e.sold.pnl+=np;e.sold.cost+=sCost;}}
+    if(ss.set){_ensure(setMap,setKey).sold.n+=(ss.qty||1);setMap[setKey].sold.rev+=amt;if(np!==null){setMap[setKey].sold.pnl+=np;setMap[setKey].sold.cost+=sCost;}}
+    if(setKeyM){_ensure(setMapM,setKeyM).sold.n+=(ss.qty||1);setMapM[setKeyM].sold.rev+=amt;if(np!==null){setMapM[setKeyM].sold.pnl+=np;setMapM[setKeyM].sold.cost+=sCost;}}
   }
   const avgHold=holdCount>0?Math.round(totalHoldDays/holdCount):null;
   const avgSale=sales.length>0?avgSalePrice/sales.length:0;
+  const aging=purchases.filter(p=>!sp.has(p.id)).map(p=>{
+    const pp=getP(p.id);const pd=_pd(pp.date||'');
+    const days=pd?Math.round((Date.now()-_ts(pd))/86400000):null;
+    return{pp,days};
+  }).filter(x=>x.days!==null).sort((a,b)=>b.days-a.days);
+  return{sp,plMap,catMap,setMap,setMapM,monthly,daily,pnlMonthly,avgHold,avgSale,aging,_pd,_ts};
+}
 
-  // ── Player table rows ─────────────────────────────────────────
-  const plRows=Object.entries(plMap).map(([pl,d])=>{
-    const roi=d.sold.cost>0?d.sold.pnl/d.sold.cost*100:null;
-    return{pl,inv:d.inv,sold:d.sold,roi};
+// ── Chart helpers ─────────────────────────────────────────────
+const CHART_COLORS=['var(--green)','var(--gold)','var(--blue)','var(--purple)','var(--orange)','var(--red)','#2ec9a3','#e08a3a','#a47cf0','#4da6ff'];
+
+function _buildHBars(rows,opts){
+  const mx=opts.maxV||Math.max(...rows.map(r=>opts.getVal(r)),1);
+  return rows.map(function(row){
+    const val=opts.getVal(row);const pct=mx>0?(val/mx*100).toFixed(1):0;
+    const lbl=opts.getLabel(row);const right=opts.getRight?opts.getRight(row):'';
+    const color=opts.colorFn?opts.colorFn(row):'var(--green)';
+    const inner='<div class="bar-lbl"><span style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block" title="'+esc(lbl)+'">'+esc(lbl)+'</span><span style="font-family:var(--mono);font-size:10px;color:var(--dim);margin-left:auto;padding-left:8px">'+right+'</span></div>'
+      +'<div class="bar-track"><div class="bar-fill" style="width:'+pct+'%;background:'+color+'"></div></div>';
+    const click=opts.onClick?'onclick="'+opts.onClick(row)+'" style="cursor:pointer"':'';
+    return '<div class="bar-wrap" '+click+'>'+inner+'</div>';
+  }).join('');
+}
+
+function _buildDonut(slices,size){
+  if(!size)size=160;const r=size/2;const cx=r,cy=r;
+  const outerR=r-4;const innerR=outerR*0.55;
+  const total=slices.reduce((a,s)=>a+(s.value||0),0);
+  if(!total)return '<svg width="'+size+'" height="'+size+'"><text x="'+cx+'" y="'+cy+'" text-anchor="middle" dominant-baseline="middle" fill="var(--faint)" font-size="10" font-family="var(--mono)">No data</text></svg>';
+  let paths='';let startAngle=-Math.PI/2;
+  slices.forEach(function(slice,i){
+    const val=slice.value||0;if(!val)return;
+    const angle=(val/total)*Math.PI*2;const endAngle=startAngle+angle;
+    const x1=cx+outerR*Math.cos(startAngle);const y1=cy+outerR*Math.sin(startAngle);
+    const x2=cx+outerR*Math.cos(endAngle);const y2=cy+outerR*Math.sin(endAngle);
+    const ix1=cx+innerR*Math.cos(endAngle);const iy1=cy+innerR*Math.sin(endAngle);
+    const ix2=cx+innerR*Math.cos(startAngle);const iy2=cy+innerR*Math.sin(startAngle);
+    const large=angle>Math.PI?1:0;
+    const color=slice.color||(CHART_COLORS[i%CHART_COLORS.length]);
+    const pct=((val/total)*100).toFixed(1);
+    paths+='<path d="M'+x1+','+y1+' A'+outerR+','+outerR+' 0 '+large+',1 '+x2+','+y2
+      +' L'+ix1+','+iy1+' A'+innerR+','+innerR+' 0 '+large+',0 '+ix2+','+iy2+' Z"'
+      +' fill="'+color+'" opacity="0.88"><title>'+esc(slice.label)+': '+f$(val)+' ('+pct+'%)</title></path>';
+    startAngle=endAngle;
   });
-  const _sortFns={pnl:(a,b)=>b.sold.pnl-a.sold.pnl,rev:(a,b)=>b.sold.rev-a.sold.rev,
-    inv:(a,b)=>b.inv.cost-a.inv.cost,roi:(a,b)=>(b.roi||0)-(a.roi||0),n:(a,b)=>b.sold.n-a.sold.n};
-  plRows.sort(_sortFns[_dashPlayerSort]||_sortFns.pnl);
+  return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 '+size+' '+size+'">'+paths+'</svg>';
+}
 
-  // ── Category data ─────────────────────────────────────────────
+function _buildVBars(months,maxRev){
+  const mx=maxRev||Math.max(...months.map(m=>m.rev),1);
+  return months.map(function(m){
+    const rh=m.rev>0?Math.max(4,Math.round(m.rev/mx*72)):0;
+    const ph=m.pnl!==null&&m.rev>0?Math.round(Math.abs(m.pnl)/mx*72):0;
+    const pc=m.pnl===null?'var(--faint)':m.pnl>=0?'var(--green)':'var(--red)';
+    const tip='Revenue: '+f$(m.rev)+(m.pnl!==null?' · P&L: '+f$(m.pnl):'');
+    return '<div class="trend-col" title="'+esc(m.lbl)+' — '+tip+'">'
+      +'<div class="trend-bars" style="height:72px">'
+      +(rh>0?'<div class="trend-rev" style="height:'+rh+'px"></div>':'')
+      +(ph>0?'<div class="trend-pnl" style="height:'+ph+'px;background:'+pc+'"></div>':'')
+      +'</div>'
+      +'<div class="trend-lbl">'+esc(m.lbl)+'</div>'
+      +'</div>';
+  }).join('');
+}
+
+function _buildLegend(items){
+  return '<div style="display:flex;flex-direction:column;gap:5px;font-size:10px;font-family:var(--mono)">'
+    +items.map(function(it){
+      return '<div style="display:flex;align-items:center;gap:6px">'
+        +'<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:'+it.color+';flex-shrink:0"></span>'
+        +'<span style="color:var(--dim);flex:1">'+esc(it.label)+'</span>'
+        +(it.value!=null?'<span style="color:var(--text);font-weight:600">'+it.value+'</span>':'')
+        +'</div>';
+    }).join('')
+    +'</div>';
+}
+
+// ── Drilldown openers ─────────────────────────────────────────
+function openPlayerDrilldown(chart,sortBy){
+  if(chart===undefined)chart=_drillChart.player||'bar';
+  if(sortBy===undefined)sortBy=_dashPlayerSort;
+  _drillChart.player=chart;_dashPlayerSort=sortBy;
+  const d=_computeDash();const plMap=d.plMap;
+  const plRows=Object.entries(plMap).map(function(e){
+    const roi=e[1].sold.cost>0?e[1].sold.pnl/e[1].sold.cost*100:null;
+    return{pl:e[0],inv:e[1].inv,sold:e[1].sold,roi};
+  });
+  const sf={pnl:(a,b)=>b.sold.pnl-a.sold.pnl,rev:(a,b)=>b.sold.rev-a.sold.rev,
+    inv:(a,b)=>b.inv.cost-a.inv.cost,roi:(a,b)=>(b.roi||0)-(a.roi||0),n:(a,b)=>b.sold.n-a.sold.n};
+  plRows.sort(sf[sortBy]||sf.pnl);
+  const toggle='<div class="chart-toggle">'
+    +'<button class="'+(chart==='bar'?'on':'')+'" onclick="openPlayerDrilldown(\'bar\',\''+sortBy+'\')">Bar</button>'
+    +'<button class="'+(chart==='table'?'on':'')+'" onclick="openPlayerDrilldown(\'table\',\''+sortBy+'\')">Table</button>'
+    +'</div>';
+  const sortSel='<select onchange="openPlayerDrilldown(\''+chart+'\',this.value)" style="font-size:10px;padding:3px 7px;background:var(--surf2);border:1px solid var(--border);color:var(--text);border-radius:4px;font-family:var(--mono)">'
+    +['pnl','rev','roi','n','inv'].map(function(k){
+      const lbl={pnl:'Sort: P&L',rev:'Sort: Revenue',roi:'Sort: ROI%',n:'Sort: Sold',inv:'Sort: Inv Cost'};
+      return '<option value="'+k+'"'+(sortBy===k?' selected':'')+'>'+lbl[k]+'</option>';
+    }).join('')+'</select>';
+  let body='';
+  if(chart==='bar'){
+    const top=plRows.slice(0,20);
+    body=_buildHBars(top,{
+      getVal:r=>r.sold.rev,getLabel:r=>r.pl,
+      getRight:function(r){const rc=r.roi!==null?r.roi.toFixed(0)+'%':'—';const col=r.roi===null?'var(--faint)':r.roi>=0?'var(--green)':'var(--red)';
+        return '<span style="color:'+(r.sold.pnl>=0?'var(--green)':'var(--red)')+'">'+f$(r.sold.pnl)+'</span> <span style="color:'+col+';font-weight:700">'+rc+'</span>';},
+      maxV:Math.max(...top.map(r=>r.sold.rev),1),
+      colorFn:r=>r.roi!==null&&r.roi>=0?'rgba(0,229,170,.5)':'rgba(255,74,104,.45)'
+    });
+  } else {
+    body='<div style="overflow-x:auto"><table class="dash-tbl"><thead><tr>'
+      +'<th style="text-align:left">Player</th><th>In Stock</th><th>Cost Basis</th><th>Sold</th><th>Revenue</th><th>Net P&L</th><th>ROI%</th>'
+      +'</tr></thead><tbody>';
+    plRows.forEach(function(r){
+      const rc=r.roi!==null?r.roi.toFixed(0)+'%':'—';const col=r.roi===null?'var(--faint)':r.roi>=0?'var(--green)':'var(--red)';
+      body+='<tr>'
+        +'<td title="'+esc(r.pl)+'" style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(r.pl)+'</td>'
+        +'<td style="text-align:right">'+(r.inv.n||'—')+'</td>'
+        +'<td style="text-align:right;color:var(--orange)">'+(r.inv.cost>0?f$(r.inv.cost):'—')+'</td>'
+        +'<td style="text-align:right">'+(r.sold.n||'—')+'</td>'
+        +'<td style="text-align:right;color:var(--green)">'+(r.sold.rev>0?f$(r.sold.rev):'—')+'</td>'
+        +'<td style="text-align:right;color:'+(r.sold.pnl>=0?'var(--green)':'var(--red)')+'">'+f$(r.sold.pnl)+'</td>'
+        +'<td style="text-align:right;color:'+col+';font-weight:700">'+rc+'</td>'
+        +'</tr>';
+    });
+    body+='</tbody></table></div>';
+  }
+  openPanel('<div class="pn-head" style="flex-wrap:wrap;gap:8px">'
+    +'<div style="flex:1;min-width:0"><div class="pn-title">Player Intelligence</div>'
+    +'<div class="pn-meta">'+plRows.length+' players tracked</div></div>'
+    +'<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">'+toggle+sortSel+'</div>'
+    +'<span class="pn-close" onclick="closePanel()">✕</span>'
+    +'</div><div class="pn-body">'+body+'</div>',true);
+}
+
+function openCategoryDrilldown(chart){
+  if(chart===undefined)chart=_drillChart.cat||'bar';
+  _drillChart.cat=chart;
+  const d=_computeDash();const catMap=d.catMap;
+  const catRows=Object.entries(catMap).sort((a,b)=>b[1].sold.rev-a[1].sold.rev);
+  const maxRev=Math.max(...catRows.map(e=>e[1].sold.rev),1);
+  const toggle='<div class="chart-toggle">'
+    +'<button class="'+(chart==='bar'?'on':'')+'" onclick="openCategoryDrilldown(\'bar\')">Bar</button>'
+    +'<button class="'+(chart==='donut'?'on':'')+'" onclick="openCategoryDrilldown(\'donut\')">Donut</button>'
+    +'<button class="'+(chart==='table'?'on':'')+'" onclick="openCategoryDrilldown(\'table\')">Table</button>'
+    +'</div>';
+  let body='';
+  if(chart==='bar'){
+    body=_buildHBars(catRows,{
+      getVal:e=>e[1].sold.rev,getLabel:e=>e[0],
+      getRight:function(e){const roi=e[1].sold.cost>0?(e[1].sold.pnl/e[1].sold.cost*100).toFixed(0)+'%':'—';const col=e[1].sold.cost>0?(e[1].sold.pnl>=0?'var(--green)':'var(--red)'):'var(--faint)';
+        return '<span style="color:'+(e[1].sold.pnl>=0?'var(--green)':'var(--red)')+'">'+f$(e[1].sold.pnl)+'</span> <span style="color:'+col+';font-weight:700">'+roi+'</span>';},
+      maxV:maxRev,colorFn:(e,i)=>CHART_COLORS[catRows.indexOf(e)%CHART_COLORS.length]
+    });
+  } else if(chart==='donut'){
+    const slices=catRows.filter(e=>e[1].sold.rev>0).map((e,i)=>({label:e[0],value:e[1].sold.rev,color:CHART_COLORS[i%CHART_COLORS.length]}));
+    body='<div style="display:flex;gap:24px;align-items:center;flex-wrap:wrap;justify-content:center;padding:10px 0">'
+      +'<div>'+_buildDonut(slices,200)+'</div>'
+      +'<div>'+_buildLegend(slices.map(s=>({color:s.color,label:s.label,value:f$(s.value)})))+'</div>'
+      +'</div>';
+  } else {
+    body='<div style="overflow-x:auto"><table class="dash-tbl"><thead><tr>'
+      +'<th style="text-align:left">Type</th><th>In Stock</th><th>Cost</th><th>Sold</th><th>Revenue</th><th>P&L</th><th>ROI%</th>'
+      +'</tr></thead><tbody>';
+    catRows.forEach(function(e){
+      const ty=e[0],data=e[1];const roi=data.sold.cost>0?(data.sold.pnl/data.sold.cost*100).toFixed(0)+'%':'—';const col=data.sold.cost>0?(data.sold.pnl>=0?'var(--green)':'var(--red)'):'var(--faint)';
+      body+='<tr><td>'+esc(ty)+'</td><td style="text-align:right">'+(data.inv.n||'—')+'</td>'
+        +'<td style="text-align:right;color:var(--orange)">'+(data.inv.cost>0?f$(data.inv.cost):'—')+'</td>'
+        +'<td style="text-align:right">'+(data.sold.n||'—')+'</td>'
+        +'<td style="text-align:right;color:var(--green)">'+(data.sold.rev>0?f$(data.sold.rev):'—')+'</td>'
+        +'<td style="text-align:right;color:'+(data.sold.pnl>=0?'var(--green)':'var(--red)')+'">'+f$(data.sold.pnl)+'</td>'
+        +'<td style="text-align:right;color:'+col+';font-weight:700">'+roi+'</td></tr>';
+    });
+    body+='</tbody></table></div>';
+  }
+  openPanel('<div class="pn-head" style="flex-wrap:wrap;gap:8px">'
+    +'<div style="flex:1;min-width:0"><div class="pn-title">Earnings by Category</div>'
+    +'<div class="pn-meta">'+catRows.length+' categories</div></div>'
+    +'<div style="display:flex;gap:6px;align-items:center">'+toggle+'</div>'
+    +'<span class="pn-close" onclick="closePanel()">✕</span>'
+    +'</div><div class="pn-body">'+body+'</div>',true);
+}
+
+function openSetDrilldown(chart,merge,catFilter){
+  if(chart===undefined)chart=_drillChart.sets||'bar';
+  if(merge===undefined)merge=_drillSetMerge;
+  if(catFilter===undefined)catFilter=_drillSetCat;
+  _drillChart.sets=chart;_drillSetMerge=merge;_drillSetCat=catFilter;
+  const d=_computeDash();const rawMap=merge?d.setMapM:d.setMap;
+  const setRows=Object.entries(rawMap)
+    .filter(e=>e[1].sold.cost>0||e[1].sold.rev>0)
+    .map(e=>{const st=e[0],data=e[1];return{st,rev:data.sold.rev,pnl:data.sold.pnl,n:data.sold.n,cost:data.sold.cost,
+      roi:data.sold.cost>0?data.sold.pnl/data.sold.cost*100:null,invN:data.inv.n,invCost:data.inv.cost};})
+    .sort((a,b)=>b.pnl-a.pnl).slice(0,20);
+  const toggle='<div class="chart-toggle">'
+    +'<button class="'+(chart==='bar'?'on':'')+'" onclick="openSetDrilldown(\'bar\','+merge+',\''+catFilter+'\')">Bar</button>'
+    +'<button class="'+(chart==='table'?'on':'')+'" onclick="openSetDrilldown(\'table\','+merge+',\''+catFilter+'\')">Table</button>'
+    +'</div>';
+  const mergeTog='<div class="chart-toggle">'
+    +'<button class="'+(!merge?'on':'')+'" onclick="openSetDrilldown(\''+chart+'\',false,\''+catFilter+'\')">Split years</button>'
+    +'<button class="'+(merge?'on':'')+'" onclick="openSetDrilldown(\''+chart+'\',true,\''+catFilter+'\')">Merged</button>'
+    +'</div>';
+  let body='';
+  if(chart==='bar'){
+    body=_buildHBars(setRows,{
+      getVal:r=>r.rev,getLabel:r=>r.st,
+      getRight:function(r){const roi=r.roi!==null?r.roi.toFixed(0)+'%':'—';const col=r.roi===null?'var(--faint)':r.roi>=0?'var(--green)':'var(--red)';
+        return '<span style="color:'+(r.pnl>=0?'var(--green)':'var(--red)')+'">'+f$(r.pnl)+'</span> <span style="color:'+col+';font-weight:700">'+roi+'</span>';},
+      maxV:Math.max(...setRows.map(r=>r.rev),1),
+      colorFn:r=>r.roi!==null&&r.roi>=0?'rgba(0,229,170,.5)':'rgba(255,74,104,.45)'
+    });
+  } else {
+    body='<div style="overflow-x:auto"><table class="dash-tbl"><thead><tr>'
+      +'<th style="text-align:left">Set</th><th>In Stock</th><th>Sold</th><th>Revenue</th><th>P&L</th><th>ROI%</th>'
+      +'</tr></thead><tbody>';
+    setRows.forEach(function(r){
+      const roi=r.roi!==null?r.roi.toFixed(0)+'%':'—';const col=r.roi===null?'var(--faint)':r.roi>=0?'var(--green)':'var(--red)';
+      body+='<tr><td title="'+esc(r.st)+'" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(r.st)+'</td>'
+        +'<td style="text-align:right">'+(r.invN||'—')+'</td><td style="text-align:right">'+(r.n||'—')+'</td>'
+        +'<td style="text-align:right;color:var(--green)">'+(r.rev>0?f$(r.rev):'—')+'</td>'
+        +'<td style="text-align:right;color:'+(r.pnl>=0?'var(--green)':'var(--red)')+'">'+f$(r.pnl)+'</td>'
+        +'<td style="text-align:right;color:'+col+';font-weight:700">'+roi+'</td></tr>';
+    });
+    body+='</tbody></table></div>';
+  }
+  openPanel('<div class="pn-head" style="flex-wrap:wrap;gap:8px">'
+    +'<div style="flex:1;min-width:0"><div class="pn-title">Set Performance</div>'
+    +'<div class="pn-meta">Top 20 · '+(merge?'merged years':'year split')+'</div></div>'
+    +'<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">'+toggle+mergeTog+'</div>'
+    +'<span class="pn-close" onclick="closePanel()">✕</span>'
+    +'</div><div class="pn-body">'+body+'</div>',true);
+}
+
+function openTrendDrilldown(chart,period){
+  if(chart===undefined)chart=_drillChart.trend||'bar';
+  if(period===undefined)period='12m';
+  _drillChart.trend=chart;
+  const d=_computeDash();const monthly=d.monthly;const pnlMonthly=d.pnlMonthly;
+  const now=new Date();
+  let trendMonths=[];
+  if(period==='all'){
+    const allKeys=[...new Set([...Object.keys(monthly),...Object.keys(pnlMonthly)])].sort();
+    allKeys.forEach(function(ym){const pts=ym.split('-');const dt=new Date(parseInt(pts[0]),parseInt(pts[1])-1,1);const lbl=dt.toLocaleString('default',{month:'short'})+' '+String(pts[0]).slice(2);trendMonths.push({ym,lbl,rev:monthly[ym]||0,pnl:pnlMonthly[ym]??null});});
+  } else {
+    const n=period==='6m'?6:12;
+    for(let i=n-1;i>=0;i--){const dt=new Date(now.getFullYear(),now.getMonth()-i,1);const ym=dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0');const lbl=dt.toLocaleString('default',{month:'short'});trendMonths.push({ym,lbl,rev:monthly[ym]||0,pnl:pnlMonthly[ym]??null});}
+  }
+  const toggle='<div class="chart-toggle">'
+    +'<button class="'+(chart==='bar'?'on':'')+'" onclick="openTrendDrilldown(\'bar\',\''+period+'\')">Bar</button>'
+    +'<button class="'+(chart==='table'?'on':'')+'" onclick="openTrendDrilldown(\'table\',\''+period+'\')">Table</button>'
+    +'</div>';
+  const periodTog='<div class="chart-toggle">'
+    +'<button class="'+(period==='12m'?'on':'')+'" onclick="openTrendDrilldown(\''+chart+'\',\'12m\')">12 Mo</button>'
+    +'<button class="'+(period==='6m'?'on':'')+'" onclick="openTrendDrilldown(\''+chart+'\',\'6m\')">6 Mo</button>'
+    +'<button class="'+(period==='all'?'on':'')+'" onclick="openTrendDrilldown(\''+chart+'\',\'all\')">All</button>'
+    +'</div>';
+  let body='';
+  if(chart==='bar'){
+    const mx=Math.max(...trendMonths.map(m=>m.rev),1);
+    body='<div style="overflow-x:auto"><div class="trend-wrap" style="min-width:'+(trendMonths.length*36)+'px">'+_buildVBars(trendMonths,mx)+'</div></div>'
+      +'<div style="margin-top:12px">'+_buildLegend([{color:'rgba(0,229,170,.18)',label:'Revenue'},{color:'var(--green)',label:'P&L (positive)'},{color:'var(--red)',label:'P&L (negative)'}])+'</div>';
+  } else {
+    body='<div style="overflow-x:auto"><table class="dash-tbl"><thead><tr>'
+      +'<th style="text-align:left">Month</th><th>Revenue</th><th>P&L</th><th>Margin</th>'
+      +'</tr></thead><tbody>';
+    trendMonths.slice().reverse().forEach(function(m){
+      const roi=m.pnl!==null&&m.rev>0?(m.pnl/m.rev*100).toFixed(0)+'%':'—';
+      const col=m.pnl===null||m.rev===0?'var(--faint)':m.pnl>=0?'var(--green)':'var(--red)';
+      body+='<tr><td style="font-family:var(--mono)">'+esc(m.ym)+'</td>'
+        +'<td style="text-align:right;color:var(--green)">'+(m.rev>0?f$(m.rev):'—')+'</td>'
+        +'<td style="text-align:right;color:'+(m.pnl!==null?(m.pnl>=0?'var(--green)':'var(--red)'):'var(--faint)')+'">'+(m.pnl!==null?f$(m.pnl):'—')+'</td>'
+        +'<td style="text-align:right;color:'+col+';font-weight:700">'+roi+'</td></tr>';
+    });
+    body+='</tbody></table></div>';
+  }
+  openPanel('<div class="pn-head" style="flex-wrap:wrap;gap:8px">'
+    +'<div style="flex:1;min-width:0"><div class="pn-title">Revenue &amp; P&amp;L Trend</div>'
+    +'<div class="pn-meta">'+trendMonths.length+' months</div></div>'
+    +'<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">'+toggle+periodTog+'</div>'
+    +'<span class="pn-close" onclick="closePanel()">✕</span>'
+    +'</div><div class="pn-body">'+body+'</div>',true);
+}
+
+function openAgingDrilldown(chart,catFilter){
+  if(chart===undefined)chart=_drillChart.aging||'table';
+  if(catFilter===undefined)catFilter=_drillAgingCat;
+  _drillChart.aging=chart;_drillAgingCat=catFilter;
+  const d=_computeDash();
+  let aging=catFilter?d.aging.filter(x=>(x.pp.type||'Other')===catFilter):d.aging;
+  const cats=[''].concat(Object.keys(d.catMap).sort());
+  const toggle='<div class="chart-toggle">'
+    +'<button class="'+(chart==='table'?'on':'')+'" onclick="openAgingDrilldown(\'table\',\''+catFilter+'\')">Table</button>'
+    +'<button class="'+(chart==='bar'?'on':'')+'" onclick="openAgingDrilldown(\'bar\',\''+catFilter+'\')">Bar</button>'
+    +'</div>';
+  const catSel='<select onchange="openAgingDrilldown(\''+chart+'\',this.value)" style="font-size:10px;padding:3px 7px;background:var(--surf2);border:1px solid var(--border);color:var(--text);border-radius:4px;font-family:var(--mono)">'
+    +cats.map(c=>'<option value="'+esc(c)+'"'+(catFilter===c?' selected':'')+'>'+esc(c||'All Types')+'</option>').join('')
+    +'</select>';
+  let body='';
+  if(chart==='table'){
+    body='<div style="overflow-y:auto;max-height:calc(100vh - 140px)">';
+    aging.forEach(function(item){
+      const pp=item.pp;const days=item.days;const uc=days>180?'var(--red)':days>90?'var(--orange)':'var(--faint)';
+      body+='<div class="aging-row" onclick="closePanel();showCardPage(\''+pp.id+'\')" style="cursor:pointer">'
+        +'<div class="aging-days" style="color:'+uc+'">'+days+'d</div>'
+        +'<div style="flex:1;min-width:0"><div style="font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(pp.player||pp.name)+'</div>'
+        +'<div style="font-size:9px;font-family:var(--mono);color:var(--faint)">'+esc(pp.set||pp.type||'')+(pp.variation?' · '+esc(pp.variation):'')+'</div></div>'
+        +'<div style="font-size:10px;font-family:var(--mono);color:var(--dim);flex-shrink:0;margin-right:8px">'+esc(pp.type||'')+'</div>'
+        +'<div style="font-size:11px;font-family:var(--mono);color:var(--gold);flex-shrink:0">'+f$(pp.cost)+'</div>'
+        +'</div>';
+    });
+    if(!aging.length)body+='<div style="color:var(--faint);font-size:11px;font-family:var(--mono);padding:20px 0">No inventory found.</div>';
+    body+='</div>';
+  } else {
+    const buckets=[
+      {label:'0–30d',min:0,max:30,count:0,cost:0,color:'var(--green)'},
+      {label:'31–60d',min:31,max:60,count:0,cost:0,color:'var(--gold)'},
+      {label:'61–90d',min:61,max:90,count:0,cost:0,color:'var(--orange)'},
+      {label:'91–180d',min:91,max:180,count:0,cost:0,color:'rgba(255,130,74,.8)'},
+      {label:'181d+',min:181,max:Infinity,count:0,cost:0,color:'var(--red)'}
+    ];
+    aging.forEach(function(item){buckets.forEach(function(b){if(item.days>=b.min&&item.days<=b.max){b.count++;b.cost+=item.pp.cost||0;}});});
+    body=_buildHBars(buckets,{
+      getVal:b=>b.count,getLabel:b=>b.label,
+      getRight:b=>'<span style="color:var(--text)">'+b.count+' cards</span> <span style="color:var(--gold)">'+f$(b.cost)+'</span>',
+      maxV:Math.max(...buckets.map(b=>b.count),1),colorFn:b=>b.color
+    });
+  }
+  openPanel('<div class="pn-head" style="flex-wrap:wrap;gap:8px">'
+    +'<div style="flex:1;min-width:0"><div class="pn-title">Inventory Aging</div>'
+    +'<div class="pn-meta">'+aging.length+' cards'+(catFilter?' · '+catFilter:'')+'</div></div>'
+    +'<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">'+toggle+catSel+'</div>'
+    +'<span class="pn-close" onclick="closePanel()">✕</span>'
+    +'</div><div class="pn-body">'+body+'</div>',true);
+}
+
+function renderDash(){
+  const cd=_computeDash();
+  const sp=cd.sp,plMap=cd.plMap,catMap=cd.catMap,setMap=cd.setMap;
+  const monthly=cd.monthly,daily=cd.daily,pnlMonthly=cd.pnlMonthly;
+  const avgHold=cd.avgHold,avgSale=cd.avgSale,aging=cd.aging;
+
+  const pnl=linkedPnl(),rev=totalRev(),cost=totalCost();
+  const linked=sales.filter(s=>getLinkedPids(s.id).length>0).length;
+  const unlinked=sales.length-linked;
+  const soldCost=sales.reduce((a,s)=>{const pids=getLinkedPids(s.id);return a+pids.reduce((sum,pid)=>sum+(getP(pid)?.cost||0),0);},0);
+  const roi=soldCost>0?((pnl/soldCost)*100).toFixed(0)+'%':'—';
+
+  // Player rows
+  const plRows=Object.entries(plMap).map(([pl,d])=>{const r=d.sold.cost>0?d.sold.pnl/d.sold.cost*100:null;return{pl,inv:d.inv,sold:d.sold,roi:r};});
+  const _sf={pnl:(a,b)=>b.sold.pnl-a.sold.pnl,rev:(a,b)=>b.sold.rev-a.sold.rev,inv:(a,b)=>b.inv.cost-a.inv.cost,roi:(a,b)=>(b.roi||0)-(a.roi||0),n:(a,b)=>b.sold.n-a.sold.n};
+  plRows.sort(_sf[_dashPlayerSort]||_sf.pnl);
+
+  // Category
   const catRows=Object.entries(catMap).sort((a,b)=>b[1].sold.rev-a[1].sold.rev);
   const maxCatRev=Math.max(...catRows.map(([,d])=>d.sold.rev),1);
   const maxCatInv=Math.max(...catRows.map(([,d])=>d.inv.cost),1);
 
-  // ── Top sets by P&L ───────────────────────────────────────────
+  // Sets (year-split)
   const setRows=Object.entries(setMap)
     .filter(([,d])=>d.sold.cost>0||d.sold.rev>0)
-    .map(([st,d])=>({st,rev:d.sold.rev,pnl:d.sold.pnl,n:d.sold.n,
-      roi:d.sold.cost>0?d.sold.pnl/d.sold.cost*100:null,invN:d.inv.n,invCost:d.inv.cost}))
+    .map(([st,d])=>({st,rev:d.sold.rev,pnl:d.sold.pnl,n:d.sold.n,roi:d.sold.cost>0?d.sold.pnl/d.sold.cost*100:null,invN:d.inv.n,invCost:d.inv.cost}))
     .sort((a,b)=>b.pnl-a.pnl).slice(0,10);
 
-  // ── Inventory aging (unsold, oldest first) ─────────────────────
-  const agingCards=purchases.filter(p=>!sp.has(p.id)).map(p=>{
-    const pp=getP(p.id);
-    const pd=_parseDate(pp.date||'');
-    const days=pd?Math.round((Date.now()-_toTs(pd))/86400000):null;
-    return{pp,days};
-  }).filter(x=>x.days!==null).sort((a,b)=>b.days-a.days).slice(0,8);
-
-  // ── 12-month trend ────────────────────────────────────────────
+  // 12-month trend
   const now=new Date();
   const trendMonths=[];
-  for(let i=11;i>=0;i--){
-    const d=new Date(now.getFullYear(),now.getMonth()-i,1);
-    const ym=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
-    const lbl=d.toLocaleString('default',{month:'short'});
-    trendMonths.push({ym,lbl,rev:monthly[ym]||0,pnl:pnlMonthly[ym]??null});
-  }
+  for(let i=11;i>=0;i--){const dt=new Date(now.getFullYear(),now.getMonth()-i,1);const ym=dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0');const lbl=dt.toLocaleString('default',{month:'short'});trendMonths.push({ym,lbl,rev:monthly[ym]||0,pnl:pnlMonthly[ym]??null});}
   const maxTrendRev=Math.max(...trendMonths.map(m=>m.rev),1);
-  // ── Mini calendar cells ───────────────────────────────────────
+
+  // Mini calendar
   const now_mc=new Date();
   if(!_calYear)_calYear=now_mc.getFullYear();
   if(!_calMonth)_calMonth=now_mc.getMonth()+1;
@@ -1409,77 +1720,49 @@ function renderDash(){
   const todayStr=now_mc.getFullYear()+'-'+String(now_mc.getMonth()+1).padStart(2,'0')+'-'+String(now_mc.getDate()).padStart(2,'0');
   let mcCells='';
   for(let i=0;i<mcFirstDow;i++)mcCells+='<div class="mini-cal-day empty-d"></div>';
-  for(let d=1;d<=mcDim;d++){const k=mcYm+'-'+String(d).padStart(2,'0');const sAmt=daily[k]||0;const isToday=k===todayStr;mcCells+='<div class="mini-cal-day'+(isToday?' today':sAmt>0?' has-data':'')+'" onclick="showCalDay(\''+k+'\',\''+mcLabel.toUpperCase()+'\')"><span class="mini-cal-dnum">'+d+'</span>'+(sAmt>0?'<span class="mini-cal-damt">'+f$(sAmt)+'</span>':'')+'</div>';}
+  for(let d=1;d<=mcDim;d++){const k=mcYm+'-'+String(d).padStart(2,'0');const sAmt=daily[k]||0;const isToday=k===todayStr;mcCells+='<div class="mini-cal-day'+(isToday?' today':sAmt>0?' has-data':'')+'" onclick="showCalDay(\''+k+'\',\''+mcLabel.toUpperCase()+'\')">'+'<span class="mini-cal-dnum">'+d+'</span>'+(sAmt>0?'<span class="mini-cal-damt">'+f$(sAmt)+'</span>':'')+'</div>';}
 
-  // ── Trend chart bars ──────────────────────────────────────────
-  const trendBars=trendMonths.map(m=>{
-    const rh=m.rev>0?Math.max(4,Math.round(m.rev/maxTrendRev*72)):0;
-    const ph=m.pnl!==null&&m.rev>0?Math.round(Math.abs(m.pnl)/maxTrendRev*72):0;
-    const pc=m.pnl===null?'var(--faint)':m.pnl>=0?'var(--green)':'var(--red)';
-    const tip='Revenue: '+f$(m.rev)+(m.pnl!==null?' · P&L: '+f$(m.pnl):'');
-    return '<div class="trend-col" title="'+m.lbl+' — '+tip+'">'
-      +'<div class="trend-bars" style="height:72px">'
-      +(rh>0?'<div class="trend-rev" style="height:'+rh+'px"></div>':'')
-      +(ph>0?'<div class="trend-pnl" style="height:'+ph+'px;background:'+pc+'"></div>':'')
-      +'</div>'
-      +'<div class="trend-lbl">'+m.lbl+'</div>'
-      +'</div>';
-  }).join('');
+  const trendBars=_buildVBars(trendMonths,maxTrendRev);
 
-  // ── Player table rows HTML ────────────────────────────────────
+  // Player table HTML
   const thS=k=>'<th class="'+(k===_dashPlayerSort?'sort-active':'')+'" onclick="_dashPlayerSort=\''+k+'\';render()">';
   const plTableRows=plRows.slice(0,20).map(r=>{
-    const roiStr=r.roi!==null?r.roi.toFixed(0)+'%':'—';
-    const roiColor=r.roi===null?'var(--faint)':r.roi>=0?'var(--green)':'var(--red)';
+    const roiStr=r.roi!==null?r.roi.toFixed(0)+'%':'—';const rc=r.roi===null?'var(--faint)':r.roi>=0?'var(--green)':'var(--red)';
     return '<tr onclick="filt.inv.q=\''+r.pl.replace(/'/g,"\\'")+'\';\'+\'filt.sells.q=\''+r.pl.replace(/'/g,"\\'")+'\';nav(\'inv\');render()">'
-      +'<td title="'+esc(r.pl)+'">'+esc(r.pl)+'</td>'
-      +'<td>'+(r.inv.n?r.inv.n:'—')+'</td>'
+      +'<td title="'+esc(r.pl)+'">'+esc(r.pl)+'</td><td>'+(r.inv.n||'—')+'</td>'
       +'<td style="color:var(--orange)">'+(r.inv.cost>0?f$(r.inv.cost):'—')+'</td>'
-      +'<td>'+(r.sold.n||'—')+'</td>'
-      +'<td style="color:var(--green)">'+(r.sold.rev>0?f$(r.sold.rev):'—')+'</td>'
+      +'<td>'+(r.sold.n||'—')+'</td><td style="color:var(--green)">'+(r.sold.rev>0?f$(r.sold.rev):'—')+'</td>'
       +'<td style="color:'+(r.sold.pnl>=0?'var(--green)':'var(--red)')+'">'+f$(r.sold.pnl)+'</td>'
-      +'<td style="color:'+roiColor+';font-weight:700">'+roiStr+'</td>'
-      +'</tr>';
+      +'<td style="color:'+rc+';font-weight:700">'+roiStr+'</td></tr>';
   }).join('');
 
-  // ── Category rows HTML ────────────────────────────────────────
+  // Category HTML
   const catHtml=catRows.map(([ty,d])=>{
     const revW=d.sold.rev>0?(d.sold.rev/maxCatRev*100).toFixed(1):0;
     const invW=d.inv.cost>0?(d.inv.cost/maxCatInv*100).toFixed(1):0;
     const roiStr=d.sold.cost>0?(d.sold.pnl/d.sold.cost*100).toFixed(0)+'%':'—';
-    const roiColor=d.sold.cost>0?(d.sold.pnl>=0?'var(--green)':'var(--red)'):'var(--faint)';
-    return '<div class="cat-row">'
-      +'<div class="cat-lbl">'+esc(ty)+'</div>'
-      +'<div class="cat-bars">'
-      +(revW>0?'<div class="cat-bar" style="width:'+revW+'%;background:rgba(0,229,170,.5)" title="Revenue '+f$(d.sold.rev)+'"></div>':'')
-      +(invW>0?'<div class="cat-bar" style="width:'+invW+'%;background:rgba(245,200,66,.35)" title="In stock '+f$(d.inv.cost)+'"></div>':'')
-      +'</div>'
-      +'<div class="cat-stats">'
-      +'<span style="color:var(--gold)" title="Inventory cost">'+f$(d.inv.cost)+'</span>'
-      +'<span style="color:var(--green)" title="Revenue">'+f$(d.sold.rev)+'</span>'
-      +'<span style="color:'+roiColor+';font-weight:700" title="ROI">'+roiStr+'</span>'
-      +'</div>'
-      +'</div>';
+    const rc=d.sold.cost>0?(d.sold.pnl>=0?'var(--green)':'var(--red)'):'var(--faint)';
+    return '<div class="cat-row"><div class="cat-lbl">'+esc(ty)+'</div>'
+      +'<div class="cat-bars">'+(revW>0?'<div class="cat-bar" style="width:'+revW+'%;background:rgba(0,229,170,.5)" title="Revenue '+f$(d.sold.rev)+'"></div>':'')+(invW>0?'<div class="cat-bar" style="width:'+invW+'%;background:rgba(245,200,66,.35)" title="In stock '+f$(d.inv.cost)+'"></div>':'')+'</div>'
+      +'<div class="cat-stats"><span style="color:var(--gold)">'+f$(d.inv.cost)+'</span><span style="color:var(--green)">'+f$(d.sold.rev)+'</span><span style="color:'+rc+';font-weight:700">'+roiStr+'</span></div></div>';
   }).join('');
 
-  // ── Set performance rows ──────────────────────────────────────
+  // Set HTML
   const setHtml=setRows.map(r=>{
-    const roiStr=r.roi!==null?r.roi.toFixed(0)+'%':'—';
-    const roiColor=r.roi===null?'var(--faint)':r.roi>=0?'var(--green)':'var(--red)';
+    const roiStr=r.roi!==null?r.roi.toFixed(0)+'%':'—';const rc=r.roi===null?'var(--faint)':r.roi>=0?'var(--green)':'var(--red)';
     return '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border)">'
       +'<div style="flex:1;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+esc(r.st)+'">'+esc(r.st)+'</div>'
       +'<div style="font-size:10px;font-family:var(--mono);color:var(--faint);flex-shrink:0">×'+r.n+'</div>'
       +'<div style="font-size:11px;font-family:var(--mono);color:var(--green);flex-shrink:0;width:72px;text-align:right">'+f$(r.rev)+'</div>'
       +'<div style="font-size:11px;font-family:var(--mono);color:'+(r.pnl>=0?'var(--green)':'var(--red)')+';flex-shrink:0;width:72px;text-align:right">'+f$(r.pnl)+'</div>'
-      +'<div style="font-size:11px;font-family:var(--mono);color:'+roiColor+';font-weight:700;flex-shrink:0;width:46px;text-align:right">'+roiStr+'</div>'
-      +'</div>';
+      +'<div style="font-size:11px;font-family:var(--mono);color:'+rc+';font-weight:700;flex-shrink:0;width:46px;text-align:right">'+roiStr+'</div></div>';
   }).join('');
 
-  // ── Aging inventory ───────────────────────────────────────────
-  const agingHtml=agingCards.map(({pp,days})=>{
-    const urgColor=days>180?'var(--red)':days>90?'var(--orange)':'var(--faint)';
+  // Aging HTML (top 8 for dashboard)
+  const agingHtml=aging.slice(0,8).map(({pp,days})=>{
+    const uc=days>180?'var(--red)':days>90?'var(--orange)':'var(--faint)';
     return '<div class="aging-row" onclick="showCardPage(\''+pp.id+'\')" style="cursor:pointer">'
-      +'<div class="aging-days" style="color:'+urgColor+'">'+days+'d</div>'
+      +'<div class="aging-days" style="color:'+uc+'">'+days+'d</div>'
       +'<div style="flex:1;min-width:0"><div style="font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(pp.player||pp.name)+'</div>'
       +'<div style="font-size:9px;font-family:var(--mono);color:var(--faint)">'+esc(pp.set||pp.type||'')+(pp.variation?' · '+esc(pp.variation):'')+'</div></div>'
       +'<div style="font-size:11px;font-family:var(--mono);color:var(--gold);flex-shrink:0">'+f$(pp.cost)+'</div>'
@@ -1494,7 +1777,7 @@ function renderDash(){
   +'<div class="sc"><div class="sc-lbl">Purchases</div><div class="sc-val o">'+purchases.length.toLocaleString()+'</div><div class="sc-sub">cards bought</div></div>'
   +'<div class="sc"><div class="sc-lbl">Total Cost</div><div class="sc-val">'+f$(cost)+'</div><div class="sc-sub">per-card basis</div></div>'
   +'<div class="sc"><div class="sc-lbl">Revenue</div><div class="sc-val g">'+f$(rev)+'</div><div class="sc-sub">'+sales.length+' sales</div></div>'
-  +'<div class="sc"><div class="sc-lbl">Net P&amp;L</div><div class="sc-val '+(pnl>=0?'g':'r')+'">'+f$(pnl)+'</div><div class="sc-sub">'+linked+' linked flips</div></div>'
+  +'<div class="sc"><div class="sc-lbl">Net P&L</div><div class="sc-val '+(pnl>=0?'g':'r')+'">'+f$(pnl)+'</div><div class="sc-sub">'+linked+' linked flips</div></div>'
   +'<div class="sc"><div class="sc-lbl">Total ROI</div><div class="sc-val '+(pnl>=0?'g':'r')+'">'+roi+'</div><div class="sc-sub">net ÷ cost sold</div></div>'
   +(()=>{const invMkt=purchases.filter(p=>!sp.has(p.id)).reduce((a,p)=>a+(valueLookups[p.id]?.avgPrice||0),0);return'<div class="sc"><div class="sc-lbl">Inventory</div><div class="sc-val b">'+(purchases.length-sp.size)+'</div><div class="sc-sub">'+f$(invCost())+' cost'+(invMkt?' · '+f$(invMkt)+' est.':'')+'</div></div>';})()
   +'<div class="sc"><div class="sc-lbl">Avg Sale Price</div><div class="sc-val">'+f$(avgSale)+'</div><div class="sc-sub">per transaction</div></div>'
@@ -1502,10 +1785,10 @@ function renderDash(){
   +'<div class="sc"><div class="sc-lbl">Unlinked Sales</div><div class="sc-val '+(unlinked>0?'r':'g')+'">'+unlinked+'</div><div class="sc-sub">'+Math.round(linked/Math.max(sales.length,1)*100)+'% linked</div></div>'
   +'</div>'
 
-  // 12-month P&L trend
-  +'<div style="background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:20px">'
+  // 12-month trend — clickable
+  +'<div class="drill-section" style="background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:20px" onclick="openTrendDrilldown()">'
   +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
-  +'<div style="font-size:13px;font-weight:700">12-Month Revenue &amp; P&amp;L Trend</div>'
+  +'<div style="font-size:13px;font-weight:700;display:flex;align-items:center;gap:6px">12-Month Revenue &amp; P&amp;L Trend <button class="drill-expand" onclick="event.stopPropagation();openTrendDrilldown()">↗</button></div>'
   +'<div style="display:flex;gap:12px;font-size:9px;font-family:var(--mono);color:var(--faint)">'
   +'<span><span style="display:inline-block;width:10px;height:8px;background:rgba(0,229,170,.18);border-radius:2px;margin-right:3px"></span>Revenue</span>'
   +'<span><span style="display:inline-block;width:10px;height:8px;background:var(--green);border-radius:2px;margin-right:3px;opacity:.9"></span>P&amp;L</span>'
@@ -1513,50 +1796,35 @@ function renderDash(){
   +'<div class="trend-wrap">'+trendBars+'</div>'
   +'</div>'
 
-  // Player intelligence table
-  +'<div style="background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:20px;overflow-x:auto">'
-  +'<div style="font-size:13px;font-weight:700;margin-bottom:10px">Player Intelligence <span style="font-size:10px;font-family:var(--mono);color:var(--faint);font-weight:400">— click column to sort · click row to filter</span></div>'
+  // Player intelligence — clickable
+  +'<div class="drill-section" style="background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:20px;overflow-x:auto" onclick="openPlayerDrilldown()">'
+  +'<div style="font-size:13px;font-weight:700;margin-bottom:10px;display:flex;align-items:center;gap:6px">Player Intelligence <button class="drill-expand" onclick="event.stopPropagation();openPlayerDrilldown()">↗</button> <span style="font-size:10px;font-family:var(--mono);color:var(--faint);font-weight:400">— click to expand</span></div>'
   +(plRows.length?'<table class="dash-tbl"><thead><tr>'
   +'<th style="text-align:left;cursor:default">Player</th>'
-  +thS('inv')+'In Stock</th>'
-  +thS('inv')+'Cost Basis</th>'
-  +thS('n')+'Sold</th>'
-  +thS('rev')+'Revenue</th>'
-  +thS('pnl')+'Net P&amp;L</th>'
-  +thS('roi')+'ROI%</th>'
+  +thS('inv')+'In Stock</th>'+thS('inv')+'Cost Basis</th>'+thS('n')+'Sold</th>'+thS('rev')+'Revenue</th>'+thS('pnl')+'Net P&amp;L</th>'+thS('roi')+'ROI%</th>'
   +'</tr></thead><tbody>'+plTableRows+'</tbody></table>'
-  :'<div style="color:var(--faint);font-size:11px;font-family:var(--mono)">Add player names to sales and purchases to see breakdowns here.</div>')
+  :'<div style="color:var(--faint);font-size:11px;font-family:var(--mono)">Add player names to see breakdowns here.</div>')
   +'</div>'
 
-  // Category breakdown + Set performance
+  // Category + Sets — side by side, both clickable
   +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:20px">'
 
-  // Category
-  +'<div style="background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:14px">'
-  +'<div style="font-size:13px;font-weight:700;margin-bottom:4px">Earnings by Category</div>'
-  +'<div style="display:flex;gap:12px;font-size:8px;font-family:var(--mono);color:var(--faint);margin-bottom:10px">'
-  +'<span style="color:rgba(0,229,170,.7)">■ Revenue</span>'
-  +'<span style="color:rgba(245,200,66,.6)">■ In Stock</span>'
-  +'<span>· right: stock cost / revenue / ROI</span>'
-  +'</div>'
+  +'<div class="drill-section" style="background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:14px" onclick="openCategoryDrilldown()">'
+  +'<div style="font-size:13px;font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:6px">Earnings by Category <button class="drill-expand" onclick="event.stopPropagation();openCategoryDrilldown()">↗</button></div>'
+  +'<div style="display:flex;gap:12px;font-size:8px;font-family:var(--mono);color:var(--faint);margin-bottom:10px"><span style="color:rgba(0,229,170,.7)">■ Revenue</span><span style="color:rgba(245,200,66,.6)">■ In Stock</span><span>· right: stock / revenue / ROI</span></div>'
   +(catHtml||'<div style="color:var(--faint);font-size:11px;font-family:var(--mono)">No data yet.</div>')
   +'</div>'
 
-  // Top sets
-  +'<div style="background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:14px">'
-  +'<div style="font-size:13px;font-weight:700;margin-bottom:4px">Top Sets by P&amp;L</div>'
-  +'<div style="display:flex;gap:16px;font-size:8px;font-family:var(--mono);color:var(--faint);margin-bottom:10px;justify-content:flex-end">'
-  +'<span>×qty</span><span style="width:72px;text-align:right">Revenue</span><span style="width:72px;text-align:right">P&amp;L</span><span style="width:46px;text-align:right">ROI%</span>'
-  +'</div>'
+  +'<div class="drill-section" style="background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:14px" onclick="openSetDrilldown()">'
+  +'<div style="font-size:13px;font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:6px">Top Sets by P&amp;L <button class="drill-expand" onclick="event.stopPropagation();openSetDrilldown()">↗</button></div>'
+  +'<div style="display:flex;gap:16px;font-size:8px;font-family:var(--mono);color:var(--faint);margin-bottom:10px;justify-content:flex-end"><span>×qty</span><span style="width:72px;text-align:right">Revenue</span><span style="width:72px;text-align:right">P&amp;L</span><span style="width:46px;text-align:right">ROI%</span></div>'
   +(setHtml?'<div style="max-height:280px;overflow-y:auto">'+setHtml+'</div>'
   :'<div style="color:var(--faint);font-size:11px;font-family:var(--mono)">Link sales to purchases to see set performance.</div>')
   +'</div>'
   +'</div>'
 
-  // Mini calendar + Inventory aging
+  // Calendar + Aging
   +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:20px">'
-
-  // Calendar
   +'<div>'
   +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
   +'<div style="font-size:13px;font-weight:700">Monthly Calendar</div>'
@@ -1570,14 +1838,11 @@ function renderDash(){
   +'</div>'+(mcIncome?'<span style="font-size:11px;font-family:var(--mono);color:var(--green);font-weight:700">'+f$(mcIncome)+'</span>':'')+'</div>'
   +'<div class="mini-cal-dow">'+['S','M','T','W','T','F','S'].map(d=>'<span>'+d+'</span>').join('')+'</div>'
   +'<div class="mini-cal-grid">'+mcCells+'</div>'
-  +'</div>'
-  +'</div>'
+  +'</div></div>'
 
-  // Aging inventory
-  +'<div style="background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:14px">'
-  +'<div style="font-size:13px;font-weight:700;margin-bottom:4px">Inventory Aging</div>'
-  +'<div style="font-size:9px;font-family:var(--mono);color:var(--faint);margin-bottom:10px">Oldest unsold cards — '
-  +'<span style="color:var(--orange)">orange &gt;90d</span> · <span style="color:var(--red)">red &gt;180d</span></div>'
+  +'<div class="drill-section" style="background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:14px" onclick="openAgingDrilldown()">'
+  +'<div style="font-size:13px;font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:6px">Inventory Aging <button class="drill-expand" onclick="event.stopPropagation();openAgingDrilldown()">↗</button></div>'
+  +'<div style="font-size:9px;font-family:var(--mono);color:var(--faint);margin-bottom:10px">Oldest unsold — <span style="color:var(--orange)">orange &gt;90d</span> · <span style="color:var(--red)">red &gt;180d</span></div>'
   +(agingHtml||'<div style="color:var(--faint);font-size:11px;font-family:var(--mono)">No dated inventory found.</div>')
   +'</div>'
   +'</div>'
