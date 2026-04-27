@@ -253,6 +253,26 @@ select.recat-sel:hover{border-color:var(--gold)}
 .aging-row{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)}
 .aging-row:last-child{border-bottom:none}
 .aging-days{flex-shrink:0;font-size:10px;font-family:var(--mono);font-weight:700;padding:2px 6px;border-radius:3px;background:var(--surf2)}
+/* Drilldown chart toggle */
+.chart-toggle{display:flex;gap:4px;flex-wrap:wrap}
+.chart-toggle button{background:var(--surf2);border:1px solid var(--border);color:var(--faint);padding:3px 9px;border-radius:4px;font-size:10px;font-family:var(--mono);cursor:pointer;transition:all .12s}
+.chart-toggle button.on{background:rgba(0,229,170,.15);border-color:var(--green);color:var(--green)}
+.chart-toggle button:hover:not(.on){color:var(--text);border-color:var(--border2)}
+.drill-section{cursor:pointer;transition:border-color .12s}
+.drill-section:hover{border-color:var(--border2)!important}
+.drill-expand{font-size:10px;padding:2px 8px;background:var(--surf2);border:1px solid var(--border);border-radius:4px;color:var(--faint);cursor:pointer;font-family:var(--mono);transition:all .12s}
+.drill-expand:hover{color:var(--green);border-color:var(--green)}
+/* Drilldown donut SVG */
+.donut-wrap{display:flex;align-items:center;gap:18px}
+.donut-legend{display:flex;flex-direction:column;gap:5px;font-size:10px;font-family:var(--mono)}
+.donut-legend-item{display:flex;align-items:center;gap:6px}
+.donut-swatch{width:10px;height:10px;border-radius:2px;flex-shrink:0}
+/* Drilldown V-bar chart */
+.vbar-wrap{display:flex;gap:6px;align-items:flex-end;height:140px;overflow-x:auto;padding-bottom:24px;position:relative}
+.vbar-col{display:flex;flex-direction:column;align-items:center;gap:3px;flex-shrink:0;min-width:32px}
+.vbar-inner{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;width:100%;position:relative}
+.vbar-fill{width:26px;border-radius:3px 3px 0 0;transition:height .2s;min-height:2px}
+.vbar-lbl{font-size:9px;font-family:var(--mono);color:var(--faint);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:52px}
 
 /* ── REVENUE CALENDAR ── */
 .rev-cal-wrap{max-height:380px;overflow-y:auto;padding-right:2px}
@@ -426,9 +446,6 @@ thead th.sh:hover{color:var(--text)}
       <div class="sf-row"><div class="sf-lbl">Inventory</div><div class="sf-val o" id="sf-inv">—</div></div>
     </div>
     <div class="sf-key">
-      <div style="font-size:9px;color:var(--faint);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">Anthropic API Key</div>
-      <input class="key-input" type="password" id="api-key-input" placeholder="sk-ant-…" oninput="saveApiKey(this.value)">
-      <div class="key-status" id="key-status">—</div>
       <div style="margin-top:8px">
         <button class="btn sm" style="width:100%" onclick="exportBackup()">📤 Export Backup</button>
       </div>
@@ -598,6 +615,10 @@ let sortState = { inv: {col:'date',dir:-1}, buys: {col:'date',dir:-1}, sells: {c
 let sellsTab = 'sales'; // 'sales' | 'pnl'
 let _dashPlayerMode = 'rev'; // 'rev' | 'roi'
 let _dashPlayerSort = 'pnl'; // column to sort player table by
+let _drillChart={};           // section -> 'bar'|'table'|'pie'|'vbar'
+let _drillSetMerge=false;     // merge set years into one row
+let _drillSetCat='';          // category filter for set drilldown
+let _drillAgingCat='';        // category filter for aging drilldown
 // persist market lookups: pid -> {avgPrice, lowPrice, highPrice, confidence, recentSales, ts}
 let valueLookups = JSON.parse(localStorage.getItem('cb_lookups')||'{}');
 function persistLookups() { try { localStorage.setItem('cb_lookups', JSON.stringify(valueLookups)); } catch(e){} }
@@ -750,20 +771,9 @@ function executeDataClear() {
 }
 
 // API key
-function getApiKey() { return localStorage.getItem('cb_apikey')||''; }
-function saveApiKey(v) {
-  localStorage.setItem('cb_apikey', v.trim());
-  const el = document.getElementById('key-status');
-  if(el) { el.textContent = v.trim() ? '✓ saved' : '—'; el.className = 'key-status '+(v.trim()?'ok':'no'); }
-}
-// init API key field
-function initApiKeyField() {
-  const el = document.getElementById('api-key-input');
-  const k = getApiKey();
-  if(el) el.value = k;
-  const st = document.getElementById('key-status');
-  if(st) { st.textContent = k ? '✓ saved' : 'enter key to enable AI features'; st.className = 'key-status '+(k?'ok':'no'); }
-}
+function getApiKey() { return ''; }
+function saveApiKey() {}
+function initApiKeyField() {}
 function setSort(key, col) {
   if (sortState[key].col === col) sortState[key].dir *= -1;
   else { sortState[key].col = col; sortState[key].dir = -1; }
@@ -1207,9 +1217,11 @@ function matchesSQ(s,q){const sq=q.toLowerCase();return[s.title,s.player,s.type,
 function toast(msg,ms){if(!ms)ms=Math.min(4000,Math.max(1800,1400+msg.length*38));const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');if(!el.onclick){el.style.pointerEvents='none';el.style.cursor='';}clearTimeout(el._t);el._t=setTimeout(()=>{el.classList.remove('show');el.onclick=null;el.style.pointerEvents='none';el.style.cursor='';},ms);}
 function nav(p){if(p==='pnl')p='sells';page=p;document.querySelectorAll('.ni').forEach(el=>{el.classList.remove('on');el.removeAttribute('aria-current');});const ni=document.getElementById('ni-'+p);if(ni){ni.classList.add('on');ni.setAttribute('aria-current','page');}render();}
 let _panelTrigger=null;
-function openPanel(html){
+function openPanel(html,wide){
   _panelTrigger=document.activeElement;
-  document.getElementById('pn').innerHTML=html;
+  const pn=document.getElementById('pn');
+  pn.innerHTML=html;
+  pn.style.width=wide?'720px':'';
   document.getElementById('ov').classList.add('open');
   requestAnimationFrame(()=>{const b=document.querySelector('.pn-close');if(b)b.focus();});
 }
@@ -1756,7 +1768,7 @@ function renderInv(){
           const mktAge=vl?.ts?Math.floor((Date.now()-vl.ts)/86400000):null;
           const mktBadgeClass=mktAge===null?'stale':mktAge<3?'fresh':mktAge>7?'warn':'stale';
           const mktBadgeText=mktAge===null?'':(mktDiff>=0?'+':'')+f$(mktDiff)+' · '+(mktAge>7?mktAge+'d ago — refresh?':mktAge+'d ago');
-          const mktBadgeClick=mktAge!==null&&mktAge>7?`onclick="event.stopPropagation();lookupCard('${p.id}')"` :'';
+          const mktBadgeClick=mktAge!==null&&mktAge>7?`onclick="event.stopPropagation();lookupCard('${p.id}')" style="cursor:pointer"` :'';
           const mktHtml=vl?`<div class="mkt ${mktDiff>=0?'up':'dn'}">${f$(vl.avgPrice)}</div><div class="mkt-badge ${mktBadgeClass}" ${mktBadgeClick}>${mktBadgeText}</div>`:`<span style="color:var(--faint);font-size:11px;font-family:var(--mono)">—</span>`;
           return`
         <tr onclick="if(event.ctrlKey||event.metaKey){event.preventDefault();toggleInvSelect('${p.id}');render();}else{showCardPage('${p.id}');}" style="cursor:pointer" class="${invSelected.has(p.id)?'highlight':''}">
@@ -1809,7 +1821,6 @@ function renderBuys(){
   items=applySortP(items,'buys');
   const pn=pgNum.buys||0,total=items.length;
   const page_items=items.slice(pn*_pageSize,(pn+1)*_pageSize);
-  const hasApiKey=!!getApiKey();
   return`
   <div class="topbar"><div class="pg-title">Purchases <span class="pg-sub"><span class="stat-num">${total.toLocaleString()}</span> total<span class="stat-sep">·</span><span class="stat-money">${f$(items.reduce((a,p)=>a+p.cost,0))}</span> cost</span></div>
     <button class="btn sm ghost" onclick="nav('imp')">↗ Import CSV</button>
@@ -2038,15 +2049,12 @@ function parseBuysCSV(text) {
   var skipNote = '';
   if (_buysSkipped) skipNote += ' (' + _buysSkipped + ' skipped: empty title)';
   if (_buysDuplicates) skipNote += ' (' + _buysDuplicates + ' skipped: already imported)';
-  // Auto-trigger AI parse if API key present
-  if (getApiKey()) parseBuysCsvWithAI();
-  else toast('Parsed ' + _buysCsvRows.length + ' rows' + skipNote);
+  toast('Parsed ' + _buysCsvRows.length + ' rows' + skipNote);
 }
 
 function _renderBuysCsvReview() {
   var pending = _buysCsvRows.filter(function(r){ return !r._confirmed; }).length;
   var confirmed = _buysCsvRows.length - pending;
-  var hasApiKey = !!getApiKey();
   var withCost = _buysCsvRows.filter(function(r){ return r.cost > 0; }).length;
   var withAuto = _buysCsvRows.filter(function(r){ return r.is_auto; }).length;
   var withRC   = _buysCsvRows.filter(function(r){ return r.is_rc; }).length;
@@ -2058,8 +2066,6 @@ function _renderBuysCsvReview() {
     + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">'
     + '<div style="font-size:13px;font-weight:700">Review ' + _buysCsvRows.length + ' Rows</div>'
     + '<span id="buys-csv-confirmed-ct" style="font-size:11px;font-family:var(--mono);color:var(--dim)">' + confirmed + ' confirmed</span>'
-    + (hasApiKey ? '<button class="btn sm" id="buys-ai-btn" onclick="parseBuysCsvWithAI()">&#x2728; AI Parse Titles</button>' : '')
-    + (function(){ var scannable = _buysCsvRows.filter(function(r){ return r.img && !r.player && !r._confirmed; }).length; return (hasApiKey && scannable) ? '<button class="btn sm" id="buys-img-scan-btn" onclick="_scanImportImages()" title="Use Claude Vision to extract player names from card images">&#x1F441; Scan ' + scannable + ' Image' + (scannable===1?'':'s') + '</button>' : ''; })()
     + '<button class="btn pri sm" style="margin-left:auto" onclick="confirmAllBuysCsv()">&#x2713; Import ' + _buysCsvRows.length + ' cards</button>'
     + '<button class="btn ghost sm" onclick="_buysCsvRows=[];render()">&#x2715; Cancel</button>'
     + '</div>'
@@ -2141,172 +2147,6 @@ function confirmAllBuysCsv() {
   render();
 }
 
-async function parseBuysCsvWithAI() {
-  var apiKey = getApiKey();
-  if (!apiKey) { toast('No API key — add one in the sidebar'); return; }
-  var pending = _buysCsvRows.filter(function(r){ return !r._confirmed && !r._aiDone; });
-  if (!pending.length) { toast('Nothing to parse'); return; }
-  var btn = document.getElementById('buys-ai-btn');
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Parsing…'; }
-  toast('Sending ' + pending.length + ' titles to AI…');
-
-  // Batch in chunks of 40 to stay within token limits
-  var CHUNK = 40;
-  for (var c = 0; c < pending.length; c += CHUNK) {
-    var chunk = pending.slice(c, c + CHUNK);
-    var prompt = 'Parse these eBay trading card listing titles. Return ONLY a JSON array, one object per title, same order:\n'
-      + '[{"i":0,"player":"","year":"","brand":"","set":"","variation":"","serial":"","grade":"","is_auto":false,"is_rc":false,"type":""}]\n\n'
-      + 'Rules:\n'
-      + '- player: full athlete/character name as it would appear on the card. Soccer players can have 1-4 name parts (e.g. "Neymar", "Dennis Bergkamp", "Jean Philippe Mateta", "Vinicius Junior"). NEVER include a club/team name (Arsenal, Chelsea, Barcelona, etc.) or descriptor (Legend, Icon, LEGEND) in the player field. Do not include refractor color or parallel names.\n'
-      + '- year: 4-digit year or YYYY-YY range (e.g. 2025-26).\n'
-      + '- brand: manufacturer — Topps, Panini, Upper Deck, etc.\n'
-      + '- set: product line — Prizm, Chrome, Finest, etc.\n'
-      + '- variation: exact parallel/refractor name (Gold Prizm, True Blue, Red Wave, Golazo Orange, Black Monday Night, etc.) or empty string. Include color + word combos that describe the card finish.\n'
-      + '- serial: print-run denominator only — "99" from "/99", "10" from "#5/10", "25" from "/25".\n'
-      + '- grade: slab label if present (PSA 10, BGS 9.5).\n'
-      + '- is_auto: true if "Auto", "Autograph", or "Signed" appears.\n'
-      + '- is_rc: true if "RC", "Rookie", or "Rookie Card" appears.\n'
-      + '- type: one of Soccer/Pokémon/NFL/MLB/NBA/Marvel/Yu-Gi-Oh/Other.\n\n'
-      + 'Titles:\n' + chunk.map(function(r,j){ return j + ': ' + r.name; }).join('\n');
-    try {
-      var res = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true'
-        },
-        body: JSON.stringify({
-          model: 'claude-haiku-4-5-20251001',
-          max_tokens: 3000,
-          messages: [{ role: 'user', content: prompt }]
-        })
-      });
-      if (!res.ok) { var e = await res.json().catch(function(){ return {}; }); throw new Error((e.error&&e.error.message)||'API '+res.status); }
-      var data = await res.json();
-      var txt = data.content.filter(function(b){ return b.type==='text'; }).map(function(b){ return b.text; }).join('');
-      var jsonStr = txt.replace(/```json|```/g,'').trim();
-      // Find the JSON array
-      var arrStart = jsonStr.indexOf('[');
-      var arrEnd = jsonStr.lastIndexOf(']');
-      if (arrStart >= 0 && arrEnd > arrStart) jsonStr = jsonStr.slice(arrStart, arrEnd+1);
-      var results = JSON.parse(jsonStr);
-      // Apply results back to the matching rows
-      for (var j = 0; j < results.length && j < chunk.length; j++) {
-        var ai = results[j];
-        var row = chunk[j];
-        // Find row index in _buysCsvRows
-        var idx = _buysCsvRows.indexOf(row);
-        if (idx < 0) continue;
-        if (ai.player) _buysCsvRows[idx].player = ai.player;
-        if (ai.year)   _buysCsvRows[idx].year   = ai.year;
-        if (ai.brand)  _buysCsvRows[idx].brand  = ai.brand;
-        if (ai.set)    _buysCsvRows[idx].set    = ai.set;
-        if (ai.variation) _buysCsvRows[idx].variation = ai.variation;
-        if (ai.serial) _buysCsvRows[idx].serial = ai.serial;
-        if (ai.grade)  _buysCsvRows[idx].grade  = ai.grade;
-        if (ai.type && ai.type !== 'Other') _buysCsvRows[idx].type = ai.type;
-        _buysCsvRows[idx].is_auto = _buysCsvRows[idx].is_auto || !!ai.is_auto;
-        _buysCsvRows[idx].is_rc   = _buysCsvRows[idx].is_rc   || !!ai.is_rc;
-        _buysCsvRows[idx]._aiDone = true;
-        // Rebuild standardized name now that AI has filled in player/year/set/etc.
-        if (_buysCsvRows[idx].player) {
-          _buysCsvRows[idx].name = buildStandardName(_buysCsvRows[idx]);
-        }
-      }
-    } catch(err) {
-      toast('AI parse error: ' + err.message);
-      if (btn) { btn.disabled = false; btn.textContent = '✨ AI Parse Titles'; }
-      return;
-    }
-  }
-
-  // Re-render the review section
-  var revEl = document.getElementById('buys-csv-review');
-  if (revEl) revEl.innerHTML = _renderBuysCsvReview();
-  if (btn) { btn.disabled = false; btn.textContent = '✨ AI Parse Titles'; }
-  toast('AI parse complete ✓');
-  // Auto-scan images for rows that still have no player but have an image URL
-  _scanImportImages();
-}
-
-// Scan card images via Vision API for import rows that still have no player name
-async function _scanImportImages() {
-  var apiKey = getApiKey();
-  if (!apiKey) return;
-  var toScan = _buysCsvRows.filter(function(r){ return r.img && !r.player && !r._imgScanned && !r._confirmed; });
-  if (!toScan.length) return;
-
-  var btn = document.getElementById('buys-img-scan-btn');
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Scanning…'; }
-  toast('Scanning ' + toScan.length + ' card image' + (toScan.length === 1 ? '' : 's') + ' for player names…');
-
-  var prompt = 'This is a trading card image. Extract ALL visible information and return ONLY valid JSON:\n'
-    + '{"player":"","year":"","brand":"","set":"","variation":"","serial":"","grade":"","is_auto":false,"is_rc":false,"type":"","comp":""}\n\n'
-    + 'Rules:\n'
-    + '- player: the subject/player name printed on the card\n'
-    + '- year: the card year (4 digits, or YYYY-YY)\n'
-    + '- brand: Panini, Topps, Upper Deck, etc.\n'
-    + '- set: Prizm, Chrome, Finest, etc.\n'
-    + '- variation: EXACT parallel name visible (Gold Prizm, Silver, Refractor, etc.)\n'
-    + '- serial: print-run denominator only — "99" from "/99", "10" from "#5/10"\n'
-    + '- grade: grading slab text if visible (e.g. PSA 10, BGS 9.5)\n'
-    + '- is_auto: true if signature visible\n'
-    + '- is_rc: true if RC or Rookie Card logo visible\n'
-    + '- type: Soccer, Pokémon, NFL, MLB, NBA, Marvel, Yu-Gi-Oh, or Other\n'
-    + '- comp: competition/league shorthand (PL, CWC, UCL, etc.)';
-
-  for (var si = 0; si < toScan.length; si++) {
-    var row = toScan[si];
-    var idx = _buysCsvRows.indexOf(row);
-    if (idx < 0) continue;
-    try {
-      var res = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true'
-        },
-        body: JSON.stringify({
-          model: 'claude-opus-4-6',
-          max_tokens: 400,
-          messages: [{role: 'user', content: [
-            {type: 'image', source: {type: 'url', url: row.img}},
-            {type: 'text', text: prompt}
-          ]}]
-        })
-      });
-      _buysCsvRows[idx]._imgScanned = true;
-      if (!res.ok) continue;
-      var data = await res.json();
-      var txt = data.content.filter(function(b){ return b.type==='text'; }).map(function(b){ return b.text; }).join('');
-      var json = JSON.parse(txt.replace(/```json|```/g,'').trim());
-      if (json.player) _buysCsvRows[idx].player = json.player;
-      if (json.year && !_buysCsvRows[idx].year) _buysCsvRows[idx].year = json.year;
-      if (json.brand && !_buysCsvRows[idx].brand) _buysCsvRows[idx].brand = json.brand;
-      if (json.set && !_buysCsvRows[idx].set) _buysCsvRows[idx].set = json.set;
-      if (json.variation && !_buysCsvRows[idx].variation) _buysCsvRows[idx].variation = json.variation;
-      if (json.serial && !_buysCsvRows[idx].serial) _buysCsvRows[idx].serial = json.serial;
-      if (json.grade && !_buysCsvRows[idx].grade) _buysCsvRows[idx].grade = json.grade;
-      if (json.type && json.type !== 'Other' && !_buysCsvRows[idx].type) _buysCsvRows[idx].type = json.type;
-      if (json.comp && !_buysCsvRows[idx].comp) _buysCsvRows[idx].comp = json.comp;
-      _buysCsvRows[idx].is_auto = _buysCsvRows[idx].is_auto || !!json.is_auto;
-      _buysCsvRows[idx].is_rc   = _buysCsvRows[idx].is_rc   || !!json.is_rc;
-      if (_buysCsvRows[idx].player) {
-        _buysCsvRows[idx].name = buildStandardName(_buysCsvRows[idx]);
-      }
-    } catch(e) {
-      _buysCsvRows[idx]._imgScanned = true;
-    }
-  }
-
-  var revEl2 = document.getElementById('buys-csv-review');
-  if (revEl2) revEl2.innerHTML = _renderBuysCsvReview();
-  toast('Image scan complete ✓');
-}
 
 // ─────────────────────────────────────────────
 // SALES
@@ -2580,7 +2420,7 @@ function buildPurchasePanel(pid){
       <div class="ps">
         <div class="ps-title">Actions</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn pri" onclick="closePanel();lookupCard('${pid}')">💡 Value Lookup</button>
+          <button class="btn pri" onclick="lookupCard('${pid}')">🔍 eBay Sold</button>
           <button class="btn" onclick="closePanel();buildListing('${pid}')">📝 Build Listing</button>
           ${p.itemId?`<a href="https://www.ebay.com/itm/${esc(p.itemId)}" target="_blank" class="btn" style="text-decoration:none">🔗 eBay</a>`:''}
           ${p.is_lot?`<button class="btn" onclick="openSplitLot('${pid}')">✂ Split Lot</button>`:''}
@@ -2619,10 +2459,7 @@ function buildPurchaseEditForm(pid){
       </select>
     </div>
     <div class="field-item"><label>Image URL</label>
-      <div style="display:flex;gap:4px">
-        <input class="field-input mono" id="ef-img-${pid}" value="${esc(p.img||'')}" placeholder="https://i.ebayimg.com/..." style="flex:1">
-        <button class="scan-btn" onclick="scanCardImage(document.getElementById('ef-img-${pid}').value||'${esc(p.img||'')}','${pid}')" title="Scan image to auto-fill fields">🔍 Scan</button>
-      </div>
+      <input class="field-input mono" id="ef-img-${pid}" value="${esc(p.img||'')}" placeholder="https://i.ebayimg.com/...">
     </div>
   </div>
   <div style="display:flex;gap:14px;margin:10px 0">
@@ -3498,126 +3335,14 @@ function renderRelinkResultsHtml(sid,q){
 }
 
 // ─────────────────────────────────────────────
-// VALUE LOOKUP
+// VALUE LOOKUP — opens eBay sold search
 // ─────────────────────────────────────────────
-async function lookupCard(pid){
+function lookupCard(pid){
   const p=getP(pid);
-  const apiKey=getApiKey();
-  const ebayUrl=`https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(p.name)}&LH_Complete=1&LH_Sold=1&_sop=13`;
-  // Show cached result immediately if fresh (<24h)
-  const cached=valueLookups[pid];
-  if(cached&&(Date.now()-cached.ts)<86400000){showLookupResult(pid,cached);return;}
-  if(!apiKey){
-    openPanel(`<div class="pn-head"><div><div class="pn-title">${esc(p.name)}</div></div><button class="pn-close" onclick="closePanel()">✕</button></div>
-      <div class="pn-body"><div class="alert warn">Enter your Anthropic API key in the sidebar to enable AI value lookup.</div>
-      <a href="${ebayUrl}" target="_blank" class="btn" style="text-decoration:none;margin-top:10px;display:inline-block">Search eBay Sold manually →</a></div>`);
-    return;
-  }
-  openPanel(`
-    <div class="pn-head">
-      ${p.img?`<img class="pn-img" src="${esc(p.img)}" onerror="this.style.display='none'">`:`<div class="pn-img" style="display:flex;align-items:center;justify-content:center;font-size:32px">🃏</div>`}
-      <div><div class="pn-title">${esc(p.name)}</div><div class="pn-meta">${esc(p.type)} · paid ${f$(p.cost)}</div></div>
-      <button class="pn-close" onclick="closePanel()">✕</button>
-    </div>
-    <div class="pn-body" style="text-align:center;padding-top:50px">
-      <div class="spin" style="width:22px;height:22px;margin:0 auto 12px"></div>
-      <div style="font-size:12px;font-family:var(--mono);color:var(--dim)">Searching sold listings…</div>
-    </div>`);
-  // Build tight search query emphasizing variation/serial/grade
-  const varParts=[p.variation,p.grade?p.grade:'raw',p.serial?`/${p.serial}`:''].filter(Boolean).join(' ');
-  const searchQ=`${p.player||''} ${p.year||''} ${p.set||''} ${varParts} sold ebay`.replace(/\s+/g,' ').trim();
-  const prompt=`You are a trading card market research expert. Search for RECENT eBay sold prices for this EXACT card:
-
-FULL TITLE: ${p.name}
-PLAYER/SUBJECT: ${p.player||'?'}
-YEAR: ${p.year||'?'} | SET: ${p.set||'?'} | BRAND: ${p.brand||'?'}
-VARIATION/PARALLEL: ${p.variation||'base (no parallel)'}
-SERIAL #: ${p.serial?'YES — /'+p.serial+' — CRITICAL: ONLY match this exact print run, NOT other serials':' NOT serialized'}
-GRADE: ${p.grade||'raw/ungraded'}
-AUTO: ${p.is_auto?'YES — must be autographed':'no'}
-RC/ROOKIE: ${p.is_rc?'YES':'no'}
-TYPE: ${p.type}
-
-CRITICAL MATCHING RULES:
-- ${p.serial?`Serial /${p.serial} is NON-NEGOTIABLE. A /10 and /25 are completely different cards.`:'Match the exact variation/parallel — Gold Prizm ≠ Silver Prizm ≠ Base'}
-- ${p.variation?`Variation "${p.variation}" must match exactly — different parallels have very different values`:'If card has no variation, do not include parallel versions in comps'}
-- ${p.grade?`Grade ${p.grade} only — raw card prices are irrelevant`:'Raw card only — do not include graded comps'}
-- Search: "${searchQ}"
-- Also try: "${p.player||p.name.split(' ').slice(0,3).join(' ')} ${p.set||''} ${p.serial?'/'+p.serial:''} sold"
-
-Gather 6-8 recent sold prices. Return ONLY valid JSON (no markdown):
-{"cardName":"","avgPrice":0,"lowPrice":0,"highPrice":0,"confidence":"high|medium|low","notes":"brief note on match quality and market trend","recentSales":[{"title":"","price":0,"date":"","url":"","imageUrl":null}]}
-recentSales: up to 8 items, sorted newest first. imageUrl: only real https:// URLs from i.ebayimg.com or cdn.tcgplayer.com, null otherwise. url: direct eBay sold listing URL if available.`;
-  try{
-    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
-      headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-beta':'prompt-caching-2024-07-31','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:'claude-opus-4-6',max_tokens:2500,
-        tools:[{type:'web_search_20250305',name:'web_search'}],messages:[{role:'user',content:prompt}]})});
-    if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error((e.error?.message)||'API '+res.status);}
-    const data=await res.json();
-    const text=data.content.filter(b=>b.type==='text').map(b=>b.text).join('');
-    const raw=text.replace(/```json|```/g,'').trim();
-    const json=JSON.parse(raw);
-    json.avgPrice=parseFloat(json.avgPrice)||0;
-    json.lowPrice=parseFloat(json.lowPrice)||0;
-    json.highPrice=parseFloat(json.highPrice)||0;
-    json.recentSales=(json.recentSales||[]).slice(0,8).map(s=>({
-      ...s,price:parseFloat(s.price)||0,
-      imageUrl:(typeof s.imageUrl==='string'&&s.imageUrl.startsWith('https://')&&/ebayimg|tcgplayer/.test(s.imageUrl))?s.imageUrl:null,
-      url:(typeof s.url==='string'&&s.url.startsWith('https://'))?s.url:null,
-    }));
-    json.ts=Date.now();
-    valueLookups[pid]=json;persistLookups();
-    showLookupResult(pid,json);
-  }catch(e){
-    openPanel(`<div class="pn-head"><div><div class="pn-title">${esc(p.name)}</div></div><button class="pn-close" onclick="closePanel()">✕</button></div>
-      <div class="pn-body"><div class="alert err">Lookup failed: ${esc(e.message)}</div>
-      <a href="${ebayUrl}" target="_blank" class="btn" style="text-decoration:none;margin-top:10px;display:inline-block">Search eBay manually →</a></div>`);
-  }
+  const q=encodeURIComponent(p.name);
+  window.open('https://www.ebay.com/sch/i.html?_nkw='+q+'&LH_Complete=1&LH_Sold=1&_sop=13','_blank');
 }
-function showLookupResult(pid,r){
-  const p=getP(pid);
-  const pnl=r.avgPrice?r.avgPrice-p.cost:null;
-  const netPnlEst=pnl;
-  const imgUrl=r.recentSales?.[0]?.imageUrl;
-  const ebayUrl=`https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(p.name)}&LH_Complete=1&LH_Sold=1&_sop=13`;
-  const ageHrs=r.ts?Math.round((Date.now()-r.ts)/3600000):null;
-  openPanel(`
-    <div class="pn-head">
-      ${(imgUrl||p.img)?`<img class="pn-img" src="${esc(imgUrl||p.img)}" onerror="this.parentElement.innerHTML='<div class=pn-img style=display:flex;align-items:center;justify-content:center;font-size:32px>🃏</div>'">`:`<div class="pn-img" style="display:flex;align-items:center;justify-content:center;font-size:32px">🃏</div>`}
-      <div style="flex:1;min-width:0">
-        <div class="pn-title">${esc(r.cardName||p.name)}</div>
-        <div class="pn-meta">Confidence: <span style="color:${r.confidence==='high'?'var(--green)':r.confidence==='medium'?'var(--gold)':'var(--red)'}">${r.confidence}</span>${ageHrs!=null?` · ${ageHrs<1?'just now':ageHrs+'h ago'}`:''}</div>
-      </div>
-      <button class="pn-close" onclick="closePanel()">✕</button>
-    </div>
-    <div class="pn-body">
-      <div class="lp-grid">
-        <div class="lp-c"><div class="lp-lbl">LOW</div><div class="lp-val" style="color:var(--dim)">${f$(r.lowPrice)}</div></div>
-        <div class="lp-c"><div class="lp-lbl">MARKET AVG</div><div class="lp-val" style="color:var(--gold)">${f$(r.avgPrice)}</div></div>
-        <div class="lp-c"><div class="lp-lbl">HIGH</div><div class="lp-val" style="color:var(--green)">${f$(r.highPrice)}</div></div>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
-        <div class="lp-c"><div class="lp-lbl">YOU PAID</div><div class="lp-val" style="color:var(--gold)">${f$(p.cost)}</div></div>
-        <div class="lp-c"><div class="lp-lbl">UNREALIZED P&L</div><div class="lp-val" style="color:${pnl!=null?(pnl>=0?'var(--green)':'var(--red)'):'var(--faint)'}">${pnl!=null?f$(pnl):'—'}</div></div>
-        <div class="lp-c"><div class="lp-lbl">NET (after eBay fee)</div><div class="lp-val" style="color:${netPnlEst!=null?(netPnlEst>=0?'var(--green)':'var(--red)'):'var(--faint)'};font-size:13px">${netPnlEst!=null?f$(netPnlEst):'—'}</div></div>
-        <div class="lp-c"><div class="lp-lbl">ROI</div><div class="lp-val" style="color:var(--dim);font-size:13px">${p.cost>0&&netPnlEst!=null?((netPnlEst/p.cost*100).toFixed(0)+'%'):'—'}</div></div>
-      </div>
-      ${r.notes?`<div class="alert info" style="margin-bottom:12px">${esc(r.notes)}</div>`:''}
-      ${r.recentSales?.length?`<div class="ps"><div class="ps-title">Recent Sold Comps (${r.recentSales.length})</div>
-        ${r.recentSales.map(s=>`<div class="comp-row" ${s.url?`onclick="window.open('${esc(s.url)}','_blank')" style="cursor:pointer"`:''}>
-          ${s.imageUrl?`<img src="${esc(s.imageUrl)}" style="width:30px;height:42px;border-radius:3px;object-fit:cover;flex-shrink:0" onerror="this.style.display='none'">` :'<div style="width:30px;flex-shrink:0"></div>'}
-          <span class="comp-title">${esc(s.title||'—')}</span>
-          <span class="comp-price">${f$(s.price)}</span>
-          <span class="comp-date">${esc(s.date||'')}</span>
-        </div>`).join('')}</div>`:''}
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <a href="${ebayUrl}" target="_blank" class="btn" style="text-decoration:none">🔍 eBay Sold</a>
-        <button class="btn ghost sm" onclick="delete valueLookups['${pid}'];persistLookups();lookupCard('${pid}')">↻ Refresh</button>
-        <button class="btn ghost sm" onclick="showPurchase('${pid}')">← Card Detail</button>
-      </div>
-    </div>`);
-}
+
 
 // ─────────────────────────────────────────────
 // CARD TITLE PARSER
@@ -3823,64 +3548,6 @@ function parseCardTitle(title) {
   return out;
 }
 
-// ─────────────────────────────────────────────
-// IMAGE SCANNER (Vision API)
-// ─────────────────────────────────────────────
-async function scanCardImage(imgUrl, pid) {
-  const apiKey = getApiKey();
-  if(!apiKey) { toast('Enter API key in sidebar first'); return; }
-  if(!imgUrl || !imgUrl.startsWith('http')) { toast('No image URL to scan'); return; }
-  toast('Scanning image…');
-  const prompt = `This is a trading card image. Extract ALL visible information and return ONLY valid JSON:
-{"player":"","year":"","brand":"","set":"","variation":"","serial":"","grade":"","is_auto":false,"is_rc":false,"type":"","comp":"","notes":""}
-
-Rules:
-- player: the subject/player name printed on the card
-- year: the card year (4 digits, or YYYY-YY)
-- brand: Panini, Topps, Upper Deck, etc.
-- set: Prizm, Chrome, Finest, etc.
-- variation: EXACT parallel name visible (Gold Prizm, Silver, Refractor, Holo, etc.) — be very specific
-- serial: print run number only (e.g. if card says 23/99, return "99"; if 1/1, return "1")
-- grade: grading slab text if visible (e.g. PSA 10, BGS 9.5)
-- is_auto: true if signature visible
-- is_rc: true if RC or Rookie Card logo visible
-- type: Soccer, Pokémon, NFL, MLB, NBA, Marvel, Yu-Gi-Oh, or Other
-- comp: competition/league shorthand (PL, CWC, UCL, etc.)
-- notes: any other notable info`;
-  try {
-    // Fetch image as base64 if from ebayimg (cross-origin may fail, use url type instead)
-    const imgContent = imgUrl.includes('ebayimg.com') || imgUrl.includes('tcgplayer.com')
-      ? {type:'image',source:{type:'url',url:imgUrl}}
-      : {type:'image',source:{type:'url',url:imgUrl}};
-    const res = await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
-      headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:'claude-opus-4-6',max_tokens:800,
-        messages:[{role:'user',content:[imgContent,{type:'text',text:prompt}]}]})});
-    if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error((e.error?.message)||'API '+res.status);}
-    const data = await res.json();
-    const text = data.content.filter(b=>b.type==='text').map(b=>b.text).join('');
-    const json = JSON.parse(text.replace(/```json|```/g,'').trim());
-    // Merge into purchase
-    editP(pid, {
-      player:    json.player    || '',
-      year:      json.year      || '',
-      brand:     json.brand     || '',
-      set:       json.set       || '',
-      variation: json.variation || '',
-      serial:    json.serial    || '',
-      grade:     json.grade     || '',
-      is_auto:   !!json.is_auto,
-      is_rc:     !!json.is_rc,
-      type:      json.type      || '',
-      comp:      json.comp      || '',
-    });
-    toast('Image scanned — fields updated ✓');
-    document.getElementById('pn').innerHTML = buildPurchasePanel(pid);
-    render();
-  } catch(e) {
-    toast('Scan failed: ' + e.message);
-  }
-}
 
 // ─────────────────────────────────────────────
 // ACTIVE LISTINGS PAGE
@@ -4369,7 +4036,6 @@ function renderListings() {
 let _importRows = []; // parsed rows pending review
 
 function renderImport() {
-  const apiKey = getApiKey();
   const tab = _importTab;
   const tabBtn = (t, label) => `<button class="btn ${tab===t?'pri':'ghost'} sm" onclick="_importTab='${t}';render()">${label}</button>`;
   const dropZone = (type) => {
@@ -4464,8 +4130,6 @@ function renderImport() {
   return`
   <div class="topbar"><div class="pg-title">Import</div><div style="margin-left:auto;display:flex;gap:8px"><button class="btn ghost sm" onclick="showChecklistPanel()">📋 Checklists (${Object.keys(checklists).length})</button></div></div>
   <div class="content">
-    ${!apiKey?`<div class="alert warn" style="margin-bottom:16px">⚠ Enter your Anthropic API key in the sidebar to enable AI title parsing.</div>`:''}
-
     <!-- TABS -->
     <div style="display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap">
       ${tabBtn('template','📋 Purchases')}
@@ -4480,22 +4144,7 @@ function renderImport() {
     </div>
 
     <!-- TOOLS -->
-    <div style="padding-top:18px;border-top:1px solid var(--border);display:grid;grid-template-columns:1fr 1fr;gap:18px">
-      <!-- IMAGE SCAN -->
-      <div>
-        <div style="font-size:12px;font-weight:700;margin-bottom:6px;color:var(--dim)">Scan a Card Image</div>
-        <div style="font-size:11px;color:var(--dim);font-family:var(--mono);margin-bottom:8px">Paste an image URL to auto-extract card details using AI vision.</div>
-        <input id="scan-url" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:var(--r2);font-size:11px;font-family:var(--mono);outline:none;margin-bottom:8px;box-sizing:border-box" placeholder="https://i.ebayimg.com/…">
-        <div style="margin-bottom:8px">
-          <img id="scan-preview" src="" style="max-width:100%;max-height:140px;border-radius:6px;display:none;object-fit:contain">
-        </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn sm" style="background:rgba(164,126,245,.1);border-color:rgba(164,126,245,.3);color:var(--purple)" onclick="previewScanImage()">👁 Preview</button>
-          <button class="btn sm" style="background:rgba(164,126,245,.1);border-color:rgba(164,126,245,.3);color:var(--purple)" onclick="runStandaloneScan()">🔍 Scan &amp; Parse</button>
-        </div>
-        <div id="scan-result" style="margin-top:10px"></div>
-      </div>
-
+    <div style="padding-top:18px;border-top:1px solid var(--border)">
       <!-- BACKUP RESTORE -->
       <div>
         <div style="font-size:12px;font-weight:700;margin-bottom:6px;color:var(--dim)">Restore Backup</div>
@@ -4504,42 +4153,6 @@ function renderImport() {
       </div>
     </div>
   </div>`;
-}
-
-function previewScanImage() {
-  const url = document.getElementById('scan-url')?.value?.trim();
-  const img = document.getElementById('scan-preview');
-  if(!img||!url) return;
-  img.src = url; img.style.display = 'block';
-  img.onerror = () => { img.style.display='none'; toast('Could not load image'); };
-}
-
-async function runStandaloneScan() {
-  const url = document.getElementById('scan-url')?.value?.trim();
-  const apiKey = getApiKey();
-  if(!apiKey){toast('Enter API key in sidebar');return;}
-  if(!url){toast('Enter an image URL');return;}
-  const resEl = document.getElementById('scan-result');
-  if(resEl) resEl.innerHTML=`<div style="font-size:11px;font-family:var(--mono);color:var(--dim)">Scanning…</div>`;
-  const prompt=`This is a trading card image. Extract ALL visible information and return ONLY valid JSON:
-{"player":"","year":"","brand":"","set":"","variation":"","serial":"","grade":"","is_auto":false,"is_rc":false,"type":"","comp":""}
-variation: be very specific about the exact parallel (Gold Prizm, Silver Prizm, Refractor, Holo, etc.). serial: print run denominator only (e.g. card says 5/25, return "25"). type: Soccer/Pokémon/NFL/MLB/NBA/Marvel/Yu-Gi-Oh/Other.`;
-  try {
-    const res = await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
-      headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:'claude-opus-4-6',max_tokens:600,
-        messages:[{role:'user',content:[{type:'image',source:{type:'url',url}},{type:'text',text:prompt}]}]})});
-    if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error((e.error?.message)||'API '+res.status);}
-    const data = await res.json();
-    const text = data.content.filter(b=>b.type==='text').map(b=>b.text).join('');
-    const json = JSON.parse(text.replace(/```json|```/g,'').trim());
-    if(resEl) resEl.innerHTML=`<div style="background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);padding:10px;font-size:11px;font-family:var(--mono)">
-      ${Object.entries(json).filter(([,v])=>v&&v!==false).map(([k,v])=>`<div><span style="color:var(--faint)">${k}:</span> <span style="color:var(--text)">${v}</span></div>`).join('')}
-    </div>`;
-    toast('Scan complete ✓');
-  } catch(e) {
-    if(resEl) resEl.innerHTML=`<div class="alert err">Scan failed: ${esc(e.message)}</div>`;
-  }
 }
 
 function runImportParse() {
@@ -5671,112 +5284,8 @@ function bulkDeleteSelected() {
 // LISTING BUILDER
 // ─────────────────────────────────────────────
 const listingCache={};
-let _ld={};
-async function buildListing(pid){
-  const p=getP(pid);
-  const apiKey=getApiKey();
-  if(!apiKey){
-    const p2=getP(pid);
-    openPanel(`
-      <div class="pn-head">
-        ${p2.img?`<img class="pn-img" src="${esc(p2.img)}" onerror="this.style.display='none'">`:`<div class="pn-img" style="display:flex;align-items:center;justify-content:center;font-size:32px">🃏</div>`}
-        <div style="flex:1;min-width:0"><div class="pn-title">Build Listing</div><div class="pn-meta">${esc(p2.name)}</div></div>
-        <button class="pn-close" onclick="closePanel()">✕</button>
-      </div>
-      <div class="pn-body">
-        <div style="display:grid;gap:10px">
-          <div style="background:var(--surf2);border:1px solid var(--border);border-radius:var(--r);padding:14px">
-            <div style="font-weight:700;font-size:13px;margin-bottom:4px">📥 Download eBay CSV</div>
-            <div style="font-size:12px;color:var(--dim);margin-bottom:10px;line-height:1.5">Generate an eBay File Exchange–compatible CSV row for this card. No API key needed. Open in Excel or Google Sheets and import to eBay Seller Hub.</div>
-            <button class="btn pri" onclick="exportSingleCardCSV('${pid}');closePanel()">📥 Download CSV for this card</button>
-          </div>
-          <div style="background:var(--surf2);border:1px solid var(--border);border-radius:var(--r);padding:14px">
-            <div style="font-weight:700;font-size:13px;margin-bottom:4px">✨ AI-Written Listing</div>
-            <div style="font-size:12px;color:var(--dim);margin-bottom:10px;line-height:1.5">Add your Anthropic API key in the sidebar to have Claude write a keyword-rich title, description, and pricing suggestions tailored to this card.</div>
-            <div style="font-size:11px;font-family:var(--mono);color:var(--faint)">API key → sidebar footer → paste key</div>
-          </div>
-        </div>
-      </div>`);
-    return;
-  }
-  if(listingCache[pid]){showListingResult(pid,listingCache[pid]);return;}
-  openPanel(`
-    <div class="pn-head">
-      ${p.img?`<img class="pn-img" src="${esc(p.img)}" onerror="this.style.display='none'">`:`<div class="pn-img" style="display:flex;align-items:center;justify-content:center;font-size:32px">🃏</div>`}
-      <div style="flex:1;min-width:0"><div class="pn-title">Building Listing…</div><div class="pn-meta">${esc(p.name)}</div></div>
-      <button class="pn-close" onclick="closePanel()">✕</button>
-    </div>
-    <div class="pn-body" style="text-align:center;padding-top:50px">
-      <div class="spin" style="width:22px;height:22px;margin:0 auto 12px"></div>
-      <div style="font-size:12px;font-family:var(--mono);color:var(--dim)">Writing your eBay listing…</div>
-    </div>`);
-  const {grader:_gr,grade:_gv}=_parseGrade(p.grade);
-  const _mfr=_ebayManufacturer(p);
-  const _sport=_ebaySport(p);
-  const _baseSpecs=_ebaySpecifics(p);
-  const prompt=`You are an expert eBay trading card seller. Generate a complete, fully-filled eBay listing for this trading card. Return ONLY valid JSON, no markdown, no extra text.
-
-Card info:
-- Full name: ${p.name}
-- Player/Subject: ${p.player||'unknown'}
-- Year: ${p.year||'unknown'}
-- Manufacturer: ${_mfr||'unknown'}
-- Set: ${p.set||'unknown'}
-- Parallel/Variety: ${p.variation&&p.variation.toLowerCase()!=='base'?p.variation:'Base'}
-- Serial numbered: ${p.serial?'Yes, /'+p.serial:'No'}
-- Graded: ${p.grade?'Yes — '+p.grade+(_gr?' ('+_gr+' '+_gv+')':''):'No (raw card)'}
-- Autographed: ${p.is_auto?'Yes':'No'}
-- Rookie card: ${p.is_rc?'Yes':'No'}
-- Card type/sport: ${p.type||'Trading Card'}
-- Sport: ${_sport||'N/A'}
-- League/Competition: ${p.comp||'unknown'}
-- Cost paid: $${p.cost||'unknown'}
-
-Fill in EVERY field. For unknown specifics (team, card number, league) make your best educated guess based on the player and year, or leave as empty string only if truly unknowable.
-
-Return this exact JSON:
-{
-  "title": "keyword-rich eBay title, max 80 chars, no special symbols, include year player set parallel grade serial auto rc",
-  "description": "4-6 sentence HTML description highlighting key features, condition, and shipping",
-  "auction_start": 9.99,
-  "buy_it_now": 29.99,
-  "condition_text": "Near Mint" or "PSA 10" etc,
-  "specifics": {
-    "Sport": "${_sport||''}",
-    "Player": "${p.player||''}",
-    "Team": "infer from player if known else empty string",
-    "League": "${p.comp||'infer from player/sport'}",
-    "Year": "${p.year||''}",
-    "Manufacturer": "${_mfr||''}",
-    "Set": "${p.set||''}",
-    "Parallel/Variety": "${p.variation&&p.variation.toLowerCase()!=='base'?p.variation:'Base'}",
-    "Card Number": "infer if known, else empty string",
-    "Autographed": "${p.is_auto?'Yes':'No'}",
-    "Rookie": "${p.is_rc?'Yes':'No'}",
-    "Graded": "${p.grade?'Yes':'No'}",
-    "Grade": "${_gv||''}",
-    "Grading Company": "${_gr||''}",
-    "Serial Numbered": "${p.serial?'Yes':'No'}",
-    "Print Run": "${p.serial||''}",
-    "Original/Reprint": "Original",
-    "Country/Region of Manufacture": "${p.type==='Pokémon'?'Japan':'United States'}",
-    "Modified Item": "No",
-    "Non-Domestic Product": "No"
-  }
-}`;
-  try{
-    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
-      headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:1400,
-        messages:[{role:'user',content:prompt}]})});
-    if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error((e.error?.message)||'API '+res.status);}
-    const data=await res.json();
-    const text=data.content.filter(b=>b.type==='text').map(b=>b.text).join('');
-    listingCache[pid]=text;
-    showListingResult(pid,text);
-  }catch(e){
-    openPanel(`<div class="pn-head"><div style="flex:1;min-width:0"><div class="pn-title">Listing Failed</div><div class="pn-meta">${esc(p.name)}</div></div><button class="pn-close" onclick="closePanel()">✕</button></div><div class="pn-body"><div class="alert err">${esc(e.message)}</div><button class="btn ghost sm" style="margin-top:10px" onclick="buildListing('${pid}')">↻ Try Again</button></div>`);
-  }
+function buildListing(pid){
+  exportSingleCardCSV(pid);
 }
 function copyListing() {
   const el = document.getElementById('listing-out-raw');
