@@ -9,7 +9,7 @@
 :root{
   --bg:#04070f;--surf:#09111e;--surf2:#0e1929;--surf3:#142035;
   --border:#1a2d44;--border2:#22395a;
-  --text:#c4d8f5;--dim:#5a7a9c;--faint:#253650;
+  --text:#c4d8f5;--dim:#6e94be;--faint:#4a6a8a;
   --gold:#00d4ff;--gold2:#0099cc;
   --green:#00e5aa;--red:#ff4a68;--blue:#5aadff;--purple:#b87aff;--orange:#ff8a4a;
   --cyan-glow:rgba(0,212,255,.15);--cyan-dim:rgba(0,212,255,.08);
@@ -262,6 +262,9 @@ select.recat-sel:hover{border-color:var(--gold)}
 .drill-section:hover{border-color:var(--border2)!important}
 .drill-expand{font-size:10px;padding:2px 8px;background:var(--surf2);border:1px solid var(--border);border-radius:4px;color:var(--faint);cursor:pointer;font-family:var(--mono);transition:all .12s}
 .drill-expand:hover{color:var(--green);border-color:var(--green)}
+.pl-thumb{width:28px;height:28px;object-fit:cover;border-radius:3px;display:block;border:1px solid var(--border);transition:transform .15s,box-shadow .15s;cursor:zoom-in;transform-origin:left center}
+.pl-thumb:hover{transform:scale(3.5);box-shadow:0 4px 16px rgba(0,0,0,.7);z-index:200;position:relative}
+.pl-thumb-empty{width:28px;height:28px;border-radius:3px;background:var(--surf2);border:1px solid var(--border);display:block}
 /* Drilldown donut SVG */
 .donut-wrap{display:flex;align-items:center;gap:18px}
 .donut-legend{display:flex;flex-direction:column;gap:5px;font-size:10px;font-family:var(--mono)}
@@ -863,6 +866,7 @@ function getLinkedPids(sid) {
 function soldPids() {
   const s = new Set();
   for (const sale of sales) { for (const pid of getLinkedPids(sale.id)) s.add(pid); }
+  for (const p of purchases) { if (getP(p.id).splitDone) s.add(p.id); }
   return s;
 }
 function salesForPid(pid) { return sales.filter(s => getLinkedPids(s.id).includes(pid)); }
@@ -1294,6 +1298,15 @@ function _computeDash(){
   const _MN={Jan:1,Feb:2,Mar:3,Apr:4,May:5,Jun:6,Jul:7,Aug:8,Sep:9,Oct:10,Nov:11,Dec:12};
   function _pd(d){if(!d)return null;let m;if((m=d.match(/^([A-Za-z]{3})-(\d{1,2})-(\d{2,4})$/))!==null){const yr=m[3].length===2?2000+parseInt(m[3]):parseInt(m[3]);return{yr,mo:_MN[m[1]]||0,dy:parseInt(m[2])};}if((m=d.match(/^([A-Za-z]{3})\s+(\d{1,2}),\s*(\d{4})$/))!==null){return{yr:parseInt(m[3]),mo:_MN[m[1]]||0,dy:parseInt(m[2])};}return null;}
   function _ts(pd){return pd?new Date(pd.yr,pd.mo-1,pd.dy).getTime():null;}
+  function _getImg(pp){if(!pp)return'';const img=pp.img;return Array.isArray(img)?(img[0]||''):(img||'');}
+  function _normPl(pl){return pl.toLowerCase().trim();}
+  function _ensurePl(m,pl){
+    const key=_normPl(pl);
+    if(!m[key])m[key]={inv:{n:0,cost:0},sold:{n:0,rev:0,pnl:0,cost:0},displayName:pl,imgs:{pnl:{v:-Infinity,url:''},rev:{v:-Infinity,url:''},roi:{v:-Infinity,url:''},inv:{v:-Infinity,url:''}}};
+    const cur=m[key].displayName;
+    if(cur===cur.toUpperCase()&&pl!==pl.toUpperCase())m[key].displayName=pl;
+    return m[key];
+  }
   const sp=soldPids();
   const plMap={},catMap={},setMap={},setMapM={};
   function _ensure(m,k){if(!m[k])m[k]={inv:{n:0,cost:0},sold:{n:0,rev:0,pnl:0,cost:0}};return m[k];}
@@ -1303,7 +1316,10 @@ function _computeDash(){
     const pl=pp.player||'';const ty=pp.type||'Other';
     const setKey=(pp.year?pp.year+' ':'')+pp.set;
     const setKeyM=pp.set||'';
-    if(pl.length>=2){const e=_ensure(plMap,pl);e.inv.n++;e.inv.cost+=pp.cost||0;}
+    if(pl.length>=2){
+      const e=_ensurePl(plMap,pl);e.inv.n++;e.inv.cost+=pp.cost||0;
+      const imgUrl=_getImg(pp);if(imgUrl&&(pp.cost||0)>e.imgs.inv.v)e.imgs.inv={v:pp.cost||0,url:imgUrl};
+    }
     {const e=_ensure(catMap,ty);e.inv.n++;e.inv.cost+=pp.cost||0;}
     if(pp.set){_ensure(setMap,setKey).inv.n++;setMap[setKey].inv.cost+=pp.cost||0;}
     if(setKeyM){_ensure(setMapM,setKeyM).inv.n++;setMapM[setKeyM].inv.cost+=pp.cost||0;}
@@ -1329,7 +1345,16 @@ function _computeDash(){
     const pl=ss.player||'';const ty=ss.type||'Other';
     const setKey=(ss.year?ss.year+' ':'')+ss.set;
     const setKeyM=ss.set||'';
-    if(pl.length>=2){const e=_ensure(plMap,pl);e.sold.n+=(ss.qty||1);e.sold.rev+=amt;if(np!==null){e.sold.pnl+=np;e.sold.cost+=sCost;}}
+    if(pl.length>=2){
+      const e=_ensurePl(plMap,pl);e.sold.n+=(ss.qty||1);e.sold.rev+=amt;if(np!==null){e.sold.pnl+=np;e.sold.cost+=sCost;}
+      const sImgUrl=pids.length?_getImg(getP(pids[0])):'';
+      if(sImgUrl){
+        if(np!==null&&np>e.imgs.pnl.v)e.imgs.pnl={v:np,url:sImgUrl};
+        if(amt>e.imgs.rev.v)e.imgs.rev={v:amt,url:sImgUrl};
+        const sRoi=sCost>0?np/sCost*100:null;
+        if(sRoi!==null&&sRoi>e.imgs.roi.v)e.imgs.roi={v:sRoi,url:sImgUrl};
+      }
+    }
     {const e=_ensure(catMap,ty);e.sold.n+=(ss.qty||1);e.sold.rev+=amt;if(np!==null){e.sold.pnl+=np;e.sold.cost+=sCost;}}
     if(ss.set){_ensure(setMap,setKey).sold.n+=(ss.qty||1);setMap[setKey].sold.rev+=amt;if(np!==null){setMap[setKey].sold.pnl+=np;setMap[setKey].sold.cost+=sCost;}}
     if(setKeyM){_ensure(setMapM,setKeyM).sold.n+=(ss.qty||1);setMapM[setKeyM].sold.rev+=amt;if(np!==null){setMapM[setKeyM].sold.pnl+=np;setMapM[setKeyM].sold.cost+=sCost;}}
@@ -1421,7 +1446,7 @@ function openPlayerDrilldown(chart,sortBy){
   const d=_computeDash();const plMap=d.plMap;
   const plRows=Object.entries(plMap).map(function(e){
     const roi=e[1].sold.cost>0?e[1].sold.pnl/e[1].sold.cost*100:null;
-    return{pl:e[0],inv:e[1].inv,sold:e[1].sold,roi};
+    return{pl:e[1].displayName||e[0],inv:e[1].inv,sold:e[1].sold,roi,imgs:e[1].imgs||{}};
   });
   const sf={pnl:(a,b)=>b.sold.pnl-a.sold.pnl,rev:(a,b)=>b.sold.rev-a.sold.rev,
     inv:(a,b)=>b.inv.cost-a.inv.cost,roi:(a,b)=>(b.roi||0)-(a.roi||0),n:(a,b)=>b.sold.n-a.sold.n};
@@ -1447,11 +1472,16 @@ function openPlayerDrilldown(chart,sortBy){
     });
   } else {
     body='<div style="overflow-x:auto"><table class="dash-tbl"><thead><tr>'
+      +'<th style="width:36px"></th>'
       +'<th style="text-align:left">Player</th><th>In Stock</th><th>Cost Basis</th><th>Sold</th><th>Revenue</th><th>Net P&L</th><th>ROI%</th>'
       +'</tr></thead><tbody>';
     plRows.forEach(function(r){
       const rc=r.roi!==null?r.roi.toFixed(0)+'%':'—';const col=r.roi===null?'var(--faint)':r.roi>=0?'var(--green)':'var(--red)';
+      const imgUrl=(r.imgs&&r.imgs[sortBy]&&r.imgs[sortBy].url)||(r.imgs&&r.imgs.inv&&r.imgs.inv.url)||(r.imgs&&r.imgs.rev&&r.imgs.rev.url)||'';
+      const thumb=imgUrl?'<img class="pl-thumb" src="'+esc(imgUrl)+'" loading="lazy" alt="">'
+        :'<span class="pl-thumb-empty"></span>';
       body+='<tr>'
+        +'<td style="width:36px;padding:2px 4px">'+thumb+'</td>'
         +'<td title="'+esc(r.pl)+'" style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(r.pl)+'</td>'
         +'<td style="text-align:right">'+(r.inv.n||'—')+'</td>'
         +'<td style="text-align:right;color:var(--orange)">'+(r.inv.cost>0?f$(r.inv.cost):'—')+'</td>'
@@ -1683,8 +1713,8 @@ function renderDash(){
   const soldCost=sales.reduce((a,s)=>{const pids=getLinkedPids(s.id);return a+pids.reduce((sum,pid)=>sum+(getP(pid)?.cost||0),0);},0);
   const roi=soldCost>0?((pnl/soldCost)*100).toFixed(0)+'%':'—';
 
-  // Player rows
-  const plRows=Object.entries(plMap).map(([pl,d])=>{const r=d.sold.cost>0?d.sold.pnl/d.sold.cost*100:null;return{pl,inv:d.inv,sold:d.sold,roi:r};});
+  // Player rows — use normalized displayName, carry imgs for thumbnails
+  const plRows=Object.entries(plMap).map(([key,d])=>{const r=d.sold.cost>0?d.sold.pnl/d.sold.cost*100:null;return{pl:d.displayName||key,inv:d.inv,sold:d.sold,roi:r,imgs:d.imgs||{}};});
   const _sf={pnl:(a,b)=>b.sold.pnl-a.sold.pnl,rev:(a,b)=>b.sold.rev-a.sold.rev,inv:(a,b)=>b.inv.cost-a.inv.cost,roi:(a,b)=>(b.roi||0)-(a.roi||0),n:(a,b)=>b.sold.n-a.sold.n};
   plRows.sort(_sf[_dashPlayerSort]||_sf.pnl);
 
@@ -1726,9 +1756,16 @@ function renderDash(){
 
   // Player table HTML
   const thS=k=>'<th class="'+(k===_dashPlayerSort?'sort-active':'')+'" onclick="_dashPlayerSort=\''+k+'\';render()">';
+  function _plThumb(r){
+    const imgUrl=(r.imgs&&r.imgs[_dashPlayerSort]&&r.imgs[_dashPlayerSort].url)||
+      (r.imgs&&r.imgs.inv&&r.imgs.inv.url)||(r.imgs&&r.imgs.rev&&r.imgs.rev.url)||'';
+    return imgUrl?'<img class="pl-thumb" src="'+esc(imgUrl)+'" loading="lazy" alt="">'
+      :'<span class="pl-thumb-empty"></span>';
+  }
   const plTableRows=plRows.slice(0,20).map(r=>{
     const roiStr=r.roi!==null?r.roi.toFixed(0)+'%':'—';const rc=r.roi===null?'var(--faint)':r.roi>=0?'var(--green)':'var(--red)';
     return '<tr onclick="filt.inv.q=\''+r.pl.replace(/'/g,"\\'")+'\';\'+\'filt.sells.q=\''+r.pl.replace(/'/g,"\\'")+'\';nav(\'inv\');render()">'
+      +'<td style="width:36px;padding:2px 4px">'+_plThumb(r)+'</td>'
       +'<td title="'+esc(r.pl)+'">'+esc(r.pl)+'</td><td>'+(r.inv.n||'—')+'</td>'
       +'<td style="color:var(--orange)">'+(r.inv.cost>0?f$(r.inv.cost):'—')+'</td>'
       +'<td>'+(r.sold.n||'—')+'</td><td style="color:var(--green)">'+(r.sold.rev>0?f$(r.sold.rev):'—')+'</td>'
@@ -1800,6 +1837,7 @@ function renderDash(){
   +'<div class="drill-section" style="background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:20px;overflow-x:auto" onclick="openPlayerDrilldown()">'
   +'<div style="font-size:13px;font-weight:700;margin-bottom:10px;display:flex;align-items:center;gap:6px">Player Intelligence <button class="drill-expand" onclick="event.stopPropagation();openPlayerDrilldown()">↗</button> <span style="font-size:10px;font-family:var(--mono);color:var(--faint);font-weight:400">— click to expand</span></div>'
   +(plRows.length?'<table class="dash-tbl"><thead><tr>'
+  +'<th style="width:36px"></th>'
   +'<th style="text-align:left;cursor:default">Player</th>'
   +thS('inv')+'In Stock</th>'+thS('inv')+'Cost Basis</th>'+thS('n')+'Sold</th>'+thS('rev')+'Revenue</th>'+thS('pnl')+'Net P&amp;L</th>'+thS('roi')+'ROI%</th>'
   +'</tr></thead><tbody>'+plTableRows+'</tbody></table>'
@@ -2910,19 +2948,31 @@ function deletePurchase(pid){
 // ─────────────────────────────────────────────
 // SPLIT LOT
 // ─────────────────────────────────────────────
+function _slCardRow(player, year, brand, set, variation, serial, cost) {
+  return '<div class="sl-card" style="background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);padding:8px;margin-bottom:8px">'
+    + '<div style="display:grid;grid-template-columns:1fr 56px auto;gap:6px;align-items:center;margin-bottom:5px">'
+    + '<input class="sl-name field-input" value="' + esc(player) + '" placeholder="Player name" style="font-size:12px">'
+    + '<input class="sl-cost field-input mono" type="number" step="0.01" min="0" value="' + parseFloat(cost||0).toFixed(2) + '" placeholder="Cost" style="font-size:12px">'
+    + '<button style="background:none;border:none;color:var(--faint);cursor:pointer;font-size:14px;padding:0 4px" onclick="this.closest(\'.sl-card\').remove()" title="Remove">✕</button>'
+    + '</div>'
+    + '<div style="display:grid;grid-template-columns:48px 1fr 1fr 88px;gap:4px">'
+    + '<input class="sl-year field-input mono" value="' + esc(year) + '" placeholder="Year" style="font-size:11px" title="Year">'
+    + '<input class="sl-brand field-input" value="' + esc(brand) + '" placeholder="Brand" style="font-size:11px" title="Brand">'
+    + '<input class="sl-set field-input" value="' + esc(set) + '" placeholder="Set" style="font-size:11px" title="Set">'
+    + '<input class="sl-variation field-input" value="' + esc(variation) + '" placeholder="Variation" style="font-size:11px" title="Variation">'
+    + '</div>'
+    + '<div style="margin-top:4px"><input class="sl-serial field-input mono" value="' + esc(serial) + '" placeholder="Serial # (e.g. 12/50)" style="font-size:11px;width:140px" title="Serial number"></div>'
+    + '</div>';
+}
+
 function openSplitLot(pid) {
   const p = getP(pid);
   const n = p.lotQty || 2;
   const perCard = p.costRaw ? (p.costRaw / n) : p.cost;
-  const S = (s, esc) => esc ? s.replace(/"/g,'&quot;') : s;
 
   var rows = '';
   for (var i = 0; i < n; i++) {
-    rows += '<div style="display:grid;grid-template-columns:1fr auto auto;gap:6px;align-items:center;margin-bottom:6px">'
-      + '<input class="sl-name field-input" value="' + esc(p.player||p.name) + '" placeholder="Card name" style="font-size:12px">'
-      + '<input class="sl-cost field-input mono" type="number" step="0.01" min="0" value="' + perCard.toFixed(2) + '" placeholder="Cost" style="width:72px;font-size:12px">'
-      + '<button style="background:none;border:none;color:var(--faint);cursor:pointer;font-size:14px;padding:0 4px" onclick="this.closest(\'div\').remove()" title="Remove row">✕</button>'
-      + '</div>';
+    rows += _slCardRow(p.player||p.name, p.year||'', p.brand||'', p.set||'', p.variation||'', p.serial||'', perCard);
   }
 
   openPanel(
@@ -2931,9 +2981,9 @@ function openSplitLot(pid) {
     + '<div style="padding:8px 10px;background:var(--surf2);border-radius:var(--r);border:1px solid var(--border);font-size:11px;font-family:var(--mono);color:var(--dim)">'
     + 'Original lot: <strong>' + esc(p.name) + '</strong> · ' + n + ' cards · ' + f$(p.costRaw||p.cost) + ' total'
     + '</div>'
-    + '<div style="font-size:10px;font-family:var(--mono);color:var(--faint)">Edit each card name and cost. Add or remove rows as needed. The original lot entry will be deleted.</div>'
-    + '<div id="sl-rows" style="max-height:50vh;overflow-y:auto;padding-right:4px">' + rows + '</div>'
-    + '<button class="btn ghost sm" style="align-self:flex-start" onclick="_addSplitRow(' + perCard.toFixed(2) + ')">+ Add Row</button>'
+    + '<div style="font-size:10px;font-family:var(--mono);color:var(--faint)">Edit each card\'s details. The original lot will be archived (not deleted) and excluded from active inventory.</div>'
+    + '<div id="sl-rows" style="max-height:52vh;overflow-y:auto;padding-right:4px">' + rows + '</div>'
+    + '<button class="btn ghost sm" style="align-self:flex-start" onclick="_addSplitRow(\'' + pid + '\',' + perCard.toFixed(2) + ')">+ Add Card</button>'
     + '<div style="display:flex;gap:8px;margin-top:4px">'
     + '<button class="btn pri" onclick="saveSplitLot(\'' + pid + '\')">✔ Split & Create</button>'
     + '<button class="btn ghost" onclick="closePanel()">Cancel</button>'
@@ -2941,33 +2991,36 @@ function openSplitLot(pid) {
   );
 }
 
-function _addSplitRow(defaultCost) {
+function _addSplitRow(pid, defaultCost) {
   const c = document.getElementById('sl-rows');
   if (!c) return;
+  const p = getP(pid);
   const d = document.createElement('div');
-  d.style.cssText = 'display:grid;grid-template-columns:1fr auto auto;gap:6px;align-items:center;margin-bottom:6px';
-  d.innerHTML = '<input class="sl-name field-input" placeholder="Card name" style="font-size:12px">'
-    + '<input class="sl-cost field-input mono" type="number" step="0.01" min="0" value="' + (defaultCost||0).toFixed(2) + '" style="width:72px;font-size:12px">'
-    + '<button style="background:none;border:none;color:var(--faint);cursor:pointer;font-size:14px;padding:0 4px" onclick="this.closest(\'div\').remove()" title="Remove">✕</button>';
-  c.appendChild(d);
-  d.querySelector('.sl-name').focus();
+  d.innerHTML = _slCardRow(p.player||p.name, p.year||'', p.brand||'', p.set||'', p.variation||'', p.serial||'', defaultCost||0);
+  c.appendChild(d.firstElementChild);
+  c.lastElementChild.querySelector('.sl-name').focus();
 }
 
 function saveSplitLot(pid) {
   const p = getP(pid);
-  const nameEls = document.querySelectorAll('#sl-rows .sl-name');
-  const costEls = document.querySelectorAll('#sl-rows .sl-cost');
-  if (!nameEls.length) { toast('Add at least one card'); return; }
+  const cards_el = document.querySelectorAll('#sl-rows .sl-card');
+  if (!cards_el.length) { toast('Add at least one card'); return; }
 
   const cards = [];
-  for (var i = 0; i < nameEls.length; i++) {
-    const name = nameEls[i].value.trim();
-    const cost = parseFloat(costEls[i].value) || 0;
-    if (!name) { toast('Each card needs a name'); return; }
-    cards.push({ name, cost });
+  for (var i = 0; i < cards_el.length; i++) {
+    const el = cards_el[i];
+    const name = (el.querySelector('.sl-name')?.value||'').trim();
+    const cost = parseFloat(el.querySelector('.sl-cost')?.value)||0;
+    const year = (el.querySelector('.sl-year')?.value||'').trim();
+    const brand = (el.querySelector('.sl-brand')?.value||'').trim();
+    const set = (el.querySelector('.sl-set')?.value||'').trim();
+    const variation = (el.querySelector('.sl-variation')?.value||'').trim();
+    const serial = (el.querySelector('.sl-serial')?.value||'').trim();
+    if (!name) { toast('Each card needs a player name'); return; }
+    cards.push({ name, cost, player: name, year, brand, set, variation, serial });
   }
 
-  // Create individual purchase entries, inheriting all fields from the lot
+  // Create individual purchase entries, inheriting remaining fields from the lot
   const newIds = [];
   for (const card of cards) {
     const newId = 'M' + Date.now().toString(36).slice(-5) + Math.floor(Math.random()*9999);
@@ -2984,17 +3037,19 @@ function saveSplitLot(pid) {
       orderNum: p.orderNum || '',
       seller: p.seller || '',
       type: p.type || '',
-      player: p.player || '',
-      year: p.year || '',
-      brand: p.brand || '',
-      set: p.set || '',
+      player: card.player,
+      year: card.year || p.year || '',
+      brand: card.brand || p.brand || '',
+      set: card.set || p.set || '',
       comp: p.comp || '',
-      variation: p.variation || '',
-      serial: p.serial || '',
+      variation: card.variation || p.variation || '',
+      serial: card.serial || p.serial || '',
       grade: p.grade || '',
       is_auto: p.is_auto || false,
       is_rc: p.is_rc || false,
       is_lot: false,
+      parentLotId: pid,
+      isLotSplit: true,
       notes: p.notes || '',
       candidates: [],
     });
@@ -3004,17 +3059,14 @@ function saveSplitLot(pid) {
   const linkedSales = salesForPid(pid);
   if (linkedSales.length && newIds.length) {
     for (const s of linkedSales) {
-      const curPids = getLinkedPids(s.id).filter(p => p !== pid);
+      const curPids = getLinkedPids(s.id).filter(lp => lp !== pid);
       const updatedPids = [...curPids, newIds[0]];
       editS(s.id, { linkedPids: updatedPids, linkedPid: updatedPids[0] || null });
     }
   }
 
-  // Delete the original lot
-  const idx = purchases.findIndex(x => x.id === pid);
-  if (idx >= 0) purchases.splice(idx, 1);
-  delete purchaseEdits[pid];
-  try { localStorage.setItem('cb_purchaseEdits', JSON.stringify(purchaseEdits)); } catch(e) {}
+  // Archive original lot instead of deleting it
+  editP(pid, { splitDone: true });
 
   persistPurchases();
   closePanel();
