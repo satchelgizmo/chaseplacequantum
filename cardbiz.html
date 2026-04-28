@@ -661,29 +661,21 @@ function createCategoryAndApply(pid){
   toggleCardTag(pid,name);
   if(nameEl)nameEl.value='';
 }
-function renderTagChips(pid,mini){
+function renderTagChips(pid,mini,editable){
   const tags=getCardTags(pid);
   if(!tags.length)return'';
   return tags.map(function(t){
     const c=(categoryDefs[t]||{}).color||'var(--dim)';
     if(mini)return'<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+c+';flex-shrink:0" title="'+esc(t)+'"></span>';
-    return'<span class="tag-chip" style="background:'+c+'22;border:1px solid '+c+';color:'+c+'">'+esc(t)+'</span>';
-  }).join(mini?'':' ');
+    const rmv=editable?'<button onclick="toggleCardTag(\''+pid+'\',\''+esc(t)+'\')" style="background:none;border:none;cursor:pointer;color:'+c+';font-size:11px;line-height:1;padding:0 0 0 4px;opacity:.7" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=.7">✕</button>':'';
+    return'<span class="tag-chip" style="background:'+c+'22;border:1px solid '+c+';color:'+c+'">'+esc(t)+rmv+'</span>';
+  }).join(' ');
 }
 function renderTagEditor(pid){
   const tags=getCardTags(pid);
   const cats=Object.entries(categoryDefs);
   let h='<div id="cd-tags-'+pid+'" class="ps"><div class="ps-title">Tags</div>';
-  if(tags.length){
-    h+='<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px">';
-    tags.forEach(function(t){
-      const c=(categoryDefs[t]||{}).color||'var(--dim)';
-      h+='<span class="tag-chip" style="background:'+c+'22;border:1px solid '+c+';color:'+c+'">'+esc(t)
-        +'<button onclick="toggleCardTag(\''+pid+'\',\''+esc(t)+'\')" style="background:none;border:none;cursor:pointer;color:'+c+';font-size:11px;line-height:1;padding:0 0 0 4px;opacity:.7" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=.7">✕</button>'
-        +'</span>';
-    });
-    h+='</div>';
-  }
+  if(tags.length){h+='<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px">'+renderTagChips(pid,false,true)+'</div>';}
   const avail=cats.filter(function(e){return!tags.includes(e[0]);});
   if(avail.length){
     h+='<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:10px">';
@@ -936,10 +928,12 @@ function getLinkedPids(sid) {
 function soldPids() {
   const s = new Set();
   for (const sale of sales) { for (const pid of getLinkedPids(sale.id)) s.add(pid); }
-  for (const p of purchases) { if (getP(p.id).splitDone) s.add(p.id); }
+  for (const p of purchases) { if (p.splitDone||purchaseEdits[p.id]?.splitDone) s.add(p.id); }
   return s;
 }
 function salesForPid(pid) { return sales.filter(s => getLinkedPids(s.id).includes(pid)); }
+function _getImg(pp){if(!pp)return'';const img=pp.img;return Array.isArray(img)?(img[0]||''):(img||'');}
+function _mkThumb(url,sz){const s=sz?' style="width:'+sz+'px;height:'+sz+'px;flex-shrink:0"':'';return url?'<img class="pl-thumb" src="'+esc(url)+'" loading="lazy" alt=""'+s+'>':'<span class="pl-thumb-empty"'+s+'></span>';}
 function totalRev() { return sales.reduce((a,s)=>a+getS(s.id).price*(getS(s.id).qty||1),0); }
 function totalCost() { return purchases.reduce((a,p)=>a+getP(p.id).cost,0); }
 function linkedPnl() {
@@ -987,7 +981,7 @@ function buildTypeSelect(pageKey) {
 
 // Renders the search input bar bound to filt[pageKey].q
 function buildSearchInput(pageKey, placeholder='Search…') {
-  return `<div class="sw"><span class="si">🔍</span><input id="search-${pageKey}" value="${esc(filt[pageKey].q)}" placeholder="${esc(placeholder)}" oninput="filt.${pageKey}.q=this.value;pgNum.${pageKey}=0;render()"><button class="s-clr" onclick="const i=this.previousElementSibling;i.value='';i.dispatchEvent(new Event('input'))" tabindex="-1">×</button></div>`;
+  return `<div class="sw"><span class="si">🔍</span><input id="search-${pageKey}" value="${esc(filt[pageKey].q)}" placeholder="${esc(placeholder)}" oninput="filt.${pageKey}.q=this.value;pgNum.${pageKey}=0;render()" onkeydown="if(event.key==='Escape'){filt.${pageKey}.q='';this.value='';pgNum.${pageKey}=0;render();}"><button class="s-clr" onclick="const i=this.previousElementSibling;i.value='';i.dispatchEvent(new Event('input'))" tabindex="-1">×</button></div>`;
 }
 
 // Renders a sortable <th> header cell
@@ -1368,7 +1362,6 @@ function _computeDash(){
   const _MN={Jan:1,Feb:2,Mar:3,Apr:4,May:5,Jun:6,Jul:7,Aug:8,Sep:9,Oct:10,Nov:11,Dec:12};
   function _pd(d){if(!d)return null;let m;if((m=d.match(/^([A-Za-z]{3})-(\d{1,2})-(\d{2,4})$/))!==null){const yr=m[3].length===2?2000+parseInt(m[3]):parseInt(m[3]);return{yr,mo:_MN[m[1]]||0,dy:parseInt(m[2])};}if((m=d.match(/^([A-Za-z]{3})\s+(\d{1,2}),\s*(\d{4})$/))!==null){return{yr:parseInt(m[3]),mo:_MN[m[1]]||0,dy:parseInt(m[2])};}return null;}
   function _ts(pd){return pd?new Date(pd.yr,pd.mo-1,pd.dy).getTime():null;}
-  function _getImg(pp){if(!pp)return'';const img=pp.img;return Array.isArray(img)?(img[0]||''):(img||'');}
   function _normPl(pl){return pl.toLowerCase().trim();}
   function _ensurePl(m,pl){
     const key=_normPl(pl);
@@ -1408,14 +1401,15 @@ function _computeDash(){
       daily[dk]=(daily[dk]||0)+amt;
     }
     const pids=getLinkedPids(s.id);
+    const firstP=pids.length?getP(pids[0]):null;
     const sCost=pids.reduce((sum,pid)=>sum+(getP(pid)?.cost||0),0);
     const np=pids.length?netProfit(ss.price,ss.qty||1,sCost,ss.fees||0):null;
     if(pd&&pd.mo){const ym=pd.yr+'-'+String(pd.mo).padStart(2,'0');if(np!==null)pnlMonthly[ym]=(pnlMonthly[ym]||0)+np;}
-    if(pids.length&&pd){const buyPd=_pd(getP(pids[0])?.date||'');if(buyPd){const days=Math.round((_ts(pd)-_ts(buyPd))/86400000);if(days>=0){totalHoldDays+=days;holdCount++;}}}
+    if(firstP&&pd){const buyPd=_pd(firstP.date||'');if(buyPd){const days=Math.round((_ts(pd)-_ts(buyPd))/86400000);if(days>=0){totalHoldDays+=days;holdCount++;}}}
     const pl=ss.player||'';const ty=ss.type||'Other';
     const setKey=(ss.year?ss.year+' ':'')+ss.set;
     const setKeyM=ss.set||'';
-    const sImgUrl=pids.length?_getImg(getP(pids[0])):'';
+    const sImgUrl=_getImg(firstP);
     const sTs=_ts(pd)||0;
     if(pl.length>=2){
       const e=_ensurePl(plMap,pl);e.sold.n+=(ss.qty||1);e.sold.rev+=amt;if(np!==null){e.sold.pnl+=np;e.sold.cost+=sCost;}
@@ -1551,9 +1545,7 @@ function openPlayerDrilldown(chart,sortBy){
     plRows.forEach(function(r){
       const rc=r.roi!==null?r.roi.toFixed(0)+'%':'—';const col=r.roi===null?'var(--faint)':r.roi>=0?'var(--green)':'var(--red)';
       const _imgs=r.imgs||{};
-      const imgUrl=(_imgs.pnl?.url)||(_imgs.rev?.url)||(_imgs.roi?.url)||(_imgs.inv?.url)||'';
-      const thumb=imgUrl?'<img class="pl-thumb" src="'+esc(imgUrl)+'" loading="lazy" alt="">'
-        :'<span class="pl-thumb-empty"></span>';
+      const thumb=_mkThumb((_imgs.pnl?.url)||(_imgs.rev?.url)||(_imgs.roi?.url)||(_imgs.inv?.url)||'');
       body+='<tr>'
         +'<td style="width:36px;padding:2px 4px">'+thumb+'</td>'
         +'<td title="'+esc(r.pl)+'" style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(r.pl)+'</td>'
@@ -1657,7 +1649,7 @@ function openSetDrilldown(chart,merge,catFilter){
       +'</tr></thead><tbody>';
     setRows.forEach(function(r){
       const roi=r.roi!==null?r.roi.toFixed(0)+'%':'—';const col=r.roi===null?'var(--faint)':r.roi>=0?'var(--green)':'var(--red)';
-      const thumb=r.img?'<img class="pl-thumb" src="'+esc(r.img)+'" loading="lazy" alt="">':'<span class="pl-thumb-empty"></span>';
+      const thumb=_mkThumb(r.img);
       body+='<tr><td style="width:36px;padding:2px 4px">'+thumb+'</td>'
         +'<td title="'+esc(r.st)+'" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(r.st)+'</td>'
         +'<td style="text-align:right">'+(r.invN||'—')+'</td><td style="text-align:right">'+(r.n||'—')+'</td>'
@@ -1832,13 +1824,7 @@ function renderDash(){
 
   // Player table HTML
   const thS=k=>'<th class="'+(k===_dashPlayerSort?'sort-active':'')+'" onclick="_dashPlayerSort=\''+k+'\';render()">';
-  function _plThumb(r){
-    const imgs=r.imgs||{};
-    // Sale images take priority over inventory — prefer most profitable sale image
-    const imgUrl=(imgs.pnl?.url)||(imgs.rev?.url)||(imgs.roi?.url)||(imgs.inv?.url)||'';
-    return imgUrl?'<img class="pl-thumb" src="'+esc(imgUrl)+'" loading="lazy" alt="">'
-      :'<span class="pl-thumb-empty"></span>';
-  }
+  function _plThumb(r){const imgs=r.imgs||{};return _mkThumb((imgs.pnl?.url)||(imgs.rev?.url)||(imgs.roi?.url)||(imgs.inv?.url)||'');}
   const plTableRows=plRows.slice(0,20).map(r=>{
     const roiStr=r.roi!==null?r.roi.toFixed(0)+'%':'—';const rc=r.roi===null?'var(--faint)':r.roi>=0?'var(--green)':'var(--red)';
     return '<tr onclick="filt.inv.q=\''+r.pl.replace(/'/g,"\\'")+'\';\'+\'filt.sells.q=\''+r.pl.replace(/'/g,"\\'")+'\';nav(\'inv\');render()">'
@@ -1864,8 +1850,7 @@ function renderDash(){
   // Set HTML
   const setHtml=setRows.map(r=>{
     const roiStr=r.roi!==null?r.roi.toFixed(0)+'%':'—';const rc=r.roi===null?'var(--faint)':r.roi>=0?'var(--green)':'var(--red)';
-    const sThumb=r.img?'<img class="pl-thumb" src="'+esc(r.img)+'" loading="lazy" alt="" style="width:24px;height:24px;flex-shrink:0">'
-      :'<span class="pl-thumb-empty" style="width:24px;height:24px;flex-shrink:0"></span>';
+    const sThumb=_mkThumb(r.img,24);
     return '<div style="display:flex;align-items:center;gap:7px;padding:5px 0;border-bottom:1px solid var(--border)">'
       +sThumb
       +'<div style="flex:1;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+esc(r.st)+'">'+esc(r.st)+'</div>'
@@ -2063,6 +2048,7 @@ function renderCal(){
 function renderInv(){
   const sp=soldPids();
   const f=filt.inv;
+  const listedPids=new Set(activeListings.map(l=>l.matchedPid).filter(Boolean));
   let items=purchases.filter(p=>!sp.has(p.id)).map(p=>getP(p.id));
   if(f.q){const q=f.q;items=items.filter(p=>matchesQ(p,q));}
   if(f.type) items=items.filter(p=>p.type===f.type);
@@ -2109,7 +2095,7 @@ function renderInv(){
           :page_items.map(p=>{
             const vl=valueLookups[p.id];
             const mktDiff=vl?.avgPrice?(vl.avgPrice-p.cost):null;
-            const isListed=activeListings.some(function(l){return l.matchedPid===p.id;});
+            const isListed=listedPids.has(p.id);
             const imgTag=p.img?`<img class="lg-card-img" src="${esc(p.img)}" onerror="this.parentNode.innerHTML='<div class=lg-card-img-ph>&#x1F0CF;</div>'">`:`<div class="lg-card-img-ph">&#x1F0CF;</div>`;
             const isSel=invSelected.has(p.id);
             return`<div class="lg-card${isSel?' selected':''}" onclick="if(event.ctrlKey||event.metaKey){event.preventDefault();toggleInvSelect('${p.id}');render();}else{showCardPage('${p.id}');}" style="cursor:pointer" title="${isSel?'Ctrl+click to deselect':'Ctrl+click to select'}">
@@ -2157,7 +2143,7 @@ function renderInv(){
           return`
         <tr onclick="if(event.ctrlKey||event.metaKey){event.preventDefault();toggleInvSelect('${p.id}');render();}else{showCardPage('${p.id}');}" style="cursor:pointer" class="${invSelected.has(p.id)?'highlight':''}">
           <td class="cic">${thumb(p.img)}</td>
-          <td><div class="cn">${esc(p.name)}${activeListings.some(function(l){return l.matchedPid===p.id;})?'<span style="display:inline-block;font-size:8px;font-family:var(--mono);background:rgba(46,204,138,.15);color:var(--green);border:1px solid rgba(46,204,138,.35);border-radius:3px;padding:1px 5px;vertical-align:middle;margin-left:4px">LISTED</span>':''}</div><div class="cm">${esc(p.seller)} · ${esc(p.orderNum)}</div>
+          <td><div class="cn">${esc(p.name)}${listedPids.has(p.id)?'<span style="display:inline-block;font-size:8px;font-family:var(--mono);background:rgba(46,204,138,.15);color:var(--green);border:1px solid rgba(46,204,138,.35);border-radius:3px;padding:1px 5px;vertical-align:middle;margin-left:4px">LISTED</span>':''}</div><div class="cm">${esc(p.seller)} · ${esc(p.orderNum)}</div>
             ${p.is_lot?`<div class="cm" style="color:var(--orange);cursor:pointer" onclick="event.stopPropagation();showCardPage('${p.id}')" title="Click to see lot breakdown">Lot ×${p.lotQty} · raw ${f$(p.costRaw)}</div>`:''}
           </td>
           <td>${p.player?`<span style="font-family:var(--mono);font-size:12px;font-weight:600;color:var(--text)">${esc(p.player)}</span>${parsedTags(p,true)}<span style="display:inline-flex;gap:2px;margin-left:4px;vertical-align:middle">${renderTagChips(p.id,true)}</span>`:`<span style="color:var(--faint);font-size:11px;font-family:var(--mono);cursor:pointer" onclick="showCardPage('${p.id}')" title="Click to set player name">— set player</span>`}</td>
@@ -3319,7 +3305,7 @@ function renderCardDetail(pid){
   if(matched.length){
     matched.forEach(function(s){
       const ss=getS(s.id);
-      const sRev=ss.price*(ss.qty||1);const sFee=ss.fees||0;const sNet=pnl!==null?sRev-p.cost-sFee:null;
+      const sRev=ss.price*(ss.qty||1);const sFee=ss.fees||0;
       info+='<div class="mc active" style="flex-direction:column;align-items:stretch;gap:6px">';
       info+='<div style="display:flex;justify-content:space-between;align-items:flex-start">';
       info+='<div class="mc-info" style="flex:1;min-width:0">';
