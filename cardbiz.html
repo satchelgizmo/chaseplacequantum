@@ -1415,9 +1415,10 @@ function _computeDash(){
     const pl=ss.player||'';const ty=ss.type||'Other';
     const setKey=(ss.year?ss.year+' ':'')+ss.set;
     const setKeyM=ss.set||'';
+    const sImgUrl=pids.length?_getImg(getP(pids[0])):'';
+    const sTs=_ts(pd)||0;
     if(pl.length>=2){
       const e=_ensurePl(plMap,pl);e.sold.n+=(ss.qty||1);e.sold.rev+=amt;if(np!==null){e.sold.pnl+=np;e.sold.cost+=sCost;}
-      const sImgUrl=pids.length?_getImg(getP(pids[0])):'';
       if(sImgUrl){
         if(np!==null&&np>e.imgs.pnl.v)e.imgs.pnl={v:np,url:sImgUrl};
         if(amt>e.imgs.rev.v)e.imgs.rev={v:amt,url:sImgUrl};
@@ -1426,8 +1427,10 @@ function _computeDash(){
       }
     }
     {const e=_ensure(catMap,ty);e.sold.n+=(ss.qty||1);e.sold.rev+=amt;if(np!==null){e.sold.pnl+=np;e.sold.cost+=sCost;}}
-    if(ss.set){_ensure(setMap,setKey).sold.n+=(ss.qty||1);setMap[setKey].sold.rev+=amt;if(np!==null){setMap[setKey].sold.pnl+=np;setMap[setKey].sold.cost+=sCost;}}
-    if(setKeyM){_ensure(setMapM,setKeyM).sold.n+=(ss.qty||1);setMapM[setKeyM].sold.rev+=amt;if(np!==null){setMapM[setKeyM].sold.pnl+=np;setMapM[setKeyM].sold.cost+=sCost;}}
+    if(ss.set){_ensure(setMap,setKey).sold.n+=(ss.qty||1);setMap[setKey].sold.rev+=amt;if(np!==null){setMap[setKey].sold.pnl+=np;setMap[setKey].sold.cost+=sCost;}
+      if(sImgUrl&&sTs>(setMap[setKey].latestTs||-Infinity)){setMap[setKey].img=sImgUrl;setMap[setKey].latestTs=sTs;}}
+    if(setKeyM){_ensure(setMapM,setKeyM).sold.n+=(ss.qty||1);setMapM[setKeyM].sold.rev+=amt;if(np!==null){setMapM[setKeyM].sold.pnl+=np;setMapM[setKeyM].sold.cost+=sCost;}
+      if(sImgUrl&&sTs>(setMapM[setKeyM].latestTs||-Infinity)){setMapM[setKeyM].img=sImgUrl;setMapM[setKeyM].latestTs=sTs;}}
   }
   const avgHold=holdCount>0?Math.round(totalHoldDays/holdCount):null;
   const avgSale=sales.length>0?avgSalePrice/sales.length:0;
@@ -1547,7 +1550,8 @@ function openPlayerDrilldown(chart,sortBy){
       +'</tr></thead><tbody>';
     plRows.forEach(function(r){
       const rc=r.roi!==null?r.roi.toFixed(0)+'%':'—';const col=r.roi===null?'var(--faint)':r.roi>=0?'var(--green)':'var(--red)';
-      const imgUrl=(r.imgs&&r.imgs[sortBy]&&r.imgs[sortBy].url)||(r.imgs&&r.imgs.inv&&r.imgs.inv.url)||(r.imgs&&r.imgs.rev&&r.imgs.rev.url)||'';
+      const _imgs=r.imgs||{};
+      const imgUrl=(_imgs.pnl?.url)||(_imgs.rev?.url)||(_imgs.roi?.url)||(_imgs.inv?.url)||'';
       const thumb=imgUrl?'<img class="pl-thumb" src="'+esc(imgUrl)+'" loading="lazy" alt="">'
         :'<span class="pl-thumb-empty"></span>';
       body+='<tr>'
@@ -1628,7 +1632,7 @@ function openSetDrilldown(chart,merge,catFilter){
   const setRows=Object.entries(rawMap)
     .filter(e=>e[1].sold.cost>0||e[1].sold.rev>0)
     .map(e=>{const st=e[0],data=e[1];return{st,rev:data.sold.rev,pnl:data.sold.pnl,n:data.sold.n,cost:data.sold.cost,
-      roi:data.sold.cost>0?data.sold.pnl/data.sold.cost*100:null,invN:data.inv.n,invCost:data.inv.cost};})
+      roi:data.sold.cost>0?data.sold.pnl/data.sold.cost*100:null,invN:data.inv.n,invCost:data.inv.cost,img:data.img||''};})
     .sort((a,b)=>b.pnl-a.pnl).slice(0,20);
   const toggle='<div class="chart-toggle">'
     +'<button class="'+(chart==='bar'?'on':'')+'" onclick="openSetDrilldown(\'bar\','+merge+',\''+catFilter+'\')">Bar</button>'
@@ -1649,11 +1653,13 @@ function openSetDrilldown(chart,merge,catFilter){
     });
   } else {
     body='<div style="overflow-x:auto"><table class="dash-tbl"><thead><tr>'
-      +'<th style="text-align:left">Set</th><th>In Stock</th><th>Sold</th><th>Revenue</th><th>P&L</th><th>ROI%</th>'
+      +'<th style="width:36px"></th><th style="text-align:left">Set</th><th>In Stock</th><th>Sold</th><th>Revenue</th><th>P&L</th><th>ROI%</th>'
       +'</tr></thead><tbody>';
     setRows.forEach(function(r){
       const roi=r.roi!==null?r.roi.toFixed(0)+'%':'—';const col=r.roi===null?'var(--faint)':r.roi>=0?'var(--green)':'var(--red)';
-      body+='<tr><td title="'+esc(r.st)+'" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(r.st)+'</td>'
+      const thumb=r.img?'<img class="pl-thumb" src="'+esc(r.img)+'" loading="lazy" alt="">':'<span class="pl-thumb-empty"></span>';
+      body+='<tr><td style="width:36px;padding:2px 4px">'+thumb+'</td>'
+        +'<td title="'+esc(r.st)+'" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(r.st)+'</td>'
         +'<td style="text-align:right">'+(r.invN||'—')+'</td><td style="text-align:right">'+(r.n||'—')+'</td>'
         +'<td style="text-align:right;color:var(--green)">'+(r.rev>0?f$(r.rev):'—')+'</td>'
         +'<td style="text-align:right;color:'+(r.pnl>=0?'var(--green)':'var(--red)')+'">'+f$(r.pnl)+'</td>'
@@ -1796,7 +1802,7 @@ function renderDash(){
   // Sets (year-split)
   const setRows=Object.entries(setMap)
     .filter(([,d])=>d.sold.cost>0||d.sold.rev>0)
-    .map(([st,d])=>({st,rev:d.sold.rev,pnl:d.sold.pnl,n:d.sold.n,roi:d.sold.cost>0?d.sold.pnl/d.sold.cost*100:null,invN:d.inv.n,invCost:d.inv.cost}))
+    .map(([st,d])=>({st,rev:d.sold.rev,pnl:d.sold.pnl,n:d.sold.n,roi:d.sold.cost>0?d.sold.pnl/d.sold.cost*100:null,invN:d.inv.n,invCost:d.inv.cost,img:d.img||''}))
     .sort((a,b)=>b.pnl-a.pnl).slice(0,10);
 
   // 12-month trend
@@ -1827,8 +1833,9 @@ function renderDash(){
   // Player table HTML
   const thS=k=>'<th class="'+(k===_dashPlayerSort?'sort-active':'')+'" onclick="_dashPlayerSort=\''+k+'\';render()">';
   function _plThumb(r){
-    const imgUrl=(r.imgs&&r.imgs[_dashPlayerSort]&&r.imgs[_dashPlayerSort].url)||
-      (r.imgs&&r.imgs.inv&&r.imgs.inv.url)||(r.imgs&&r.imgs.rev&&r.imgs.rev.url)||'';
+    const imgs=r.imgs||{};
+    // Sale images take priority over inventory — prefer most profitable sale image
+    const imgUrl=(imgs.pnl?.url)||(imgs.rev?.url)||(imgs.roi?.url)||(imgs.inv?.url)||'';
     return imgUrl?'<img class="pl-thumb" src="'+esc(imgUrl)+'" loading="lazy" alt="">'
       :'<span class="pl-thumb-empty"></span>';
   }
@@ -1857,7 +1864,10 @@ function renderDash(){
   // Set HTML
   const setHtml=setRows.map(r=>{
     const roiStr=r.roi!==null?r.roi.toFixed(0)+'%':'—';const rc=r.roi===null?'var(--faint)':r.roi>=0?'var(--green)':'var(--red)';
-    return '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border)">'
+    const sThumb=r.img?'<img class="pl-thumb" src="'+esc(r.img)+'" loading="lazy" alt="" style="width:24px;height:24px;flex-shrink:0">'
+      :'<span class="pl-thumb-empty" style="width:24px;height:24px;flex-shrink:0"></span>';
+    return '<div style="display:flex;align-items:center;gap:7px;padding:5px 0;border-bottom:1px solid var(--border)">'
+      +sThumb
       +'<div style="flex:1;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+esc(r.st)+'">'+esc(r.st)+'</div>'
       +'<div style="font-size:10px;font-family:var(--mono);color:var(--faint);flex-shrink:0">×'+r.n+'</div>'
       +'<div style="font-size:11px;font-family:var(--mono);color:var(--green);flex-shrink:0;width:72px;text-align:right">'+f$(r.rev)+'</div>'
