@@ -2978,21 +2978,12 @@ function saveFinFields(pid){
 
 function copyCardDetails(pid){
   const p=getP(pid);
-  const parts=[p.name];
-  if(p.player)parts.push('Player: '+p.player);
-  if(p.year)parts.push('Year: '+p.year);
-  if(p.set)parts.push('Set: '+p.set);
-  if(p.variation)parts.push('Variation: '+p.variation);
-  if(p.grade)parts.push('Grade: '+p.grade);
-  if(p.serial)parts.push('Serial: '+p.serial);
-  if(p.cost)parts.push('Cost: '+f$(p.cost));
-  if(p.type)parts.push('Type: '+p.type);
-  const text=parts.join('\n');
-  navigator.clipboard.writeText(text).then(()=>toast('Card details copied!')).catch(()=>{
+  const text=buildStandardName(p)||p.name;
+  navigator.clipboard.writeText(text).then(()=>toast('Copied!')).catch(()=>{
     const ta=document.createElement('textarea');
     ta.value=text;ta.style.position='fixed';ta.style.opacity='0';
     document.body.appendChild(ta);ta.select();document.execCommand('copy');
-    document.body.removeChild(ta);toast('Card details copied!');
+    document.body.removeChild(ta);toast('Copied!');
   });
 }
 
