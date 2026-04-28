@@ -452,6 +452,9 @@ thead th.sh:hover{color:var(--text)}
     </div>
     <div class="sf-key">
       <div style="margin-top:8px">
+        <button class="btn sm" style="width:100%" onclick="openManageTypes()">🎨 Manage Types</button>
+      </div>
+      <div style="margin-top:6px">
         <button class="btn sm" style="width:100%" onclick="exportBackup()">📤 Export Backup</button>
       </div>
       <div style="margin-top:6px">
@@ -637,6 +640,11 @@ let checklists = JSON.parse(localStorage.getItem('cb_checklists')||'{}');
 let customPlayers = new Set(JSON.parse(localStorage.getItem('cb_custom_players')||'[]'));
 function persistChecklists(){try{localStorage.setItem('cb_checklists',JSON.stringify(checklists));}catch(e){}}
 function persistCustomPlayers(){try{localStorage.setItem('cb_custom_players',JSON.stringify([...customPlayers]));}catch(e){}}
+// ── Custom Card Types ───────────────────────────────────
+let customTypeDefs={};
+try{customTypeDefs=JSON.parse(localStorage.getItem('cb_typeDefs')||'{}');}catch(e){}
+function persistTypeDefs(){try{localStorage.setItem('cb_typeDefs',JSON.stringify(customTypeDefs));}catch(e){}}
+function getTypeList(){return[...CARD_TYPES,...Object.keys(customTypeDefs),'Other'];}
 // ── Category / Tag system ───────────────────────────────
 let categoryDefs={};
 try{categoryDefs=JSON.parse(localStorage.getItem('cb_catDefs')||'{}');}catch(e){}
@@ -696,6 +704,88 @@ function renderTagEditor(pid){
   h+='<button class="btn xs" onclick="createCategoryAndApply(\''+pid+'\')">Add</button>';
   h+='</div></div>';
   return h;
+}
+// ── Manage Custom Card Types ────────────────────────────
+let _newTypeColor='#5aadff';
+function openManageTypes(){
+  openPanel(_renderManageTypes(),false);
+}
+function _renderManageTypes(){
+  const builtIn=CARD_TYPES;
+  const custom=Object.entries(customTypeDefs);
+  let h='<div class="pn-head"><div class="pn-title">Card Types</div><button class="pn-close" onclick="closePanel()">✕</button></div>';
+  h+='<div class="pn-body"><div style="display:grid;gap:16px">';
+
+  // Built-in types (read-only display)
+  h+='<div class="ps"><div class="ps-title">Built-in Types</div>';
+  h+='<div style="display:flex;gap:6px;flex-wrap:wrap">';
+  builtIn.forEach(function(t){h+=typeBadge(t);});
+  h+='</div></div>';
+
+  // Custom types list
+  if(custom.length){
+    h+='<div class="ps"><div class="ps-title">Custom Types</div>';
+    h+='<div id="mt-custom-list" style="display:grid;gap:8px">';
+    custom.forEach(function(e){
+      const name=e[0],color=e[1].color||'#5aadff';
+      h+='<div style="display:flex;align-items:center;gap:8px">';
+      h+=typeBadge(name);
+      h+='<div style="display:flex;gap:3px;flex:1">';
+      TAG_PALETTE.forEach(function(c){
+        const sel=c===color;
+        h+='<button onclick="updateCustomTypeColor(\''+esc(name)+'\',\''+c+'\')" style="width:16px;height:16px;border-radius:50%;background:'+c+';border:2px solid '+(sel?'var(--text)':'transparent')+';cursor:pointer;flex-shrink:0;transition:border-color .1s"></button>';
+      });
+      h+='</div>';
+      h+='<button class="btn xs red" onclick="deleteCustomType(\''+esc(name)+'\')">✕ Remove</button>';
+      h+='</div>';
+    });
+    h+='</div></div>';
+  }
+
+  // Add new type
+  h+='<div class="ps"><div class="ps-title">Add New Type</div>';
+  h+='<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">';
+  h+='<input id="mt-new-name" class="field-input" placeholder="Type name…" style="flex:1;min-width:100px;font-size:12px" onkeydown="if(event.key===\'Enter\')addCustomType()">';
+  h+='<div style="display:flex;gap:3px">';
+  TAG_PALETTE.forEach(function(c){
+    const sel=c===_newTypeColor;
+    h+='<button class="mt-sw" onclick="_newTypeColor=\''+c+'\';document.querySelectorAll(\'.mt-sw\').forEach(function(b){b.style.borderColor=\'transparent\'});this.style.borderColor=\'var(--text)\'" style="width:16px;height:16px;border-radius:50%;background:'+c+';border:2px solid '+(sel?'var(--text)':'transparent')+';cursor:pointer;flex-shrink:0"></button>';
+  });
+  h+='</div>';
+  h+='<button class="btn xs" onclick="addCustomType()">Add</button>';
+  h+='</div>';
+  h+='<div style="margin-top:8px;font-size:10px;color:var(--faint)">Custom types appear in all type dropdowns and get their own badge color.</div>';
+  h+='</div>';
+
+  h+='</div></div>';
+  return h;
+}
+function addCustomType(){
+  const el=document.getElementById('mt-new-name');
+  const name=(el?.value||'').trim();
+  if(!name){toast('Enter a type name');return;}
+  if(CARD_TYPES.map(function(t){return t.toLowerCase();}).indexOf(name.toLowerCase())>=0){toast('That\'s a built-in type');return;}
+  if(customTypeDefs[name]){toast('Type already exists');return;}
+  customTypeDefs[name]={color:_newTypeColor};
+  persistTypeDefs();
+  const pn=document.getElementById('pn');
+  if(pn)pn.innerHTML=_renderManageTypes();
+  toast('Added '+name);
+}
+function deleteCustomType(name){
+  if(!customTypeDefs[name])return;
+  delete customTypeDefs[name];
+  persistTypeDefs();
+  const pn=document.getElementById('pn');
+  if(pn)pn.innerHTML=_renderManageTypes();
+  toast('Removed '+name);
+}
+function updateCustomTypeColor(name,color){
+  if(!customTypeDefs[name])return;
+  customTypeDefs[name].color=color;
+  persistTypeDefs();
+  const pn=document.getElementById('pn');
+  if(pn)pn.innerHTML=_renderManageTypes();
 }
 // Backup export/import
 function exportBackup() {
@@ -966,7 +1056,7 @@ function netProfit(salePrice, qty, cost, fees) {
 
 // Renders a <select> of card types; selected = current filter value
 function buildTypeOptions(selected, includeOther=false) {
-  const types = includeOther ? CARD_TYPES_WITH_OTHER : CARD_TYPES;
+  const types = includeOther ? getTypeList() : [...CARD_TYPES,...Object.keys(customTypeDefs)];
   return types.map(t=>`<option value="${t}" ${selected===t?'selected':''}>${t}</option>`).join('');
 }
 
@@ -1163,6 +1253,11 @@ function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;'
 function typeBadge(t, mismatch) {
   const cls=(t||'').toLowerCase().replace(/[éê]/g,'e').replace(/[^a-z0-9-]/g,'');
   const warn=mismatch?` title="Possible misclassification — might be ${mismatch}" style="outline:1px solid var(--orange);outline-offset:1px;cursor:help"`:'';
+  const custom=customTypeDefs[t];
+  if(custom?.color){
+    const c=custom.color;
+    return `<span class="tb" style="background:${c}1a;color:${c};border:1px solid ${c}33"${warn}>${esc(t||'?')}</span>`;
+  }
   return `<span class="tb ${cls}"${warn}>${esc(t||'?')}</span>`;
 }
 function thumb(url,cls='ct') {
@@ -2747,7 +2842,7 @@ function buildPurchasePanel(pid){
         <div class="pn-title" id="p-title-display">${esc(p.name)}</div>
         <div class="pn-meta">${esc(p.date)} · ${esc(p.seller)}</div>
         <div style="margin-top:6px;display:flex;gap:5px;flex-wrap:wrap;align-items:center">
-          <select class="recat-sel" onchange="recategorizeP('${pid}',this.value)">${['Soccer','Pokémon','NFL','MLB','Marvel','NBA','Yu-Gi-Oh','Other'].map(t=>`<option value="${t}" ${p.type===t?'selected':''}>${t}</option>`).join('')}</select>
+          <select class="recat-sel" onchange="recategorizeP('${pid}',this.value)">${getTypeList().map(t=>`<option value="${t}" ${p.type===t?'selected':''}>${t}</option>`).join('')}</select>
           ${sp?`<span class="sb sold">SOLD</span>`:`<span class="sb stock">IN STOCK</span>`}
           ${p.grade?`<span class="pt grade">${esc(p.grade)}</span>`:''}
           ${p.is_lot?`<span class="pt" style="color:var(--orange)">LOT×${p.lotQty}</span>`:''}
@@ -3237,7 +3332,7 @@ function renderCardDetail(pid){
   const editing=_panelEdit['main'];
   const editingFin=_panelEdit['fin'];
 
-  const typeList=['Soccer','Pokémon','NFL','MLB','Marvel','NBA','Yu-Gi-Oh','Other'];
+  const typeList=getTypeList();
   const typeOpts=typeList.map(function(t){return '<option value="'+t+'"'+(p.type===t?' selected':'')+'>'+t+'</option>';}).join('');
 
   let info='';
@@ -3368,7 +3463,7 @@ function buildSalePanel(sid){
       <div style="flex:1;min-width:0">
         <div class="pn-title">${esc(s.title)}</div>
         <div class="pn-meta">${esc(s.date)} · Order #${esc(s.recordNum)}</div>
-        <div style="margin-top:6px"><select class="recat-sel" onchange="recategorizeS('${sid}',this.value)">${['Soccer','Pokémon','NFL','MLB','Marvel','NBA','Yu-Gi-Oh','Other'].map(t=>`<option value="${t}" ${s.type===t?'selected':''}>${t}</option>`).join('')}</select></div>
+        <div style="margin-top:6px"><select class="recat-sel" onchange="recategorizeS('${sid}',this.value)">${getTypeList().map(t=>`<option value="${t}" ${s.type===t?'selected':''}>${t}</option>`).join('')}</select></div>
       </div>
       <button class="pn-close" onclick="closePanel()">✕</button>
     </div>
@@ -5848,7 +5943,7 @@ function openAddPurchase(prefill) {
   var pSerial   = (prefill && prefill.serial)    ? prefill.serial    : '';
   var pGrade    = (prefill && prefill.grade)     ? prefill.grade     : '';
   var pType     = (prefill && prefill.type)      ? prefill.type      : '';
-  var typeOpts = ['Soccer','Pokémon','NFL','MLB','Marvel','NBA','Yu-Gi-Oh','Other'].map(function(t){
+  var typeOpts = getTypeList().map(function(t){
     return '<option value="' + t + '">' + t + '</option>';
   }).join('');
   openPanel(
@@ -6005,7 +6100,7 @@ function saveListingToInventory(itemId) {
 // MANUAL ADD — SALE
 // ─────────────────────────────────────────────
 function openAddSale() {
-  var typeOpts = ['Soccer','Pokémon','NFL','MLB','Marvel','NBA','Yu-Gi-Oh','Other'].map(function(t){
+  var typeOpts = getTypeList().map(function(t){
     return '<option value="' + t + '">' + t + '</option>';
   }).join('');
   openPanel(
