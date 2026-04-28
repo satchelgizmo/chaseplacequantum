@@ -1059,6 +1059,8 @@ function netProfit(salePrice, qty, cost, fees) {
 // Renders a <select> of card types; selected = current filter value
 function buildTypeOptions(selected, includeOther=false) {
   const types = includeOther ? getTypeList() : [...CARD_TYPES,...Object.keys(customTypeDefs)];
+  // If the current value isn't in the list (e.g. set via import), include it so it shows correctly
+  if(selected && !types.includes(selected)) types.unshift(selected);
   return types.map(t=>`<option value="${t}" ${selected===t?'selected':''}>${t}</option>`).join('')
     + '<option value="__newcat__" style="color:var(--blue)">＋ Add category…</option>';
 }
@@ -3336,9 +3338,6 @@ function renderCardDetail(pid){
   const editing=_panelEdit['main'];
   const editingFin=_panelEdit['fin'];
 
-  const typeList=getTypeList();
-  const typeOpts=typeList.map(function(t){return '<option value="'+t+'"'+(p.type===t?' selected':'')+'>'+t+'</option>';}).join('');
-
   let info='';
   // ── Name + Category (always visible, auto-saves) ──
   info+='<div class="ps" style="margin-bottom:16px">'
@@ -3349,7 +3348,7 @@ function renderCardDetail(pid){
     +'</div>'
     +'<div><label style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:.8px;text-transform:uppercase;display:block;margin-bottom:4px">CATEGORY</label>'
     +'<select id="cd-type-'+pid+'" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:var(--r2);font-size:12px;font-family:var(--ui);outline:none" onchange="saveCardMeta(\''+esc(pid)+'\')">'
-    +'<option value="">— select —</option>'+typeOpts+'</select>'
+    +'<option value="">— select —</option>'+buildTypeOptions(p.type,true)+'</select>'
     +'</div>'
     +'</div></div>';
 
