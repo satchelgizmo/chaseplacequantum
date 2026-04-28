@@ -452,7 +452,7 @@ thead th.sh:hover{color:var(--text)}
     </div>
     <div class="sf-key">
       <div style="margin-top:8px">
-        <button class="btn sm" style="width:100%" onclick="openManageTypes()">🎨 Manage Types</button>
+        <button class="btn sm" style="width:100%" onclick="openManageCategories()">🎨 Manage Categories</button>
       </div>
       <div style="margin-top:6px">
         <button class="btn sm" style="width:100%" onclick="exportBackup()">📤 Export Backup</button>
@@ -614,8 +614,8 @@ function getS(sid) {
 }
 function editP(pid, fields) { purchaseEdits[pid] = {...(purchaseEdits[pid]||{}), ...fields}; updateSidebar(); try{localStorage.setItem('cb_purchaseEdits',JSON.stringify(purchaseEdits));toast('✓ saved',1200);}catch(e){} }
 function editS(sid, fields) { saleEdits[sid] = {...(saleEdits[sid]||{}), ...fields}; updateSidebar(); try{localStorage.setItem('cb_saleEdits',JSON.stringify(saleEdits));toast('✓ saved',1200);}catch(e){} }
-function recategorizeP(pid, type) { editP(pid, {type}); document.getElementById('pn').innerHTML = buildPurchasePanel(pid); render(); }
-function recategorizeS(sid, type) { editS(sid, {type}); document.getElementById('pn').innerHTML = buildSalePanel(sid); render(); }
+function recategorizeP(pid, type) { if(type==='__newcat__'){openManageCategories();return;} editP(pid, {type}); document.getElementById('pn').innerHTML = buildPurchasePanel(pid); render(); }
+function recategorizeS(sid, type) { if(type==='__newcat__'){openManageCategories();return;} editS(sid, {type}); document.getElementById('pn').innerHTML = buildSalePanel(sid); render(); }
 
 let page = 'dash', pgNum = {};
 let currentCardPid = '', _cardPhotoIdx = 0;
@@ -705,26 +705,26 @@ function renderTagEditor(pid){
   h+='</div></div>';
   return h;
 }
-// ── Manage Custom Card Types ────────────────────────────
+// ── Manage Custom Categories ────────────────────────────
 let _newTypeColor='#5aadff';
-function openManageTypes(){
-  openPanel(_renderManageTypes(),false);
+function openManageCategories(){
+  openPanel(_renderManageCategories(),false);
 }
-function _renderManageTypes(){
+function _renderManageCategories(){
   const builtIn=CARD_TYPES;
   const custom=Object.entries(customTypeDefs);
-  let h='<div class="pn-head"><div class="pn-title">Card Types</div><button class="pn-close" onclick="closePanel()">✕</button></div>';
+  let h='<div class="pn-head"><div class="pn-title">Manage Categories</div><button class="pn-close" onclick="closePanel()">✕</button></div>';
   h+='<div class="pn-body"><div style="display:grid;gap:16px">';
 
-  // Built-in types (read-only display)
-  h+='<div class="ps"><div class="ps-title">Built-in Types</div>';
+  // Built-in categories (read-only display)
+  h+='<div class="ps"><div class="ps-title">Built-in Categories</div>';
   h+='<div style="display:flex;gap:6px;flex-wrap:wrap">';
   builtIn.forEach(function(t){h+=typeBadge(t);});
   h+='</div></div>';
 
-  // Custom types list
+  // Custom categories list
   if(custom.length){
-    h+='<div class="ps"><div class="ps-title">Custom Types</div>';
+    h+='<div class="ps"><div class="ps-title">Custom Categories</div>';
     h+='<div id="mt-custom-list" style="display:grid;gap:8px">';
     custom.forEach(function(e){
       const name=e[0],color=e[1].color||'#5aadff';
@@ -742,10 +742,10 @@ function _renderManageTypes(){
     h+='</div></div>';
   }
 
-  // Add new type
-  h+='<div class="ps"><div class="ps-title">Add New Type</div>';
+  // Add new category
+  h+='<div class="ps"><div class="ps-title">Add New Category</div>';
   h+='<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">';
-  h+='<input id="mt-new-name" class="field-input" placeholder="Type name…" style="flex:1;min-width:100px;font-size:12px" onkeydown="if(event.key===\'Enter\')addCustomType()">';
+  h+='<input id="mt-new-name" class="field-input" placeholder="Category name…" style="flex:1;min-width:100px;font-size:12px" onkeydown="if(event.key===\'Enter\')addCustomType()">';
   h+='<div style="display:flex;gap:3px">';
   TAG_PALETTE.forEach(function(c){
     const sel=c===_newTypeColor;
@@ -754,7 +754,7 @@ function _renderManageTypes(){
   h+='</div>';
   h+='<button class="btn xs" onclick="addCustomType()">Add</button>';
   h+='</div>';
-  h+='<div style="margin-top:8px;font-size:10px;color:var(--faint)">Custom types appear in all type dropdowns and get their own badge color.</div>';
+  h+='<div style="margin-top:8px;font-size:10px;color:var(--faint)">Custom categories appear in all dropdowns with their assigned badge color.</div>';
   h+='</div>';
 
   h+='</div></div>';
@@ -763,13 +763,13 @@ function _renderManageTypes(){
 function addCustomType(){
   const el=document.getElementById('mt-new-name');
   const name=(el?.value||'').trim();
-  if(!name){toast('Enter a type name');return;}
-  if(CARD_TYPES.map(function(t){return t.toLowerCase();}).indexOf(name.toLowerCase())>=0){toast('That\'s a built-in type');return;}
-  if(customTypeDefs[name]){toast('Type already exists');return;}
+  if(!name){toast('Enter a category name');return;}
+  if(CARD_TYPES.map(function(t){return t.toLowerCase();}).indexOf(name.toLowerCase())>=0){toast('That\'s a built-in category');return;}
+  if(customTypeDefs[name]){toast('Category already exists');return;}
   customTypeDefs[name]={color:_newTypeColor};
   persistTypeDefs();
   const pn=document.getElementById('pn');
-  if(pn)pn.innerHTML=_renderManageTypes();
+  if(pn)pn.innerHTML=_renderManageCategories();
   toast('Added '+name);
 }
 function deleteCustomType(name){
@@ -777,7 +777,7 @@ function deleteCustomType(name){
   delete customTypeDefs[name];
   persistTypeDefs();
   const pn=document.getElementById('pn');
-  if(pn)pn.innerHTML=_renderManageTypes();
+  if(pn)pn.innerHTML=_renderManageCategories();
   toast('Removed '+name);
 }
 function updateCustomTypeColor(name,color){
@@ -785,8 +785,10 @@ function updateCustomTypeColor(name,color){
   customTypeDefs[name].color=color;
   persistTypeDefs();
   const pn=document.getElementById('pn');
-  if(pn)pn.innerHTML=_renderManageTypes();
+  if(pn)pn.innerHTML=_renderManageCategories();
 }
+// Legacy alias
+function openManageTypes(){openManageCategories();}
 // Backup export/import
 function exportBackup() {
   const data = {
@@ -1057,14 +1059,15 @@ function netProfit(salePrice, qty, cost, fees) {
 // Renders a <select> of card types; selected = current filter value
 function buildTypeOptions(selected, includeOther=false) {
   const types = includeOther ? getTypeList() : [...CARD_TYPES,...Object.keys(customTypeDefs)];
-  return types.map(t=>`<option value="${t}" ${selected===t?'selected':''}>${t}</option>`).join('');
+  return types.map(t=>`<option value="${t}" ${selected===t?'selected':''}>${t}</option>`).join('')
+    + '<option value="__newcat__" style="color:var(--blue)">＋ Add category…</option>';
 }
 
 // Renders the type filter <select> bound to filt[pageKey].type
 function buildTypeSelect(pageKey) {
   const f = filt[pageKey];
   return `<select onchange="filt.${pageKey}.type=this.value;pgNum.${pageKey}=0;render()">
-    <option value="">All Types</option>
+    <option value="">All Categories</option>
     ${buildTypeOptions(f.type)}
   </select>`;
 }
@@ -1689,7 +1692,7 @@ function openCategoryDrilldown(chart){
       +'</div>';
   } else {
     body='<div style="overflow-x:auto"><table class="dash-tbl"><thead><tr>'
-      +'<th style="text-align:left">Type</th><th>In Stock</th><th>Cost</th><th>Sold</th><th>Revenue</th><th>P&L</th><th>ROI%</th>'
+      +'<th style="text-align:left">Category</th><th>In Stock</th><th>Cost</th><th>Sold</th><th>Revenue</th><th>P&L</th><th>ROI%</th>'
       +'</tr></thead><tbody>';
     catRows.forEach(function(e){
       const ty=e[0],data=e[1];const roi=data.sold.cost>0?(data.sold.pnl/data.sold.cost*100).toFixed(0)+'%':'—';const col=data.sold.cost>0?(data.sold.pnl>=0?'var(--green)':'var(--red)'):'var(--faint)';
@@ -1824,7 +1827,7 @@ function openAgingDrilldown(chart,catFilter){
     +'<button class="'+(chart==='bar'?'on':'')+'" onclick="openAgingDrilldown(\'bar\',\''+catFilter+'\')">Bar</button>'
     +'</div>';
   const catSel='<select onchange="openAgingDrilldown(\''+chart+'\',this.value)" style="font-size:10px;padding:3px 7px;background:var(--surf2);border:1px solid var(--border);color:var(--text);border-radius:4px;font-family:var(--mono)">'
-    +cats.map(c=>'<option value="'+esc(c)+'"'+(catFilter===c?' selected':'')+'>'+esc(c||'All Types')+'</option>').join('')
+    +cats.map(c=>'<option value="'+esc(c)+'"'+(catFilter===c?' selected':'')+'>'+esc(c||'All Categories')+'</option>').join('')
     +'</select>';
   let body='';
   if(chart==='table'){
@@ -2219,7 +2222,7 @@ function renderInv(){
         <th></th>
         ${buildSortTh('inv','name','CARD')}
         ${buildSortTh('inv','player','PARSED')}
-        ${buildSortTh('inv','type','TYPE')}
+        ${buildSortTh('inv','type','CAT')}
         ${buildSortTh('inv','date','DATE')}
         ${buildSortTh('inv','cost','COST')}
         <th>MKT VALUE</th>
@@ -2328,7 +2331,7 @@ function renderBuys(){
       <thead><tr><th></th>
         ${buildSortTh('buys','name','CARD')}
         ${buildSortTh('buys','player','PARSED')}
-        ${buildSortTh('buys','type','TYPE')}
+        ${buildSortTh('buys','type','CAT')}
         ${buildSortTh('buys','date','DATE')}
         ${buildSortTh('buys','cost','COST')}
         <th>STATUS</th>
@@ -2687,7 +2690,7 @@ function renderSells(){
       <thead><tr><th></th>
         ${buildSortTh('sells','title','TITLE')}
         ${buildSortTh('sells','player','PARSED')}
-        ${buildSortTh('sells','type','TYPE')}
+        ${buildSortTh('sells','type','CAT')}
         ${buildSortTh('sells','date','DATE')}
         ${buildSortTh('sells','price','PRICE')}
         ${buildSortTh('sells','total','TOTAL')}
@@ -2842,7 +2845,7 @@ function buildPurchasePanel(pid){
         <div class="pn-title" id="p-title-display">${esc(p.name)}</div>
         <div class="pn-meta">${esc(p.date)} · ${esc(p.seller)}</div>
         <div style="margin-top:6px;display:flex;gap:5px;flex-wrap:wrap;align-items:center">
-          <select class="recat-sel" onchange="recategorizeP('${pid}',this.value)">${getTypeList().map(t=>`<option value="${t}" ${p.type===t?'selected':''}>${t}</option>`).join('')}</select>
+          <select class="recat-sel" onchange="recategorizeP('${pid}',this.value)">${getTypeList().map(t=>`<option value="${t}" ${p.type===t?'selected':''}>${t}</option>`).join('')}<option value="__newcat__" style="color:var(--blue)">＋ Add…</option></select>
           ${sp?`<span class="sb sold">SOLD</span>`:`<span class="sb stock">IN STOCK</span>`}
           ${p.grade?`<span class="pt grade">${esc(p.grade)}</span>`:''}
           ${p.is_lot?`<span class="pt" style="color:var(--orange)">LOT×${p.lotQty}</span>`:''}
@@ -2904,7 +2907,7 @@ function buildPurchaseReadView(pid){
   return`<div style="margin-bottom:12px">${editableTags('p',pid,p)}</div>
   <div class="field-grid">
     <div class="field-item"><label>Player / Subject</label><input class="field-input" id="cd-player-${pid}" value="${esc(p.player||'')}" placeholder="e.g. Lautaro Martinez" style="color:var(--blue);font-weight:600" onblur="savePlayerField('${pid}')" onkeydown="if(event.key==='Enter')this.blur()"></div>
-    <div class="field-item"><label>Type</label><div class="field-val">${typeBadge(p.type)}</div></div>
+    <div class="field-item"><label>Category</label><div class="field-val">${typeBadge(p.type)}</div></div>
     ${p.notes?`<div class="field-item" style="grid-column:1/-1"><label>Notes</label><div class="field-val" style="font-size:12px;color:var(--dim)">${esc(p.notes)}</div></div>`:''}
   </div>`;
 }
@@ -2921,7 +2924,7 @@ function buildPurchaseEditForm(pid){
     <div class="field-item"><label>Serial Print Run (e.g. 25)</label><input class="field-input mono" id="ef-serial-${pid}" value="${esc(p.serial||'')}"></div>
     <div class="field-item"><label>Grade (e.g. PSA10)</label><input class="field-input mono" id="ef-grade-${pid}" value="${esc(p.grade||'')}"></div>
     <div class="field-item">
-      <label>Type</label>
+      <label>Category</label>
       <select class="field-input" id="ef-type-${pid}">
         ${buildTypeOptions(p.type, true)}
       </select>
@@ -3271,6 +3274,7 @@ function saveCardMeta(pid){
   const typeEl=document.getElementById('cd-type-'+pid);
   const newName=(nameEl?.value||'').trim();
   const newType=typeEl?.value||'';
+  if(newType==='__newcat__'){if(typeEl)typeEl.value=getP(pid).type||'';openManageCategories();return;}
   if(!newName)return;
   editP(pid,{name:newName,type:newType});
   // Update topbar title in-place so re-render (which destroys DOM mid-click) isn't needed
@@ -3463,7 +3467,7 @@ function buildSalePanel(sid){
       <div style="flex:1;min-width:0">
         <div class="pn-title">${esc(s.title)}</div>
         <div class="pn-meta">${esc(s.date)} · Order #${esc(s.recordNum)}</div>
-        <div style="margin-top:6px"><select class="recat-sel" onchange="recategorizeS('${sid}',this.value)">${getTypeList().map(t=>`<option value="${t}" ${s.type===t?'selected':''}>${t}</option>`).join('')}</select></div>
+        <div style="margin-top:6px"><select class="recat-sel" onchange="recategorizeS('${sid}',this.value)">${getTypeList().map(t=>`<option value="${t}" ${s.type===t?'selected':''}>${t}</option>`).join('')}<option value="__newcat__" style="color:var(--blue)">＋ Add…</option></select></div>
       </div>
       <button class="pn-close" onclick="closePanel()">✕</button>
     </div>
@@ -3543,7 +3547,7 @@ function buildSaleReadView(sid){
     <div style="margin-bottom:12px">${editableTags('s',sid,s)}</div>
     <div class="field-grid">
       <div class="field-item"><label>Player</label><div class="field-val">${esc(s.player||'—')}</div></div>
-      <div class="field-item"><label>Type</label><div class="field-val">${typeBadge(s.type)}</div></div>
+      <div class="field-item"><label>Category</label><div class="field-val">${typeBadge(s.type)}</div></div>
       ${row('Grade / Cond',s.grade,true)}
       ${row('Slab Serial #',s.slabSerial,true)}
       ${row('Platform',s.platform,false)}
@@ -3571,7 +3575,7 @@ function buildSaleEditForm(sid){
     <div class="field-item"><label>Order #</label><input class="field-input mono" id="es-order-${sid}" value="${esc(s.orderNum||'')}"></div>
     <div class="field-item" style="grid-column:1/-1"><label>Tags</label><input class="field-input" id="es-tags-${sid}" value="${esc(s.tags||'')}" style="width:100%"></div>
     <div class="field-item">
-      <label>Type</label>
+      <label>Category</label>
       <select class="field-input" id="es-type-${sid}">
         ${buildTypeOptions(s.type, true)}
       </select>
@@ -5975,7 +5979,7 @@ function openAddPurchase(prefill) {
     + '</div></div>'
 
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
-    + '<div><label style="font-size:10px;font-family:var(--mono);color:var(--dim);display:block;margin-bottom:3px">TYPE</label>'
+    + '<div><label style="font-size:10px;font-family:var(--mono);color:var(--dim);display:block;margin-bottom:3px">CATEGORY</label>'
     + '<select id="ap-type" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:var(--r2);font-size:12px;font-family:var(--ui);outline:none"><option value="">— select —</option>' + typeOpts.replace('>' + pType + '<', ' selected>' + pType + '<') + '</select>'
     + '</div>'
     + '<div><label style="font-size:10px;font-family:var(--mono);color:var(--dim);display:block;margin-bottom:3px">PLAYER / SUBJECT</label>'
@@ -6124,7 +6128,7 @@ function openAddSale() {
     + '</div></div>'
 
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
-    + '<div><label style="font-size:10px;font-family:var(--mono);color:var(--dim);display:block;margin-bottom:3px">TYPE</label>'
+    + '<div><label style="font-size:10px;font-family:var(--mono);color:var(--dim);display:block;margin-bottom:3px">CATEGORY</label>'
     + '<select id="as-type" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:var(--r2);font-size:12px;font-family:var(--ui);outline:none"><option value="">— select —</option>' + typeOpts + '</select>'
     + '</div>'
     + '<div><label style="font-size:10px;font-family:var(--mono);color:var(--dim);display:block;margin-bottom:3px">PLAYER / SUBJECT</label>'
