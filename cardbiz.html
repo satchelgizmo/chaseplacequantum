@@ -2905,6 +2905,12 @@ function buildPurchasePanel(pid){
         </div>
       </div>
 
+      <!-- GRADING TRACKER -->
+      ${buildGradingTrackerSection(pid)}
+
+      <!-- LISTING TOOLS -->
+      ${buildListingToolsSection(pid)}
+
       <!-- LINKED SALES -->
       <div class="ps">
         <div class="ps-title">Linked Sales (${matched.length})</div>
@@ -2920,7 +2926,6 @@ function buildPurchasePanel(pid){
         <div class="ps-title">Actions</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn pri" onclick="lookupCard('${pid}')">🔍 eBay Sold</button>
-          <button class="btn" onclick="closePanel();buildListing('${pid}')">📝 Build Listing</button>
           ${p.itemId?`<a href="https://www.ebay.com/itm/${esc(p.itemId)}" target="_blank" class="btn" style="text-decoration:none">🔗 eBay</a>`:''}
           ${p.is_lot?`<button class="btn" onclick="openSplitLot('${pid}')">✂ Split Lot</button>`:''}
           <button class="btn red" onclick="deletePurchase('${pid}')">🗑 Remove</button>
@@ -3106,6 +3111,133 @@ function copyCardDetails(pid){
     document.body.appendChild(ta);ta.select();document.execCommand('copy');
     document.body.removeChild(ta);toast('Copied!');
   });
+}
+
+// ── Listing Tools ──────────────────────────────────────────────────────────
+function buildListingToolsSection(pid) {
+  const p = getP(pid);
+  const title = _ebayTitle(p);
+  const len = title.length;
+  const lenColor = len > 80 ? 'var(--red)' : len > 75 ? 'var(--orange)' : 'var(--faint)';
+  const compsUrl = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(title)}&_sop=13`;
+  return `<div class="ps">
+    <div class="ps-title">Listing Tools</div>
+    <div style="background:var(--surf2);border:1px solid var(--border);border-radius:var(--r);padding:10px 12px;margin-bottom:10px">
+      <div style="font-family:var(--mono);font-size:9px;letter-spacing:.8px;text-transform:uppercase;color:var(--faint);margin-bottom:5px">eBay Title</div>
+      <div id="lt-title-${pid}" style="font-family:var(--mono);font-size:12px;font-weight:500;color:var(--text);line-height:1.5;word-break:break-word">${esc(title)}</div>
+      <div style="font-family:var(--mono);font-size:9px;color:${lenColor};margin-top:5px">${len} / 80 chars</div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn sm" onclick="copyListingTitle('${pid}',this)">📋 Copy Title</button>
+      <a class="btn sm" href="${esc(compsUrl)}" target="_blank" rel="noopener noreferrer" style="text-decoration:none">🔍 Find Comps</a>
+      <button class="btn sm" onclick="closePanel();buildListing('${pid}')">📝 Build Listing</button>
+    </div>
+  </div>`;
+}
+function copyListingTitle(pid, btn) {
+  const el = document.getElementById('lt-title-' + pid);
+  const text = el ? el.textContent : _ebayTitle(getP(pid));
+  const orig = btn.textContent;
+  const done = () => { btn.textContent = '✓ Copied!'; setTimeout(() => btn.textContent = orig, 1800); };
+  navigator.clipboard.writeText(text).then(done).catch(() => {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); done();
+  });
+}
+
+// ── Grading Tracker ─────────────────────────────────────────────────────────
+const _GRADE_STEPS = ['Submitted','Received','Grading','Grade Assigned','Returned'];
+const _GRADE_COLORS = { PSA:'#1e6ad4', BGS:'#c8102e', SGC:'#1a7a3b', CGC:'#00a8e8' };
+function buildGradingTrackerSection(pid) {
+  const p = getP(pid);
+  const grading = (purchaseEdits[pid]||{}).grading;
+  const showForm = !!_panelEdit['grading'];
+
+  if (!grading && !showForm) {
+    if (p.grade) return '';
+    return `<div class="ps">
+      <div class="ps-title">Grading</div>
+      <button class="btn sm" onclick="_panelEdit['grading']=true;document.getElementById('pn').innerHTML=buildPurchasePanel('${pid}')">📬 Send to Grading…</button>
+    </div>`;
+  }
+
+  if (!grading && showForm) {
+    const today = new Date().toISOString().slice(0,10);
+    return `<div class="ps">
+      <div class="ps-title">Send to Grading
+        <button class="edit-btn" onclick="_panelEdit['grading']=false;document.getElementById('pn').innerHTML=buildPurchasePanel('${pid}')">✕ Cancel</button>
+      </div>
+      <div class="field-grid">
+        <div class="field-item"><label>Company</label>
+          <select class="field-input" id="gf-co-${pid}"><option>PSA</option><option>BGS</option><option>SGC</option><option>CGC</option></select>
+        </div>
+        <div class="field-item"><label>Submitted Date</label>
+          <input class="field-input mono" id="gf-date-${pid}" type="date" value="${today}">
+        </div>
+        <div class="field-item"><label>Service Level</label>
+          <input class="field-input" id="gf-svc-${pid}" placeholder="Economy, Standard…">
+        </div>
+        <div class="field-item"><label>Grading Fee ($)</label>
+          <input class="field-input mono" type="number" step="0.01" id="gf-fee-${pid}" placeholder="0.00">
+        </div>
+      </div>
+      ${buildEditActions(`saveGrading('${pid}')`,`_panelEdit['grading']=false;document.getElementById('pn').innerHTML=buildPurchasePanel('${pid}')`)}
+    </div>`;
+  }
+
+  const step = grading.step || 0;
+  const color = _GRADE_COLORS[grading.company] || 'var(--cyan)';
+  const stepsHtml = _GRADE_STEPS.map((s, i) => {
+    const done = i < step, active = i === step;
+    return `<div style="display:flex;align-items:center;gap:8px;padding:4px 0">
+      <div style="width:18px;height:18px;border-radius:50%;flex-shrink:0;border:2px solid ${active||done?color:'var(--border)'};background:${done?color:'transparent'};display:flex;align-items:center;justify-content:center;font-size:8px;color:${done?'#000':active?color:'var(--faint)'}${active?';box-shadow:0 0 0 3px '+color+'33':''}">${done?'✓':''}</div>
+      <span style="font-size:11px;font-weight:${active?600:400};color:${active?'var(--text)':done?'var(--dim)':'var(--faint)'}">${s}</span>
+    </div>`;
+  }).join('');
+  const isLast = step === _GRADE_STEPS.length - 1;
+  return `<div class="ps">
+    <div class="ps-title">Grading Tracker
+      <button class="edit-btn" onclick="clearGrading('${pid}')">✕ Clear</button>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+      <span style="font-family:var(--mono);font-size:13px;font-weight:700;color:${color}">${esc(grading.company)}</span>
+      ${grading.service?`<span class="pt" style="color:var(--dim);border-color:var(--border)">${esc(grading.service)}</span>`:''}
+      ${grading.cost?`<span style="font-family:var(--mono);font-size:10px;color:var(--faint)">Fee $${parseFloat(grading.cost).toFixed(2)}</span>`:''}
+      ${grading.submittedDate?`<span style="font-family:var(--mono);font-size:10px;color:var(--faint)">${esc(grading.submittedDate)}</span>`:''}
+    </div>
+    ${stepsHtml}
+    <div style="margin-top:10px;display:flex;gap:8px">
+      ${!isLast?`<button class="btn sm" onclick="advanceGradingStep('${pid}')">→ Next Step</button>`:''}
+      ${isLast?`<button class="btn sm" style="background:rgba(0,229,170,.12);border-color:rgba(0,229,170,.3);color:var(--green)" onclick="finalizeGrading('${pid}')">✓ Card Returned</button>`:''}
+    </div>
+  </div>`;
+}
+function saveGrading(pid) {
+  const g = id => (document.getElementById(id)?.value||'').trim();
+  const grading = { company:g(`gf-co-${pid}`)||'PSA', submittedDate:g(`gf-date-${pid}`), service:g(`gf-svc-${pid}`), cost:g(`gf-fee-${pid}`), step:0 };
+  purchaseEdits[pid] = {...(purchaseEdits[pid]||{}), grading};
+  try{localStorage.setItem('cb_purchaseEdits',JSON.stringify(purchaseEdits));}catch(e){}
+  _panelEdit['grading'] = false;
+  document.getElementById('pn').innerHTML = buildPurchasePanel(pid);
+}
+function advanceGradingStep(pid) {
+  const gr = (purchaseEdits[pid]||{}).grading; if(!gr) return;
+  gr.step = Math.min((gr.step||0)+1, _GRADE_STEPS.length-1);
+  purchaseEdits[pid] = {...(purchaseEdits[pid]||{}), grading:gr};
+  try{localStorage.setItem('cb_purchaseEdits',JSON.stringify(purchaseEdits));}catch(e){}
+  document.getElementById('pn').innerHTML = buildPurchasePanel(pid);
+}
+function clearGrading(pid) {
+  if(!(purchaseEdits[pid]||{}).grading) return;
+  const {grading, ...rest} = purchaseEdits[pid]; purchaseEdits[pid] = rest;
+  try{localStorage.setItem('cb_purchaseEdits',JSON.stringify(purchaseEdits));}catch(e){}
+  document.getElementById('pn').innerHTML = buildPurchasePanel(pid);
+}
+function finalizeGrading(pid) {
+  clearGrading(pid);
+  toast("Card returned! Update the Grade field with the result.");
+  document.getElementById('pn').innerHTML = buildPurchasePanel(pid);
 }
 
 function deletePurchase(pid){
