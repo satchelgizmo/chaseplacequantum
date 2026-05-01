@@ -1632,7 +1632,7 @@ function openPlayerDrilldown(chart,sortBy){
     const top=plRows.slice(0,20);
     body=_buildHBars(top,{
       getVal:r=>r.sold.rev,getLabel:r=>r.pl,
-      getRight:function(r){const rc=r.roi!==null?r.roi.toFixed(0)+'%':'—';const col=r.roi===null?'var(--faint)':r.roi>=0?'var(--green)':'var(--red)';
+      getRight:function(r){const rc=r.roi!==null?r.roi.toFixed(0)+'%':'—';const col=roiColor(r.roi);
         return '<span style="color:'+(r.sold.pnl>=0?'var(--green)':'var(--red)')+'">'+f$(r.sold.pnl)+'</span> <span style="color:'+col+';font-weight:700">'+rc+'</span>';},
       maxV:Math.max(...top.map(r=>r.sold.rev),1),
       colorFn:r=>r.roi!==null&&r.roi>=0?'rgba(0,229,170,.5)':'rgba(255,74,104,.45)'
@@ -1643,7 +1643,7 @@ function openPlayerDrilldown(chart,sortBy){
       +'<th style="text-align:left">Player</th><th>In Stock</th><th>Cost Basis</th><th>Sold</th><th>Revenue</th><th>Net P&L</th><th>ROI%</th>'
       +'</tr></thead><tbody>';
     plRows.forEach(function(r){
-      const rc=r.roi!==null?r.roi.toFixed(0)+'%':'—';const col=r.roi===null?'var(--faint)':r.roi>=0?'var(--green)':'var(--red)';
+      const rc=r.roi!==null?r.roi.toFixed(0)+'%':'—';const col=roiColor(r.roi);
       const _imgs=r.imgs||{};
       const thumb=_mkThumb((_imgs.pnl?.url)||(_imgs.rev?.url)||(_imgs.roi?.url)||(_imgs.inv?.url)||'');
       body+='<tr>'
@@ -1738,7 +1738,7 @@ function openSetDrilldown(chart,merge,catFilter){
   if(chart==='bar'){
     body=_buildHBars(setRows,{
       getVal:r=>r.rev,getLabel:r=>r.st,
-      getRight:function(r){const roi=r.roi!==null?r.roi.toFixed(0)+'%':'—';const col=r.roi===null?'var(--faint)':r.roi>=0?'var(--green)':'var(--red)';
+      getRight:function(r){const roi=r.roi!==null?r.roi.toFixed(0)+'%':'—';const col=roiColor(r.roi);
         return '<span style="color:'+(r.pnl>=0?'var(--green)':'var(--red)')+'">'+f$(r.pnl)+'</span> <span style="color:'+col+';font-weight:700">'+roi+'</span>';},
       maxV:Math.max(...setRows.map(r=>r.rev),1),
       colorFn:r=>r.roi!==null&&r.roi>=0?'rgba(0,229,170,.5)':'rgba(255,74,104,.45)'
@@ -1748,7 +1748,7 @@ function openSetDrilldown(chart,merge,catFilter){
       +'<th style="width:36px"></th><th style="text-align:left">Set</th><th>In Stock</th><th>Sold</th><th>Revenue</th><th>P&L</th><th>ROI%</th>'
       +'</tr></thead><tbody>';
     setRows.forEach(function(r){
-      const roi=r.roi!==null?r.roi.toFixed(0)+'%':'—';const col=r.roi===null?'var(--faint)':r.roi>=0?'var(--green)':'var(--red)';
+      const roi=r.roi!==null?r.roi.toFixed(0)+'%':'—';const col=roiColor(r.roi);
       const thumb=_mkThumb(r.img);
       body+='<tr><td style="width:36px;padding:2px 4px">'+thumb+'</td>'
         +'<td title="'+esc(r.st)+'" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(r.st)+'</td>'
@@ -1926,7 +1926,7 @@ function renderDash(){
   const thS=k=>'<th class="'+(k===_dashPlayerSort?'sort-active':'')+'" onclick="_dashPlayerSort=\''+k+'\';render()">';
   function _plThumb(r){const imgs=r.imgs||{};return _mkThumb((imgs.pnl?.url)||(imgs.rev?.url)||(imgs.roi?.url)||(imgs.inv?.url)||'');}
   const plTableRows=plRows.slice(0,20).map(r=>{
-    const roiStr=r.roi!==null?r.roi.toFixed(0)+'%':'—';const rc=r.roi===null?'var(--faint)':r.roi>=0?'var(--green)':'var(--red)';
+    const roiStr=r.roi!==null?r.roi.toFixed(0)+'%':'—';const rc=roiColor(r.roi);
     return '<tr onclick="filt.inv.q=\''+r.pl.replace(/'/g,"\\'")+'\';\'+\'filt.sells.q=\''+r.pl.replace(/'/g,"\\'")+'\';nav(\'inv\');render()">'
       +'<td style="width:36px;padding:2px 4px">'+_plThumb(r)+'</td>'
       +'<td title="'+esc(r.pl)+'">'+esc(r.pl)+'</td><td>'+(r.inv.n||'—')+'</td>'
@@ -1949,7 +1949,7 @@ function renderDash(){
 
   // Set HTML
   const setHtml=setRows.map(r=>{
-    const roiStr=r.roi!==null?r.roi.toFixed(0)+'%':'—';const rc=r.roi===null?'var(--faint)':r.roi>=0?'var(--green)':'var(--red)';
+    const roiStr=r.roi!==null?r.roi.toFixed(0)+'%':'—';const rc=roiColor(r.roi);
     const sThumb=_mkThumb(r.img,24);
     return '<div style="display:flex;align-items:center;gap:7px;padding:5px 0;border-bottom:1px solid var(--border)">'
       +sThumb
@@ -2818,24 +2818,26 @@ function renderPnlView(){
 // ─────────────────────────────────────────────
 let _panelEdit = {};  // unified panel edit state: section key -> bool
 
-function showPurchase(pid){
+function getPurchaseFinancials(pid){
   const p=getP(pid);
   const sp=soldPids().has(pid);
   const matched=salesForPid(pid);
   const rev=matched.reduce((a,s)=>a+getS(s.id).price*(getS(s.id).qty||1),0);
-  const totalFee=matched.reduce((a,s)=>{const ss=getS(s.id);return a+(ss.fees||0);},0);
+  const totalFee=matched.reduce((a,s)=>a+(getS(s.id).fees||0),0);
   const pnl=sp?rev-p.cost:null;
   const netPnl=sp?rev-p.cost-totalFee:null;
-  _panelEdit={}; // reset edit state
+  return{matched,rev,totalFee,pnl,netPnl,sp};
+}
+function roiColor(val){return val===null||val===undefined?'var(--faint)':val>=0?'var(--green)':'var(--red)';}
+
+function showPurchase(pid){
+  _panelEdit={};
   openPanel(buildPurchasePanel(pid));
 }
 
 function buildPurchasePanel(pid){
   const p=getP(pid);
-  const sp=soldPids().has(pid);
-  const matched=salesForPid(pid);
-  const rev=matched.reduce((a,s)=>a+getS(s.id).price*(getS(s.id).qty||1),0);
-  const pnl=sp?rev-p.cost:null;
+  const {matched,rev,totalFee,pnl,netPnl,sp}=getPurchaseFinancials(pid);
   const editing=_panelEdit['main'];
 
   return`
@@ -2859,8 +2861,8 @@ function buildPurchasePanel(pid){
 
       <!-- CARD INFO (editable) -->
       <div class="ps">
-        <div class="ps-title">Parsed Tags &amp; Card Info
-          <button class="edit-btn" onclick="togglePanelEdit('${pid}','main')">${editing?'✕ Cancel':'✏ Edit Tags'}</button>
+        <div class="ps-title">Card Info
+          <button class="edit-btn" onclick="togglePanelEdit('${pid}','main')">${editing?'✕ Cancel':'✏ Edit'}</button>
         </div>
         <div id="pf-main-${pid}">
           ${editing ? buildPurchaseEditForm(pid) : buildPurchaseReadView(pid)}
@@ -2909,7 +2911,6 @@ function buildPurchaseReadView(pid){
   return`<div style="margin-bottom:12px">${editableTags('p',pid,p)}</div>
   <div class="field-grid">
     <div class="field-item"><label>Player / Subject</label><input class="field-input" id="cd-player-${pid}" value="${esc(p.player||'')}" placeholder="e.g. Lautaro Martinez" style="color:var(--blue);font-weight:600" onblur="savePlayerField('${pid}')" onkeydown="if(event.key==='Enter')this.blur()"></div>
-    <div class="field-item"><label>Category</label><div class="field-val">${typeBadge(p.type)}</div></div>
     ${p.notes?`<div class="field-item" style="grid-column:1/-1"><label>Notes</label><div class="field-val" style="font-size:12px;color:var(--dim)">${esc(p.notes)}</div></div>`:''}
   </div>`;
 }
@@ -3297,12 +3298,7 @@ function savePlayerField(pid){
 
 function renderCardDetail(pid){
   const p=getP(pid);
-  const sp=soldPids().has(pid);
-  const matched=salesForPid(pid);
-  const rev=matched.reduce((a,s)=>a+getS(s.id).price*(getS(s.id).qty||1),0);
-  const totalFee=matched.reduce((a,s)=>{const ss=getS(s.id);return a+(ss.fees||0);},0);
-  const pnl=sp?rev-p.cost:null;
-  const netPnl=sp?rev-p.cost-totalFee:null;
+  const {matched,rev,totalFee,pnl,netPnl,sp}=getPurchaseFinancials(pid);
   const imgs=getImgs(pid);
   const bigImg=imgs[_cardPhotoIdx]||'';
 
@@ -3358,7 +3354,6 @@ function renderCardDetail(pid){
   }
   // Badges
   info+='<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:14px">';
-  info+=typeBadge(p.type,p._typeMismatch);
   info+=sp?'<span class="sb sold">SOLD</span>':'<span class="sb stock">IN STOCK</span>';
   if(p.grade) info+='<span class="pt grade">'+esc(p.grade)+'</span>';
   if(p.is_lot) info+='<span class="pt" style="color:var(--orange)">LOT×'+p.lotQty+'</span>';
@@ -3382,7 +3377,7 @@ function renderCardDetail(pid){
   // Linked sales — Card Journey
   info+='<div class="ps"><div class="ps-title">Card Journey</div>';
   if(sp&&netPnl!==null){
-    const jCol=netPnl>=0?'var(--green)':'var(--red)';
+    const jCol=roiColor(netPnl);
     const jBg=netPnl>=0?'rgba(0,229,170,.07)':'rgba(255,74,104,.07)';
     const jBorder=netPnl>=0?'rgba(0,229,170,.3)':'rgba(255,74,104,.3)';
     const firstSell=matched.length?getS(matched[0].id):null;
