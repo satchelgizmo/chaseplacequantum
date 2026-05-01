@@ -617,6 +617,27 @@ function editS(sid, fields) { saleEdits[sid] = {...(saleEdits[sid]||{}), ...fiel
 function recategorizeP(pid, type) { if(type==='__newcat__'){openManageCategories();return;} editP(pid, {type}); document.getElementById('pn').innerHTML = buildPurchasePanel(pid); render(); }
 function recategorizeS(sid, type) { if(type==='__newcat__'){openManageCategories();return;} editS(sid, {type}); document.getElementById('pn').innerHTML = buildSalePanel(sid); render(); }
 
+function autoAssignCategoryP(){
+  let n=0;
+  purchases.forEach(function(p){
+    if(getP(p.id).type)return;
+    const t=likelyType(p.name);
+    if(t){purchaseEdits[p.id]={...(purchaseEdits[p.id]||{}),type:t};n++;}
+  });
+  if(n){try{localStorage.setItem('cb_purchaseEdits',JSON.stringify(purchaseEdits));}catch(e){}render();toast('Assigned '+n+' categor'+(n===1?'y':'ies'));}
+  else toast('Nothing new to assign');
+}
+function autoAssignCategoryS(){
+  let n=0;
+  sales.forEach(function(s){
+    if(getS(s.id).type)return;
+    const t=likelyType(s.title||s.name||'');
+    if(t){saleEdits[s.id]={...(saleEdits[s.id]||{}),type:t};n++;}
+  });
+  if(n){try{localStorage.setItem('cb_saleEdits',JSON.stringify(saleEdits));}catch(e){}render();toast('Assigned '+n+' categor'+(n===1?'y':'ies'));}
+  else toast('Nothing new to assign');
+}
+
 let page = 'dash', pgNum = {};
 let currentCardPid = '', _cardPhotoIdx = 0;
 let sortState = { inv: {col:'date',dir:-1}, buys: {col:'date',dir:-1}, sells: {col:'date',dir:-1}, pnl: {col:'pnl',dir:1}, imp: {col:'date',dir:-1} };
@@ -2164,6 +2185,7 @@ function renderInv(){
   return`
   <div class="topbar">
     <div class="pg-title">Inventory <span class="pg-sub"><span class="stat-num">${total.toLocaleString()}</span> in stock<span class="stat-sep">·</span><span class="stat-money">${f$(inv_cost)}</span> cost${inv_mkt?`<span class="stat-sep">·</span><span style="color:var(--blue);font-weight:600">${f$(inv_mkt)}</span> est. market`:''}</span></div>
+    ${(()=>{const u=purchases.filter(p=>!getP(p.id).type&&likelyType(p.name)).length;return u?`<button class="btn sm ghost" onclick="autoAssignCategoryP()" title="Auto-detect category from card name for uncategorized cards">⚡ Auto-assign ${u}</button>`:''})()}
     <button class="btn pri" onclick="openAddPurchase()">+ Add Card</button>
   </div>
   <div class="content">
@@ -2293,6 +2315,7 @@ function renderBuys(){
   const page_items=items.slice(pn*_pageSize,(pn+1)*_pageSize);
   return`
   <div class="topbar"><div class="pg-title">Purchases <span class="pg-sub"><span class="stat-num">${total.toLocaleString()}</span> total<span class="stat-sep">·</span><span class="stat-money">${f$(items.reduce((a,p)=>a+p.cost,0))}</span> cost</span></div>
+    ${(()=>{const u=purchases.filter(p=>!getP(p.id).type&&likelyType(p.name)).length;return u?`<button class="btn sm ghost" onclick="autoAssignCategoryP()" title="Auto-detect category from card name for uncategorized cards">⚡ Auto-assign ${u}</button>`:''})()}
     <button class="btn sm ghost" onclick="nav('imp')">↗ Import CSV</button>
   </div>
   <div class="content">
@@ -2649,6 +2672,7 @@ function renderSells(){
     </div>
     <div style="margin-bottom:16px;display:flex;gap:8px;flex-wrap:wrap">
       ${allSales.length-linked.length>0?`<button class="btn pri" onclick="autoLinkAll()" title="Automatically match each unlinked sale to its best available purchase using scoring — review &amp; adjust afterward">⚡ Auto-link ${allSales.length-linked.length} unlinked sale${allSales.length-linked.length===1?'':'s'}</button>`:''}
+      ${(()=>{const u=sales.filter(s=>!getS(s.id).type&&likelyType(s.title||s.name||'')).length;return u?`<button class="btn ghost" onclick="autoAssignCategoryS()" title="Auto-detect category from sale title for uncategorized sales">⚡ Auto-assign ${u} categor${u===1?'y':'ies'}</button>`:''})()}
       ${linked.length>0?`<button class="btn red" onclick="unlinkAllSales()" title="Remove all purchase links from all sales">✕ Unlink All (${linked.length})</button>`:''}
     </div>
     ${tabBar}
