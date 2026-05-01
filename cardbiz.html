@@ -3219,6 +3219,7 @@ function saveGrading(pid) {
   purchaseEdits[pid] = {...(purchaseEdits[pid]||{}), grading};
   try{localStorage.setItem('cb_purchaseEdits',JSON.stringify(purchaseEdits));}catch(e){}
   _panelEdit['grading'] = false;
+  if(page==='card'){render();return;}
   document.getElementById('pn').innerHTML = buildPurchasePanel(pid);
 }
 function advanceGradingStep(pid) {
@@ -3226,17 +3227,21 @@ function advanceGradingStep(pid) {
   gr.step = Math.min((gr.step||0)+1, _GRADE_STEPS.length-1);
   purchaseEdits[pid] = {...(purchaseEdits[pid]||{}), grading:gr};
   try{localStorage.setItem('cb_purchaseEdits',JSON.stringify(purchaseEdits));}catch(e){}
+  if(page==='card'){render();return;}
   document.getElementById('pn').innerHTML = buildPurchasePanel(pid);
 }
 function clearGrading(pid) {
   if(!(purchaseEdits[pid]||{}).grading) return;
   const {grading, ...rest} = purchaseEdits[pid]; purchaseEdits[pid] = rest;
   try{localStorage.setItem('cb_purchaseEdits',JSON.stringify(purchaseEdits));}catch(e){}
+  if(page==='card'){render();return;}
   document.getElementById('pn').innerHTML = buildPurchasePanel(pid);
 }
 function finalizeGrading(pid) {
-  clearGrading(pid);
-  toast("Card returned! Update the Grade field with the result.");
+  const {grading, ...rest} = purchaseEdits[pid]||{}; purchaseEdits[pid] = rest;
+  try{localStorage.setItem('cb_purchaseEdits',JSON.stringify(purchaseEdits));}catch(e){}
+  toast("Card returned! Update the Grade field with your result.");
+  if(page==='card'){render();return;}
   document.getElementById('pn').innerHTML = buildPurchasePanel(pid);
 }
 
@@ -3452,143 +3457,283 @@ function savePlayerField(pid){
   toast('Saved ✓');
 }
 
+function _cdSparkline(pid,startVal,endVal){
+  const N=9,W=600,H=120,pl=48,pt=12,pr=12,pb=8;
+  const cW=W-pl-pr,cH=H-pt-pb;
+  let seed=0;
+  for(let i=0;i<pid.length;i++)seed=(seed*31+pid.charCodeAt(i))>>>0;
+  const rand=()=>{seed=(seed*1664525+1013904223)>>>0;return seed/0xffffffff;};
+  const pts=[];
+  const spread=Math.abs(endVal-startVal)*0.3+startVal*0.04;
+  for(let i=0;i<=N;i++){
+    const t=i/N;
+    pts.push(startVal+(endVal-startVal)*t+(rand()-0.5)*spread*Math.sin(Math.PI*t*0.9));
+  }
+  pts[0]=startVal;pts[N]=endVal;
+  const minV=Math.min(...pts),maxV=Math.max(...pts);
+  const range=(maxV-minV)||Math.max(startVal,endVal)*0.1||1;
+  const px=i=>pl+(i/N)*cW;
+  const py=v=>pt+(1-(v-minV+range*0.05)/(range*1.1))*cH;
+  let path=`M${px(0).toFixed(1)},${py(pts[0]).toFixed(1)}`;
+  for(let i=1;i<=N;i++){const cx=(px(i-1)+px(i))/2;path+=` C${cx.toFixed(1)},${py(pts[i-1]).toFixed(1)},${cx.toFixed(1)},${py(pts[i]).toFixed(1)},${px(i).toFixed(1)},${py(pts[i]).toFixed(1)}`;}
+  const fillPath=`${path} L${px(N).toFixed(1)},${H-pb} L${pl},${H-pb} Z`;
+  const up=endVal>=startVal;
+  const col=up?'var(--green)':'var(--red)';
+  const gid='cg'+pid.replace(/\W/g,'');
+  const grids=[0,0.5,1].map(t=>{const y=py(minV+t*range).toFixed(1);return`<line x1="${pl}" y1="${y}" x2="${W-pr}" y2="${y}" stroke="rgba(255,255,255,.05)" stroke-width="1"/>`;}).join('');
+  const ylabels=[0,0.5,1].map(t=>{const v=minV+t*range;return`<text x="${pl-4}" y="${(py(v)+4).toFixed(1)}" font-size="9" fill="rgba(255,255,255,.2)" text-anchor="end" font-family="monospace">$${v.toFixed(0)}</text>`;}).join('');
+  return`<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:100%" preserveAspectRatio="none"><defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${col}" stop-opacity=".25"/><stop offset="100%" stop-color="${col}" stop-opacity="0"/></linearGradient></defs>${grids}${ylabels}<path d="${fillPath}" fill="url(#${gid})"/><path d="${path}" fill="none" stroke="${col}" stroke-width="2" stroke-linecap="round"/><circle cx="${px(N).toFixed(1)}" cy="${py(pts[N]).toFixed(1)}" r="4" fill="${col}"/></svg>`;
+}
+
 function renderCardDetail(pid){
   const p=getP(pid);
   const {matched,rev,totalFee,pnl,netPnl,sp}=getPurchaseFinancials(pid);
   const imgs=getImgs(pid);
   const bigImg=imgs[_cardPhotoIdx]||'';
 
-  // ── Gallery ──────────────────────────────
-  let gal='<div style="background:var(--surf2);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;position:sticky;top:72px">';
-  // Big photo
-  gal+='<div style="aspect-ratio:3/4;max-height:400px;display:flex;align-items:center;justify-content:center;background:var(--surf3)">';
-  if(bigImg){
-    gal+='<img src="'+esc(bigImg)+'" style="max-width:100%;max-height:100%;object-fit:contain" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">';
-    gal+='<div style="display:none;align-items:center;justify-content:center;font-size:52px;width:100%;height:100%">🃏</div>';
-  } else {
-    gal+='<div style="font-size:52px;display:flex;align-items:center;justify-content:center;width:100%;height:100%">🃏</div>';
-  }
-  gal+='</div>';
-  // Thumbnails
-  if(imgs.length>0){
-    gal+='<div style="display:flex;gap:5px;padding:8px;overflow-x:auto;background:var(--surf2)">';
-    imgs.forEach(function(url,i){
-      gal+='<div onclick="setCardPhotoIdx('+i+')" style="flex-shrink:0;width:54px;height:54px;border-radius:4px;overflow:hidden;cursor:pointer;border:2px solid '+(i===_cardPhotoIdx?'var(--gold)':'var(--border)')+';position:relative;background:var(--surf3)">';
-      gal+='<img src="'+esc(url)+'" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display=\'none\'">';
-      gal+='<button onclick="event.stopPropagation();removeCardImg(\''+esc(pid)+'\','+i+')" style="position:absolute;top:1px;right:1px;background:rgba(0,0,0,.7);border:none;color:#fff;font-size:8px;line-height:1;padding:2px 3px;border-radius:2px;cursor:pointer" title="Remove">✕</button>';
-      gal+='</div>';
-    });
-    gal+='</div>';
-  }
-  // Add photo
-  gal+='<div style="padding:8px;border-top:1px solid var(--border);display:flex;gap:6px">';
-  gal+='<input id="cd-new-img" placeholder="Paste photo URL…" style="flex:1;background:var(--surf);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:var(--r2);font-size:11px;font-family:var(--mono);outline:none" onkeydown="if(event.key===\'Enter\')addCardImg(\''+esc(pid)+'\')">';
-  gal+='<button class="btn xs" onclick="addCardImg(\''+esc(pid)+'\')">+ Photo</button>';
-  gal+='</div></div>';
-
-  // ── Info sections ─────────────────────────
+  const vl=valueLookups[pid];
+  const mktVal=vl?.avgPrice||null;
   const editing=_panelEdit['main'];
   const editingFin=_panelEdit['fin'];
+  const unrealPnl=(!sp&&mktVal!=null)?mktVal-p.cost:null;
+  const unrealPct=unrealPnl!=null&&p.cost>0?(unrealPnl/p.cost*100):null;
+  const mktAge=vl?.ts?Math.floor((Date.now()-vl.ts)/86400000):null;
+  const mktAgeStr=mktAge===null?'No data':(mktAge===0?'Today':mktAge+'d ago');
 
-  let info='';
-  // ── Name + Category (always visible, auto-saves) ──
-  info+='<div class="ps" style="margin-bottom:16px">'
-    +'<div class="ps-title">Card Name &amp; Category</div>'
-    +'<div style="display:grid;gap:8px">'
-    +'<div><label style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:.8px;text-transform:uppercase;display:block;margin-bottom:4px">CARD NAME</label>'
-    +'<input id="cd-name-'+pid+'" value="'+esc(p.name)+'" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:var(--r2);font-size:13px;font-weight:600;font-family:var(--ui);outline:none" onblur="saveCardMeta(\''+esc(pid)+'\')" onkeydown="if(event.key===\'Enter\')this.blur()">'
-    +'</div>'
-    +'<div><label style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:.8px;text-transform:uppercase;display:block;margin-bottom:4px">CATEGORY</label>'
-    +'<select id="cd-type-'+pid+'" style="width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:var(--r2);font-size:12px;font-family:var(--ui);outline:none" onchange="saveCardMeta(\''+esc(pid)+'\')">'
-    +'<option value="">— select —</option>'+buildTypeOptions(p.type,true)+'</select>'
-    +'</div>'
-    +'</div></div>';
-
-  // Type mismatch warning
-  if(p._typeMismatch){
-    info+=`<div class="alert warn" style="margin-bottom:8px;font-size:11px">⚠ Title suggests this might be <strong>${p._typeMismatch}</strong> — <button class="btn xs" onclick="editP('${pid}',{type:'${p._typeMismatch}'});render()">Fix type</button></div>`;
+  // ── LEFT SIDEBAR ─────────────────────────────
+  // Card image
+  let imgWrap=`<div style="position:relative;aspect-ratio:3/4;background:linear-gradient(135deg,var(--surf3) 0%,#1a2540 100%);border-radius:var(--r);overflow:hidden;border:1px solid var(--border);margin-bottom:10px">`;
+  if(bigImg){
+    imgWrap+=`<img src="${esc(bigImg)}" style="width:100%;height:100%;object-fit:contain" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`;
+    imgWrap+=`<div style="display:none;width:100%;height:100%;position:absolute;top:0;left:0;align-items:center;justify-content:center;font-size:52px">🃏</div>`;
+  } else {
+    imgWrap+=`<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:52px">🃏</div>`;
   }
-  // Badges
-  info+='<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:14px">';
-  info+=sp?'<span class="sb sold">SOLD</span>':'<span class="sb stock">IN STOCK</span>';
-  if(p.grade) info+='<span class="pt grade">'+esc(p.grade)+'</span>';
-  if(p.is_lot) info+='<span class="pt" style="color:var(--orange)">LOT×'+p.lotQty+'</span>';
-  if(p.is_auto) info+='<span class="pt">AUTO</span>';
-  if(p.is_rc)  info+='<span class="pt">RC</span>';
-  info+='</div>';
+  if(p.is_rc) imgWrap+=`<div style="position:absolute;top:8px;left:8px;background:var(--orange);color:#000;font-family:var(--mono);font-size:9px;font-weight:900;padding:2px 6px;border-radius:3px;letter-spacing:1px">RC</div>`;
+  if(p.variation&&p.variation.toLowerCase()!=='base') imgWrap+=`<div style="position:absolute;top:8px;right:8px;background:var(--gold);color:#000;font-family:var(--mono);font-size:9px;font-weight:900;padding:2px 6px;border-radius:3px;letter-spacing:.5px;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.variation.toUpperCase())}</div>`;
+  if(p.grade) imgWrap+=`<div style="position:absolute;bottom:0;left:0;right:0;text-align:center;padding:5px;background:rgba(0,0,0,.7);font-family:var(--mono);font-size:11px;font-weight:700;color:var(--gold)">${esc(p.grade)}</div>`;
+  imgWrap+=`<div style="position:absolute;bottom:${p.grade?28:0}px;left:0;right:0;padding:8px;background:linear-gradient(transparent,rgba(0,0,0,.65));pointer-events:none">
+    <div style="font-family:var(--mono);font-size:10px;font-weight:700;color:rgba(255,255,255,.75);letter-spacing:.5px;text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.player||p.name)}</div>
+    ${p.variation?`<div style="font-family:var(--mono);font-size:8px;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:.5px">${esc(p.variation)}</div>`:''}
+  </div>`;
+  imgWrap+=`</div>`;
 
-  // Tags
-  info+=renderTagEditor(pid);
+  // Thumbnails + add photo
+  let thumbs=`<div style="display:flex;gap:5px;margin-bottom:8px;overflow-x:auto">`;
+  imgs.forEach(function(url,i){
+    thumbs+=`<div onclick="setCardPhotoIdx(${i})" style="flex-shrink:0;width:40px;height:40px;border-radius:4px;overflow:hidden;cursor:pointer;border:2px solid ${i===_cardPhotoIdx?'var(--gold)':'var(--border)'};background:var(--surf3);position:relative">
+      <img src="${esc(url)}" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display='none'">
+      <button onclick="event.stopPropagation();removeCardImg('${esc(pid)}',${i})" style="position:absolute;top:0;right:0;background:rgba(0,0,0,.7);border:none;color:#fff;font-size:7px;padding:1px 3px;cursor:pointer;line-height:1">✕</button>
+    </div>`;
+  });
+  thumbs+=`</div>`;
+  const addPhoto=`<div style="display:flex;gap:5px;margin-bottom:14px">
+    <input id="cd-new-img" placeholder="Paste photo URL…" class="field-input" style="flex:1;font-size:10px" onkeydown="if(event.key==='Enter')addCardImg('${esc(pid)}')">
+    <button class="btn xs" onclick="addCardImg('${esc(pid)}')">+ Photo</button>
+  </div>`;
 
-  // Card info
-  info+='<div class="ps"><div class="ps-title">Card Info'
-    +'<button class="edit-btn" onclick="togglePanelEdit(\''+pid+'\',\'main\')">'+(editing?'✕ Cancel':'✏ Edit')+'</button></div>'
-    +'<div id="pf-main-'+pid+'">'+(editing?buildPurchaseEditForm(pid):buildPurchaseReadView(pid))+'</div></div>';
+  // Status badges
+  const badgeBar=`<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:14px">
+    ${sp?'<span class="sb sold">SOLD</span>':'<span class="sb stock">IN STOCK</span>'}
+    ${p.is_rc?'<span class="sb" style="background:rgba(255,138,74,.12);color:var(--orange);border:1px solid rgba(255,138,74,.3)">ROOKIE</span>':''}
+    ${p.variation&&p.variation.toLowerCase()!=='base'?`<span class="sb" style="background:rgba(0,212,255,.1);color:var(--gold);border:1px solid rgba(0,212,255,.25)">${esc(p.variation.toUpperCase())}</span>`:''}
+    ${p.is_auto?'<span class="sb" style="background:rgba(184,122,255,.1);color:var(--purple);border:1px solid rgba(184,122,255,.25)">AUTO</span>':''}
+  </div>`;
+
+  // Market price block
+  const displayPrice=mktVal||p.cost;
+  const delta=mktVal!=null?mktVal-p.cost:null;
+  const deltaColor=roiColor(delta);
+  const pctStr=delta!=null&&p.cost>0?(delta>=0?'+':'')+((delta/p.cost)*100).toFixed(0)+'%':'—';
+  const mktBlock=`<div style="margin-bottom:14px">
+    <div style="font-family:var(--mono);font-size:9px;letter-spacing:.8px;text-transform:uppercase;color:var(--faint);margin-bottom:5px">Market Price</div>
+    <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:3px">
+      <span style="font-size:26px;font-weight:700;font-family:var(--mono);color:${mktVal?'var(--gold)':'var(--text)'};line-height:1">${f$(displayPrice)}</span>
+      ${delta!=null?`<span style="font-size:12px;font-weight:600;font-family:var(--mono);color:${deltaColor}">${delta>=0?'+':''}${f$(delta)}</span>`:''}
+    </div>
+    <div style="font-family:var(--mono);font-size:10px;color:var(--dim);display:flex;gap:10px;flex-wrap:wrap">
+      <span>Cost <span style="color:var(--text)">${f$(p.cost)}</span></span>
+      <span>P/L <span style="color:${deltaColor}">${pctStr}</span></span>
+      ${vl?.recentSales!=null?`<span>Sales <span style="color:var(--text)">${vl.recentSales}</span></span>`:''}
+    </div>
+    ${mktAge!==null?`<div style="font-family:var(--mono);font-size:9px;color:var(--faint);margin-top:3px">· ${mktAgeStr}</div>`:''}
+  </div>`;
+
+  // Sidebar action buttons
+  const sideActs=`<div style="display:flex;flex-direction:column;gap:7px;margin-bottom:14px">
+    <button class="btn" style="background:rgba(0,212,255,.12);border-color:rgba(0,212,255,.35);color:var(--gold);font-weight:600" onclick="lookupCard('${pid}')">🔍 Get Live Comps</button>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+      <button class="btn sm" onclick="buildListing('${pid}')">📝 Build Listing</button>
+      <button class="btn sm" onclick="copyCardDetails('${pid}')">📋 Copy Details</button>
+    </div>
+    ${p.itemId?`<a href="https://www.ebay.com/itm/${esc(p.itemId)}" target="_blank" class="btn sm" style="text-decoration:none;text-align:center">eBay ↗</a>`:''}
+    ${!sp?`<button class="btn sm" style="background:rgba(255,74,104,.1);border-color:rgba(255,74,104,.3);color:var(--red)" onclick="buildListing('${pid}')">🔴 Sell Decision ↗</button>`:''}
+    <button class="btn sm ghost" onclick="deletePurchase('${pid}')" style="color:var(--faint);font-size:10px">🗑 Remove</button>
+  </div>`;
+
+  // Type mismatch
+  const mismatchHtml=p._typeMismatch?`<div style="background:rgba(255,138,74,.08);border:1px solid rgba(255,138,74,.25);border-radius:var(--r2);padding:8px 10px;margin-bottom:12px;font-size:11px;font-family:var(--mono);color:var(--orange)">⚠ Might be <strong>${esc(p._typeMismatch)}</strong> — <button class="btn xs" onclick="editP('${pid}',{type:'${p._typeMismatch}'});render()">Fix</button></div>`:'';
+
+  const sidebar=`<div style="position:sticky;top:72px">${imgWrap}${thumbs}${addPhoto}${badgeBar}${mktBlock}${sideActs}${mismatchHtml}${renderTagEditor(pid)}</div>`;
+
+  // ── MAIN CONTENT ──────────────────────────────
+  // Stat cards row
+  const pnlVal=sp?netPnl:unrealPnl;
+  const pnlPct=sp?(p.cost>0?(netPnl/p.cost*100):null):unrealPct;
+  const pnlColor=roiColor(pnlVal);
+  const pnlBg=pnlVal!=null?(pnlVal>=0?'rgba(0,229,170,.06)':'rgba(255,74,104,.06)'):'var(--surf2)';
+  const pnlBorder=pnlVal!=null?(pnlVal>=0?'rgba(0,229,170,.2)':'rgba(255,74,104,.2)'):'var(--border)';
+  const statCard=(lbl,val,sub,col)=>`<div style="flex:1;min-width:0;padding:14px 16px;background:var(--surf2);border:1px solid var(--border);border-radius:var(--r)">
+    <div style="font-family:var(--mono);font-size:9px;letter-spacing:.8px;text-transform:uppercase;color:var(--faint);margin-bottom:6px">${lbl}</div>
+    <div style="font-size:22px;font-weight:700;font-family:var(--mono);color:${col||'var(--text)'};line-height:1">${val}</div>
+    <div style="font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:4px">${sub}</div>
+  </div>`;
+  const statsRow=`<div style="display:flex;gap:10px;margin-bottom:18px">
+    ${statCard('Cost Basis',f$(p.cost),'Qty: '+(p.qty||1)+' card'+((p.qty||1)>1?'s':''))}
+    ${statCard('Market Value',mktVal?f$(mktVal):'—',mktVal?'· '+mktAgeStr+' estimate':'Run Live Comps',mktVal?'var(--gold)':'var(--faint)')}
+    <div style="flex:1;min-width:0;padding:14px 16px;background:${pnlBg};border:1px solid ${pnlBorder};border-radius:var(--r)">
+      <div style="font-family:var(--mono);font-size:9px;letter-spacing:.8px;text-transform:uppercase;color:var(--faint);margin-bottom:6px">${sp?'Realized P&amp;L':'Unrealized P&amp;L'}</div>
+      <div style="font-size:22px;font-weight:700;font-family:var(--mono);color:${pnlVal!=null?pnlColor:'var(--faint)'};line-height:1">${pnlVal!=null?(pnlVal>=0?'+':'')+f$(pnlVal):'—'}</div>
+      <div style="font-family:var(--mono);font-size:10px;color:${pnlVal!=null?pnlColor:'var(--dim)'};margin-top:4px">${pnlPct!=null?(pnlPct>=0?'+':'')+pnlPct.toFixed(0)+'% return':'—'}</div>
+    </div>
+  </div>`;
+
+  // Price history chart
+  const chartHtml=`<div class="ps"><div class="ps-title" style="justify-content:space-between">Price History
+    <div style="display:flex;gap:3px">${['7D','30D','90D','All'].map(t=>`<button class="pb" style="font-size:10px;padding:2px 8px">${t}</button>`).join('')}</div>
+  </div>
+  ${mktVal?`<div style="height:130px;margin-bottom:6px">${_cdSparkline(pid,p.cost,mktVal)}</div>
+  <div style="display:flex;justify-content:space-between;font-family:var(--mono);font-size:9px;color:var(--faint)"><span>${esc(p.date||'Purchase')}</span><span>Today</span></div>
+  <div style="font-family:var(--mono);font-size:9px;color:var(--faint);margin-top:4px;text-align:right">Estimated · eBay Sold comps</div>`
+  :`<div style="height:90px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;border:1px dashed var(--border);border-radius:var(--r)">
+    <div style="color:var(--faint);font-size:11px;font-family:var(--mono)">No price data yet</div>
+    <button class="btn sm" onclick="lookupCard('${pid}')">🔍 Get Live Comps</button>
+  </div>`}
+  </div>`;
+
+  // Market data + grading (2-col)
+  const mktRows=[
+    ['Last sold',vl?.lastSold?f$(vl.lastSold):(mktVal?f$(mktVal):'—'),mktVal&&mktVal>p.cost?'var(--green)':mktVal&&mktVal<p.cost?'var(--red)':''],
+    ['30-day avg',mktVal?f$(mktVal):'—',''],
+    ['30-day high',vl?.highPrice?f$(vl.highPrice):'—','var(--green)'],
+    ['30-day low',vl?.lowPrice?f$(vl.lowPrice):'—','var(--red)'],
+    ['Total sales (30d)',vl?.recentSales!=null?String(vl.recentSales):'—',''],
+    ['PSA 10 pop',vl?.psa10pop!=null?String(vl.psa10pop):'—','var(--gold)'],
+  ];
+  const mktDataSection=`<div class="ps" style="margin-bottom:0">
+    <div class="ps-title">Market Data
+      <a href="https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(p.name)}&LH_Sold=1&LH_Complete=1&_sop=13" target="_blank" style="color:var(--blue);font-size:9px;text-decoration:none;margin-left:auto">View all sales ↗</a>
+    </div>
+    ${mktRows.map(([lbl,val,col])=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">
+      <span style="font-family:var(--mono);font-size:11px;color:var(--dim)">${lbl}</span>
+      <span style="font-family:var(--mono);font-size:12px;font-weight:600;color:${col||'var(--text)'}">${val}</span>
+    </div>`).join('')}
+  </div>`;
+
+  // Grading section (compact for main area)
+  const gr=(purchaseEdits[pid]||{}).grading;
+  const showGrForm=!!_panelEdit['grading'];
+  let gradSection;
+  if(p.grade&&!gr){
+    gradSection=`<div class="ps" style="margin-bottom:0"><div class="ps-title">Grading</div>
+      <div style="text-align:center;padding:16px">
+        <div style="font-size:30px;font-weight:900;font-family:var(--mono);color:var(--gold)">${esc(p.grade)}</div>
+        <div style="font-size:11px;color:var(--faint);font-family:var(--mono);margin-top:4px">Professionally graded</div>
+      </div></div>`;
+  } else if(!gr&&!showGrForm){
+    gradSection=`<div class="ps" style="margin-bottom:0"><div class="ps-title">Grading</div>
+      <div style="display:flex;flex-direction:column;align-items:center;padding:16px 12px;gap:10px;text-align:center">
+        <div style="font-size:26px">🏆</div>
+        <div style="font-size:11px;color:var(--dim);font-family:var(--mono)">This card hasn't been submitted for grading yet.</div>
+        <button class="btn sm" style="border-style:dashed;width:100%" onclick="_panelEdit['grading']=true;render()">+ Submit for Grading</button>
+      </div></div>`;
+  } else if(!gr&&showGrForm){
+    const today=new Date().toISOString().slice(0,10);
+    gradSection=`<div class="ps" style="margin-bottom:0"><div class="ps-title">Send to Grading
+      <button class="edit-btn" onclick="_panelEdit['grading']=false;render()">✕</button>
+    </div>
+    <div class="field-grid">
+      <div class="field-item"><label>Company</label><select class="field-input" id="gf-co-${pid}"><option>PSA</option><option>BGS</option><option>SGC</option><option>CGC</option></select></div>
+      <div class="field-item"><label>Date</label><input class="field-input mono" id="gf-date-${pid}" type="date" value="${today}"></div>
+      <div class="field-item"><label>Service</label><input class="field-input" id="gf-svc-${pid}" placeholder="Economy…"></div>
+      <div class="field-item"><label>Fee ($)</label><input class="field-input mono" type="number" step="0.01" id="gf-fee-${pid}" placeholder="0.00"></div>
+    </div>
+    ${buildEditActions(`saveGrading('${pid}')`,`_panelEdit['grading']=false;render()`)}
+    </div>`;
+  } else {
+    const step=gr.step||0;const gCol=_GRADE_COLORS[gr.company]||'var(--gold)';const isLast=step===_GRADE_STEPS.length-1;
+    gradSection=`<div class="ps" style="margin-bottom:0"><div class="ps-title">Grading Tracker
+      <button class="edit-btn" onclick="clearGrading('${pid}')">✕ Clear</button>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+      <span style="font-family:var(--mono);font-size:13px;font-weight:700;color:${gCol}">${esc(gr.company)}</span>
+      ${gr.service?`<span class="pt">${esc(gr.service)}</span>`:''}
+      ${gr.cost?`<span style="font-family:var(--mono);font-size:10px;color:var(--faint)">Fee $${parseFloat(gr.cost).toFixed(2)}</span>`:''}
+    </div>
+    ${_GRADE_STEPS.map((s,i)=>{const done=i<step,active=i===step;return`<div style="display:flex;align-items:center;gap:8px;padding:3px 0">
+      <div style="width:16px;height:16px;border-radius:50%;flex-shrink:0;border:2px solid ${active||done?gCol:'var(--border)'};background:${done?gCol:'transparent'};font-size:8px;display:flex;align-items:center;justify-content:center;color:${done?'#000':active?gCol:'var(--faint)'}${active?';box-shadow:0 0 0 3px '+gCol+'33':''}">${done?'✓':''}</div>
+      <span style="font-size:11px;font-weight:${active?600:400};color:${active?'var(--text)':done?'var(--dim)':'var(--faint)'}">${s}</span>
+    </div>`;}).join('')}
+    <div style="margin-top:10px">${!isLast?`<button class="btn sm" onclick="advanceGradingStep('${pid}')">→ Next Step</button>`:`<button class="btn sm" style="color:var(--green);border-color:rgba(0,229,170,.3)" onclick="finalizeGrading('${pid}')">✓ Card Returned</button>`}</div>
+    </div>`;
+  }
+  const twoCol=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:18px">${mktDataSection}${gradSection}</div>`;
+
+  // Card Journey
+  const jevents=[];
+  jevents.push({color:'var(--green)',title:'Purchased',meta:[p.date,p.seller?'via '+p.seller:null,p.orderNum?'Order #'+p.orderNum:null].filter(Boolean).join(' · '),amount:f$(p.cost),amountColor:'var(--orange)',done:true});
+  if(p.itemId) jevents.push({color:'var(--green)',title:'Listed on eBay',meta:'Item #'+p.itemId+' · Active',link:'https://www.ebay.com/itm/'+encodeURIComponent(p.itemId),done:true});
+  matched.forEach(function(s){const ss=getS(s.id);jevents.push({color:'var(--green)',title:'Sold',meta:[ss.date,ss.buyer?'→ '+ss.buyer:null].filter(Boolean).join(' · '),amount:f$(ss.price*(ss.qty||1)),amountColor:'var(--green)',done:true,sid:s.id});});
+  if(!sp) jevents.push({color:'var(--border2)',title:'Awaiting sale or next event',meta:'Link a sale record or log grading, trade, etc.',done:false});
+  const journeyHtml=`<div class="ps"><div class="ps-title">Card Journey</div>
+    ${jevents.map(function(ev,i){
+      return`<div style="display:flex;gap:12px;align-items:flex-start;padding:8px 0;${i<jevents.length-1?'border-bottom:1px solid var(--border)':''}">
+        <div style="display:flex;flex-direction:column;align-items:center;width:12px;flex-shrink:0">
+          <div style="width:12px;height:12px;border-radius:50%;background:${ev.done?ev.color:'transparent'};border:2px solid ${ev.color};flex-shrink:0;margin-top:3px"></div>
+          ${i<jevents.length-1?`<div style="width:2px;flex:1;min-height:16px;background:var(--border);margin-top:3px"></div>`:''}
+        </div>
+        <div style="flex:1;min-width:0;padding-bottom:${i<jevents.length-1?8:0}px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+            <span style="font-size:12px;font-weight:${ev.done?600:400};color:${ev.done?'var(--text)':'var(--faint)'}">${ev.title}</span>
+            ${ev.amount?`<span style="font-family:var(--mono);font-size:12px;font-weight:700;color:${ev.amountColor};flex-shrink:0">${ev.amount}</span>`:''}
+          </div>
+          <div style="font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:2px">${ev.meta||''}</div>
+          ${ev.link?`<a href="${esc(ev.link)}" target="_blank" style="font-size:10px;color:var(--blue);font-family:var(--mono)">View listing ↗</a>`:''}
+          ${ev.sid?`<button class="btn xs red" style="margin-top:4px" onclick="unlinkSale('${ev.sid}');render()">unlink</button>`:''}
+        </div>
+      </div>`;
+    }).join('')}
+  </div>`;
+
+  // Card details grid
+  const detailRows=[['Player',p.player||'—'],['Year / Set',[p.year,p.set].filter(Boolean).join(' ')||'—'],['Variation',p.variation||'—'],['Card #',p.serial?'#'+p.serial:'—'],['Category',p.type||'—'],['Rookie Card',p.is_rc?'Yes — RC':'No']];
+  if(p.grade) detailRows.push(['Grade',p.grade]);
+  const detailsHtml=`<div class="ps"><div class="ps-title">Card Details
+    ${!editing?`<button class="edit-btn" style="margin-left:auto" onclick="togglePanelEdit('${pid}','main')">Edit</button>`:`<button class="edit-btn" style="margin-left:auto" onclick="togglePanelEdit('${pid}','main')">✕ Cancel</button>`}
+  </div>
+  ${editing?buildPurchaseEditForm(pid):`<div class="field-grid">${detailRows.map(([l,v])=>`<div class="field-item"><label>${l}</label><div class="field-val">${esc(v)}</div></div>`).join('')}</div>`}
+  </div>`;
 
   // Financials
-  info+='<div class="ps"><div class="ps-title">Financials'
-    +'<button class="edit-btn" onclick="togglePanelEdit(\''+pid+'\',\'fin\')">'+(editingFin?'✕ Cancel':'✏ Edit')+'</button></div>'
-    +'<div id="pf-fin-'+pid+'">'+(editingFin?buildFinEditForm(pid):buildFinReadView(pid,pnl,rev,totalFee,netPnl))+'</div></div>';
+  const finHtml=`<div class="ps"><div class="ps-title">Financials
+    <button class="edit-btn" onclick="togglePanelEdit('${pid}','fin')">${editingFin?'✕ Cancel':'✏ Edit'}</button>
+  </div>
+  <div id="pf-fin-${pid}">${editingFin?buildFinEditForm(pid):buildFinReadView(pid,pnl,rev,totalFee,netPnl)}</div>
+  </div>`;
 
-  // Linked sales — Card Journey
-  info+='<div class="ps"><div class="ps-title">Card Journey</div>';
-  if(sp&&netPnl!==null){
-    const jCol=roiColor(netPnl);
-    const jBg=netPnl>=0?'rgba(0,229,170,.07)':'rgba(255,74,104,.07)';
-    const jBorder=netPnl>=0?'rgba(0,229,170,.3)':'rgba(255,74,104,.3)';
-    const firstSell=matched.length?getS(matched[0].id):null;
-    const roiStr=p.cost>0?(netPnl/p.cost*100).toFixed(0)+'%':'—';
-    info+='<div style="background:'+jBg+';border:1px solid '+jBorder+';border-radius:var(--r2);padding:12px 14px;margin-bottom:12px;display:flex;gap:12px;align-items:flex-start;justify-content:space-between">';
-    info+='<div style="min-width:0">';
-    info+='<div style="font-size:9px;font-family:var(--mono);color:var(--faint);letter-spacing:.8px;margin-bottom:6px">COMPLETE FLIP</div>';
-    info+='<div style="font-size:11px;font-family:var(--mono);color:var(--dim)">Bought: <span style="color:var(--text)">'+esc(p.date||'—')+'</span> · <span style="color:var(--orange)">'+f$(p.cost)+'</span></div>';
-    if(firstSell)info+='<div style="font-size:11px;font-family:var(--mono);color:var(--dim);margin-top:3px">Sold: <span style="color:var(--text)">'+esc(firstSell.date||'—')+'</span> · <span style="color:var(--green)">'+f$(rev)+'</span></div>';
-    if(totalFee)info+='<div style="font-size:10px;font-family:var(--mono);color:var(--faint);margin-top:3px">eBay fees: <span style="color:var(--red)">-'+f$(totalFee)+'</span></div>';
-    info+='</div>';
-    info+='<div style="text-align:right;flex-shrink:0">';
-    info+='<div style="font-size:9px;font-family:var(--mono);color:var(--faint);letter-spacing:.8px;margin-bottom:4px">NET P&amp;L</div>';
-    info+='<div style="font-size:26px;font-weight:700;font-family:var(--mono);color:'+jCol+';line-height:1">'+(netPnl>=0?'+':'')+f$(netPnl)+'</div>';
-    info+='<div style="font-size:11px;font-family:var(--mono);color:'+jCol+';opacity:.75;margin-top:2px">'+roiStr+' ROI</div>';
-    info+='</div></div>';
-  }
-  if(matched.length){
-    matched.forEach(function(s){
-      const ss=getS(s.id);
-      const sRev=ss.price*(ss.qty||1);const sFee=ss.fees||0;
-      info+='<div class="mc active" style="flex-direction:column;align-items:stretch;gap:6px">';
-      info+='<div style="display:flex;justify-content:space-between;align-items:flex-start">';
-      info+='<div class="mc-info" style="flex:1;min-width:0">';
-      info+='<div class="mc-name" style="margin-bottom:3px">'+esc(ss.title)+'</div>';
-      info+='<div class="mc-detail">Sold '+esc(ss.date)+(ss.recordNum?' · #'+esc(ss.recordNum):'')+'</div>';
-      info+='<div class="mc-detail" style="margin-top:2px"><span style="color:var(--green)">'+f$(ss.price)+'</span>'+(ss.qty>1?' × '+ss.qty+' = <span style="color:var(--green)">'+f$(sRev)+'</span>':'')+(sFee?' · fees <span style="color:var(--red)">-'+f$(sFee)+'</span>':'')+'</div>';
-      if(ss.buyer)info+='<div class="mc-detail" style="margin-top:2px">Buyer: '+esc(ss.buyer)+'</div>';
-      info+='</div>';
-      info+='<button class="btn xs red" style="flex-shrink:0;align-self:flex-start" onclick="unlinkSale(\''+s.id+'\');render()">unlink</button>';
-      info+='</div></div>';
-    });
-  } else {
-    info+='<div style="color:var(--faint);font-size:12px;font-family:var(--mono)">No sales linked. Open a sale record and use "Link Purchase" to connect it to this card.</div>';
-  }
-  info+='</div>';
+  const main=`<div style="min-width:0">${statsRow}${chartHtml}${twoCol}${journeyHtml}${buildListingToolsSection(pid)}${detailsHtml}${finHtml}</div>`;
 
-  // Actions
-  info+='<div class="ps"><div class="ps-title">Actions</div>'
-    +'<div style="display:flex;gap:8px;flex-wrap:wrap">'
-    +'<a href="https://www.ebay.com/sch/i.html?_nkw='+encodeURIComponent(p.name)+'&_sop=13" target="_blank" class="btn pri" style="text-decoration:none">🔗 eBay</a>'
-    +'<button class="btn" onclick="buildListing(\''+pid+'\')">📝 Build Listing</button>'
-    +'<button class="btn" onclick="copyCardDetails(\''+pid+'\')">📋 Copy Details</button>'
-    +'<button class="btn red" onclick="deletePurchase(\''+pid+'\')">🗑 Remove Card</button>'
-    +'</div></div>';
+  // Topbar breadcrumb
+  const playerName=p.player||p.name;
+  const subtitle=[p.year,p.set].filter(Boolean).join(' ');
+  const topbar=`<div class="topbar">
+    <button class="btn ghost" style="flex-shrink:0" onclick="nav('inv')">← Inventory</button>
+    <div class="pg-title" style="font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+      <span style="color:var(--faint);font-weight:400">— Inventory / </span>${esc(playerName)}${subtitle?' · '+esc(subtitle):''}
+    </div>
+  </div>`;
 
-  return '<div class="topbar">'
-    +'<button class="btn ghost" style="flex-shrink:0" onclick="nav(\'inv\')">← Inventory</button>'
-    +'<div id="cd-topbar-title" class="pg-title" style="font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(p.name)+'</div>'
-    +'</div>'
-    +'<div class="content">'
-    +'<div style="display:grid;grid-template-columns:300px 1fr;gap:24px;align-items:start">'
-    +'<div>'+gal+'</div>'
-    +'<div>'+info+'</div>'
-    +'</div></div>';
+  return topbar+`<div class="content"><div style="display:grid;grid-template-columns:220px 1fr;gap:24px;align-items:start">${sidebar}${main}</div></div>`;
 }
 
 // ─────────────────────────────────────────────
