@@ -1,0 +1,79 @@
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.hint {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--faint);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+}
+
+.field {
+  padding: 9px 10px;
+  border-radius: var(--r2);
+  cursor: pointer;
+  transition: background .1s;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.field:hover { background: var(--surf2); }
+.field:hover .editHint { opacity: 1; }
+
+.fieldLabel {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: .8px;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.fieldValue {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fieldEmpty { color: var(--faint); }
+.editHint {
+  font-size: 9px;
+  opacity: 0;
+  transition: opacity .1s;
+  flex-shrink: 0;
+  color: var(--faint);
+}
+
+.fieldInput {
+  padding: 5px 8px;
+  font-size: 13px;
+  border-radius: var(--r2);
+  width: 100%;
+}
+
+.boolBtn {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 2px 10px;
+  border-radius: 3px;
+  border: 1px solid;
+  transition: all .12s;
+  cursor: pointer;
+}
+.boolOn  { background: rgba(0,229,170,.12); color: var(--green);  border-color: rgba(0,229,170,.3); }
+.boolOff { background: rgba(255,255,255,.04); color: var(--faint); border-color: var(--border); }
+.boolOn:hover  { background: rgba(0,229,170,.22); }
+.boolOff:hover { background: rgba(255,255,255,.08); }

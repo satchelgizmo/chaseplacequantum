@@ -1,0 +1,100 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:      #0a0c10;
+  --surf:    #111318;
+  --surf2:   #181c24;
+  --surf3:   #1e2330;
+  --surf4:   #242938;
+  --text:    #c4d8f5;
+  --dim:     #6e94be;
+  --faint:   #4a6a8a;
+  --border:  rgba(255,255,255,.07);
+  --border2: rgba(255,255,255,.13);
+  --green:   #00e5aa;
+  --red:     #e05252;
+  --blue:    #4da6ff;
+  --gold:    #f5c842;
+  --orange:  #f5824a;
+  --purple:  #a47ef5;
+  --cyan:    #00e5ff;
+  --r:       6px;
+  --r2:      4px;
+  --mono: 'DM Mono', monospace;
+  --ui:   'DM Sans', sans-serif;
+  --display: 'Bebas Neue', sans-serif;
+}
+
+html, body, #root {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--ui);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: inherit; text-decoration: none; }
+button { cursor: pointer; font-family: var(--ui); }
+input, select, textarea {
+  font-family: var(--ui);
+  background: var(--surf3);
+  color: var(--text);
+  border: 1px solid var(--border2);
+  border-radius: var(--r2);
+  outline: none;
+}
+input:focus, select:focus, textarea:focus { border-color: var(--cyan); }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--surf3); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--surf4); }
+
+/* Shared button styles */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 14px; border-radius: var(--r); border: 1px solid var(--border2);
+  background: var(--surf2); color: var(--text); font-size: 12px; font-weight: 500;
+  transition: background .12s, border-color .12s, color .12s;
+  white-space: nowrap;
+}
+.btn:hover { background: var(--surf3); border-color: var(--border2); }
+.btn-primary {
+  background: var(--cyan); color: var(--bg); border-color: var(--cyan); font-weight: 600;
+}
+.btn-primary:hover { background: #19f0ff; border-color: #19f0ff; }
+.btn-ghost { background: transparent; }
+.btn-ghost:hover { background: var(--surf2); }
+.btn-gold { background: var(--gold); color: var(--bg); border-color: var(--gold); font-weight: 700; }
+.btn-gold:hover { background: #ffd84a; }
+.btn-sm { padding: 5px 10px; font-size: 11px; }
+.btn-danger { background: rgba(224,82,82,.12); color: var(--red); border-color: rgba(224,82,82,.25); }
+.btn-danger:hover { background: rgba(224,82,82,.22); }
+
+/* Section card */
+.section-card {
+  background: var(--surf);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 18px 20px;
+}
+.section-title {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin-bottom: 14px;
+}
+
+/* Pulsing dot */
+@keyframes pulse-ring {
+  0%   { transform: scale(.85); box-shadow: 0 0 0 0 rgba(0,229,255,.6); }
+  70%  { transform: scale(1);   box-shadow: 0 0 0 8px rgba(0,229,255,0); }
+  100% { transform: scale(.85); box-shadow: 0 0 0 0 rgba(0,229,255,0); }
+}
+.pulse { animation: pulse-ring 1.8s infinite; }

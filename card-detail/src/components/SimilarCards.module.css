@@ -1,0 +1,139 @@
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.legend {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--faint);
+}
+.legendDot {
+  width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+}
+
+.scroll {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  scroll-snap-type: x mandatory;
+}
+.scroll::-webkit-scrollbar { height: 4px; }
+
+/* Card tile */
+.tile {
+  flex-shrink: 0;
+  width: 148px;
+  background: var(--surf2);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color .15s, transform .12s;
+  scroll-snap-align: start;
+}
+.tile:hover {
+  border-color: var(--cyan);
+  transform: translateY(-2px);
+}
+
+.tileImage {
+  position: relative;
+  aspect-ratio: 2.5/3.5;
+  background: linear-gradient(135deg, var(--surf3) 0%, var(--surf4) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.imagePlaceholder { font-size: 36px; }
+.ownedBadge {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  background: var(--cyan);
+  color: var(--bg);
+  font-family: var(--mono);
+  font-size: 8px;
+  font-weight: 700;
+  padding: 2px 5px;
+  border-radius: 2px;
+}
+.serialChip {
+  position: absolute;
+  bottom: 5px;
+  right: 5px;
+  background: rgba(0,0,0,.65);
+  color: var(--dim);
+  font-family: var(--mono);
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 2px;
+}
+
+.tileBody {
+  padding: 10px 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.player {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.setName { font-size: 10px; color: var(--dim); font-family: var(--mono); }
+.variation {
+  font-size: 9px;
+  color: var(--faint);
+  font-family: var(--mono);
+  background: var(--surf3);
+  border: 1px solid var(--border);
+  padding: 1px 5px;
+  border-radius: 2px;
+  display: inline-block;
+  width: fit-content;
+  margin-top: 2px;
+}
+
+.prices { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+.marketPrice {
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+.ownedPrices { display: flex; flex-direction: column; gap: 3px; }
+.costBasis { font-family: var(--mono); font-size: 9px; color: var(--faint); }
+.pnlChip {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  padding: 2px 5px;
+  border-radius: 2px;
+  display: inline-block;
+  width: fit-content;
+}
+
+.watchBtn {
+  margin-top: 8px;
+  width: 100%;
+  padding: 5px 0;
+  border-radius: var(--r2);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--faint);
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 500;
+  transition: all .12s;
+}
+.watchBtn:hover { border-color: var(--cyan); color: var(--cyan); }
+.watchBtnActive { border-color: var(--gold) !important; color: var(--gold) !important; background: rgba(245,200,66,.08) !important; }
