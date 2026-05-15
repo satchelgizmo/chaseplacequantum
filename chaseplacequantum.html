@@ -1,0 +1,2896 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chase Place Quantum</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&family=Space+Grotesk:wght@300;400;500;600;700&family=Orbitron:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+/* ─────────────────────────────────────────────
+   RESET & TOKENS
+───────────────────────────────────────────── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#04070f;--surf:#09111e;--surf2:#0e1929;--surf3:#142035;
+  --border:#1a2d44;--border2:#22395a;
+  --text:#c4d8f5;--dim:#6e94be;--faint:#4a6a8a;
+  --gold:#00d4ff;--gold2:#0099cc;
+  --green:#00e5aa;--red:#ff4a68;--blue:#5aadff;--purple:#b87aff;--orange:#ff8a4a;
+  --cyan-glow:rgba(0,212,255,.15);--cyan-dim:rgba(0,212,255,.08);
+  --mono:'DM Mono',monospace;--ui:'Space Grotesk',sans-serif;
+  --r:10px;--r2:7px;
+}
+body{background:var(--bg);color:var(--text);font-family:var(--ui);min-height:100vh;overflow-x:hidden}
+
+/* ─────────────────────────────────────────────
+   LAYOUT
+───────────────────────────────────────────── */
+.shell{display:flex;height:100vh;overflow:hidden}
+.side{width:210px;min-width:210px;background:var(--surf);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+.main{flex:1;overflow-y:auto;overflow-x:hidden;display:flex;flex-direction:column}
+
+/* ─────────────────────────────────────────────
+   SIDEBAR
+───────────────────────────────────────────── */
+.brand{padding:18px 16px 16px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,rgba(0,212,255,.04) 0%,transparent 100%)}
+.brand-name{font-size:14px;font-weight:700;letter-spacing:.5px;font-family:'Orbitron',sans-serif;line-height:1.3}
+.brand-name em{color:var(--gold);font-style:normal;text-shadow:0 0 18px rgba(0,212,255,.6);display:block;font-size:18px;letter-spacing:1px}
+.brand-tag{font-size:9px;font-family:var(--mono);color:var(--faint);letter-spacing:2px;margin-top:4px;text-transform:uppercase}
+.nav{padding:8px 0;flex:1}
+.ni{display:flex;align-items:center;gap:9px;padding:9px 16px;font-size:12.5px;font-weight:600;color:var(--dim);cursor:pointer;border-left:2px solid transparent;transition:all .12s;letter-spacing:.2px}
+.ni:hover{color:var(--text);background:var(--surf2)}
+.ni.on{color:var(--gold);border-left-color:var(--gold);background:var(--cyan-dim);box-shadow:inset 0 0 12px rgba(0,212,255,.05)}
+.ni .ic{font-size:15px;width:18px;text-align:center}
+.side-foot{padding:14px 16px;border-top:1px solid var(--border);font-family:var(--mono)}
+.sf-row{margin-bottom:6px}
+.sf-lbl{font-size:9px;color:var(--faint);letter-spacing:1px;text-transform:uppercase;margin-bottom:2px}
+.sf-val{font-size:13px;font-weight:500}
+.sf-val.g{color:var(--green)}.sf-val.r{color:var(--red)}.sf-val.o{color:var(--gold)}
+
+/* ─────────────────────────────────────────────
+   TOPBAR
+───────────────────────────────────────────── */
+.topbar{padding:14px 24px;border-bottom:1px solid var(--border2);display:flex;align-items:center;gap:12px;background:var(--surf2);position:sticky;top:0;z-index:20;box-shadow:0 2px 12px rgba(0,0,0,.4)}
+.pg-title{font-size:17px;font-weight:700;flex:1}
+.pg-sub{font-size:13px;color:var(--text);font-family:var(--mono);margin-left:8px;font-weight:400;opacity:.85}
+.pg-sub .stat-num{color:var(--gold);font-weight:600}
+.pg-sub .stat-money{color:var(--green);font-weight:600}
+.pg-sub .stat-sep{color:var(--faint);margin:0 5px}
+
+/* ─────────────────────────────────────────────
+   CONTENT
+───────────────────────────────────────────── */
+.content{padding:20px 24px;flex:1}
+
+/* ─────────────────────────────────────────────
+   STAT CARDS
+───────────────────────────────────────────── */
+.sg{display:grid;grid-template-columns:repeat(auto-fill,minmax(165px,1fr));gap:10px;margin-bottom:24px}
+.sc{background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:12px 14px}
+.sc-lbl{font-size:9px;color:var(--dim);letter-spacing:1px;text-transform:uppercase;font-family:var(--mono);margin-bottom:7px}
+.sc-val{font-size:17px;font-weight:700;letter-spacing:-.5px;line-height:1.2;white-space:nowrap;font-family:var(--mono)}
+.sc-val.g{color:var(--green)}.sc-val.r{color:var(--red)}.sc-val.o{color:var(--gold)}.sc-val.b{color:var(--blue)}
+.sc-sub{font-size:11px;color:var(--faint);margin-top:3px;font-family:var(--mono)}
+
+/* ─────────────────────────────────────────────
+   BUTTONS & INPUTS
+───────────────────────────────────────────── */
+.fb{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center}
+.sw{position:relative;flex:1;min-width:200px}
+.sw input{width:100%;background:var(--surf);border:1px solid var(--border);color:var(--text);padding:8px 26px 8px 30px;border-radius:var(--r2);font-size:12.5px;font-family:var(--ui);outline:none;transition:border .12s}
+.sw input:focus{border-color:var(--gold)}
+.sw .si{position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--faint);font-size:13px;pointer-events:none}
+.sw .s-clr{display:none;position:absolute;right:7px;top:50%;transform:translateY(-50%);color:var(--faint);cursor:pointer;font-size:15px;line-height:1;border:none;background:none;padding:0 3px;border-radius:3px}
+.sw .s-clr:hover{color:var(--text)}
+.sw input:not(:placeholder-shown)~.s-clr{display:block}
+select,.btn{background:var(--surf);border:1px solid var(--border);color:var(--text);padding:7px 12px;border-radius:var(--r2);font-size:12.5px;font-family:var(--ui);cursor:pointer;outline:none;transition:all .12s}
+.btn{font-weight:600}
+.btn:hover{background:var(--surf2);border-color:var(--border2)}
+.btn.pri{background:var(--gold);color:#040810;border-color:var(--gold);font-weight:700;box-shadow:0 0 14px rgba(0,212,255,.25)}
+.btn.pri:hover{background:var(--gold2);box-shadow:0 0 20px rgba(0,212,255,.4)}
+.btn.sm{padding:4px 9px;font-size:11px}
+.btn.xs{padding:3px 7px;font-size:10px;font-family:var(--mono)}
+.btn.ghost{background:transparent;border-color:var(--border);color:var(--dim)}
+.btn.ghost:hover{color:var(--text);border-color:var(--border2)}
+.btn.red{border-color:var(--red);color:var(--red)}
+.btn.red:hover{background:rgba(224,82,82,.1)}
+
+/* ─────────────────────────────────────────────
+   OVERLAY & PANEL
+───────────────────────────────────────────── */
+.ov{position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:100;display:none;align-items:flex-start;justify-content:flex-end;padding:0}
+.ov.open{display:flex}
+.pn{background:var(--surf);border-left:1px solid var(--border);width:560px;max-width:100vw;height:100vh;overflow-y:auto;display:flex;flex-direction:column}
+.pn-head{padding:18px 20px 16px;border-bottom:1px solid var(--border);display:flex;gap:14px;align-items:flex-start;position:sticky;top:0;background:var(--surf);z-index:5}
+.pn-title{font-size:14px;font-weight:700;line-height:1.4;margin-bottom:4px}
+.pn-meta{font-size:11px;color:var(--dim);font-family:var(--mono)}
+.pn-close{margin-left:auto;font-size:18px;cursor:pointer;color:var(--dim);flex-shrink:0;padding:2px 6px;border-radius:4px;line-height:1}
+.pn-close:hover{color:var(--text);background:var(--surf2)}
+.pn-body{padding:18px 20px;flex:1}
+.ps{margin-bottom:20px}
+.ps-title{font-size:9px;letter-spacing:1px;text-transform:uppercase;font-family:var(--mono);color:var(--faint);margin-bottom:10px;padding-bottom:5px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
+
+/* ─────────────────────────────────────────────
+   FORM FIELDS
+───────────────────────────────────────────── */
+.field-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.field-item label{font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:.8px;text-transform:uppercase;display:block;margin-bottom:4px}
+.field-val{font-size:13px;font-weight:600;min-height:20px}
+.field-input{width:100%;background:var(--surf2);border:1px solid var(--border2);color:var(--text);padding:6px 8px;border-radius:5px;font-size:12px;font-family:var(--ui);outline:none;transition:border .12s}
+.field-input:focus{border-color:var(--gold)}
+.field-input.mono{font-family:var(--mono)}
+.cb-row{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--dim)}
+.cb-row input[type=checkbox]{accent-color:var(--gold);cursor:pointer}
+
+/* ─────────────────────────────────────────────
+   TABLE
+───────────────────────────────────────────── */
+.tw{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+thead th{text-align:left;padding:8px 10px;font-size:9px;font-family:var(--mono);letter-spacing:1px;color:var(--faint);border-bottom:1px solid var(--border);white-space:nowrap;user-select:none}
+thead th.sh{cursor:pointer}
+thead th.sh:hover{color:var(--text)}
+thead th.sh.on{color:var(--gold)}
+tbody tr{border-bottom:1px solid var(--border);transition:background .08s}
+tbody tr:hover{background:var(--surf2);cursor:pointer}
+td{padding:8px 10px;vertical-align:middle}
+
+/* ─────────────────────────────────────────────
+   PARSED TAGS & BADGES
+───────────────────────────────────────────── */
+.ptags{display:flex;flex-wrap:wrap;gap:3px;margin-top:4px}
+.pt{display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:3px;font-size:9px;font-family:var(--mono);font-weight:500;letter-spacing:.3px;background:var(--surf3);border:1px solid var(--border);color:var(--dim);white-space:nowrap;height:18px;line-height:14px}
+.pt.year{border-color:rgba(77,166,255,.3);color:var(--blue)}
+.pt.set{border-color:rgba(164,126,245,.3);color:var(--purple)}
+.pt.serial{border-color:rgba(0,212,255,.4);color:var(--gold)}
+.pt.auto{border-color:rgba(245,130,74,.3);color:var(--orange)}
+.pt.rc{border-color:rgba(46,204,138,.3);color:var(--green)}
+.pt.grade{border-color:rgba(224,82,82,.4);color:var(--red)}
+.pt.var{border-color:rgba(142,162,184,.2);color:var(--dim)}
+.tb{display:inline-block;padding:2px 7px;border-radius:3px;font-size:9px;font-family:var(--mono);font-weight:500;letter-spacing:.5px}
+.sb{display:inline-block;padding:2px 7px;border-radius:3px;font-size:9px;font-family:var(--mono);font-weight:500;letter-spacing:.3px}
+.sb.sold{background:rgba(224,82,82,.1);color:var(--red);border:1px solid rgba(224,82,82,.2)}
+.sb.stock{background:rgba(46,204,138,.1);color:var(--green);border:1px solid rgba(46,204,138,.2)}
+.pr{font-family:var(--mono);font-weight:500}
+.pr.g{color:var(--green)}.pr.r{color:var(--red)}.pr.o{color:var(--gold)}.pr.d{color:var(--dim)}
+
+/* ─────────────────────────────────────────────
+   MISC
+───────────────────────────────────────────── */
+.sep{border:none;border-top:1px solid var(--border);margin:14px 0}
+.empty{text-align:center;padding:50px 20px;color:var(--dim)}
+.empty .ei{font-size:36px;margin-bottom:10px}
+.alert{padding:10px 14px;border-radius:7px;font-size:12px;margin-bottom:12px}
+.alert.warn{background:rgba(0,212,255,.07);border:1px solid rgba(0,212,255,.2);color:var(--gold)}
+.alert.info{background:rgba(77,166,255,.08);border:1px solid rgba(77,166,255,.2);color:var(--blue)}
+.alert.err{background:rgba(224,82,82,.1);border:1px solid rgba(224,82,82,.2);color:var(--red)}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid var(--border2);border-top-color:var(--gold);border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.toast{position:fixed;bottom:20px;right:20px;background:var(--surf2);border:1px solid var(--border2);border-radius:8px;padding:10px 16px;font-size:12px;z-index:9999;pointer-events:none;opacity:0;transition:opacity .2s;font-family:var(--mono)}
+.toast.show{opacity:1}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:var(--faint)}
+input[type=text],input[type=number],textarea{caret-color:var(--gold)}
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- ── SIDEBAR ── -->
+  <aside class="side">
+    <div class="brand">
+      <div class="brand-name">Chase Place<em>QUANTUM</em></div>
+      <div class="brand-tag">Card Portfolio v2</div>
+    </div>
+    <nav class="nav" id="nav">
+      <div class="ni on" data-page="dashboard" onclick="nav('dashboard')"><span class="ic">◈</span> Dashboard</div>
+      <div class="ni" data-page="inventory" onclick="nav('inventory')"><span class="ic">▦</span> Inventory</div>
+      <div class="ni" data-page="sales" onclick="nav('sales')"><span class="ic">◎</span> Sales</div>
+      <div class="ni" data-page="import" onclick="nav('import')"><span class="ic">⇪</span> Import</div>
+      <div class="ni" data-page="receive" onclick="nav('receive')"><span class="ic">⬓</span> Receive</div>
+      <div class="ni" data-page="analytics" onclick="nav('analytics')"><span class="ic">⌬</span> Analytics</div>
+      <div class="ni" data-page="settings" onclick="nav('settings')"><span class="ic">⚙</span> Settings</div>
+    </nav>
+    <div class="side-foot" id="side-foot">
+      <div class="sf-row">
+        <div class="sf-lbl">Inventory</div>
+        <div class="sf-val o" id="sf-inv">—</div>
+      </div>
+      <div class="sf-row">
+        <div class="sf-lbl">Cost Basis</div>
+        <div class="sf-val" id="sf-cost">—</div>
+      </div>
+      <div class="sf-row">
+        <div class="sf-lbl">Revenue</div>
+        <div class="sf-val g" id="sf-rev">—</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ── MAIN ── -->
+  <main class="main" id="main">
+    <!-- topbar and content rendered by JS -->
+  </main>
+
+</div>
+
+<!-- ── OVERLAY PANEL ── -->
+<div class="ov" id="ov" onclick="if(event.target===this)closePanel()">
+  <div class="pn" id="pn"></div>
+</div>
+
+<!-- ── TOAST ── -->
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+
+/* ══════════════════════════════════════════════════════
+   §1  CONFIG
+══════════════════════════════════════════════════════ */
+const CFG = {
+  APP:       'Chase Place Quantum',
+  VERSION:   '2.0.0',
+  PAGE_SIZE: 50,
+  CARD_TYPES: ['Soccer','Pokémon','NFL','MLB','Marvel','NBA','Yu-Gi-Oh'],
+};
+
+/* ══════════════════════════════════════════════════════
+   §2  DB  (localStorage — Supabase-ready async interface)
+   Swap this section for a Supabase implementation later;
+   all callers use await DB.method() already.
+══════════════════════════════════════════════════════ */
+const DB = {
+  KEYS: {
+    CARDS:          'cpq_cards',
+    SALES:          'cpq_sales',
+    CHECKLISTS:     'cpq_checklists',
+    CUSTOM_PLAYERS: 'cpq_custom_players',
+    CUSTOM_TYPES:   'cpq_custom_types',
+    CATEGORY_DEFS:  'cpq_category_defs',
+    VALUE_LOOKUPS:  'cpq_value_lookups',
+    META:           'cpq_meta',
+  },
+
+  _read(key, fallback) {
+    try { return JSON.parse(localStorage.getItem(key)) ?? fallback; }
+    catch { return fallback; }
+  },
+  _write(key, val) {
+    try { localStorage.setItem(key, JSON.stringify(val)); } catch(e) { console.error('DB write', key, e); }
+  },
+
+  async load() {
+    return {
+      cards:          DB._read(DB.KEYS.CARDS,          []),
+      sales:          DB._read(DB.KEYS.SALES,          []),
+      checklists:     DB._read(DB.KEYS.CHECKLISTS,     []),
+      custom_players: DB._read(DB.KEYS.CUSTOM_PLAYERS, []),
+      custom_types:   DB._read(DB.KEYS.CUSTOM_TYPES,   []),
+      category_defs:  DB._read(DB.KEYS.CATEGORY_DEFS,  []),
+      value_lookups:  DB._read(DB.KEYS.VALUE_LOOKUPS,  {}),
+    };
+  },
+
+  async saveCards(cards)        { DB._write(DB.KEYS.CARDS, cards); },
+  async saveSales(sales)        { DB._write(DB.KEYS.SALES, sales); },
+
+  async saveCard(card) {
+    const cards = DB._read(DB.KEYS.CARDS, []);
+    const idx = cards.findIndex(c => c.id === card.id);
+    if (idx >= 0) cards[idx] = card; else cards.push(card);
+    DB._write(DB.KEYS.CARDS, cards);
+  },
+
+  async saveSale(sale) {
+    const sales = DB._read(DB.KEYS.SALES, []);
+    const idx = sales.findIndex(s => s.id === sale.id);
+    if (idx >= 0) sales[idx] = sale; else sales.push(sale);
+    DB._write(DB.KEYS.SALES, sales);
+  },
+
+  async saveMeta(key, value) {
+    const meta = DB._read(DB.KEYS.META, {});
+    meta[key] = value;
+    DB._write(DB.KEYS.META, meta);
+  },
+
+  getMeta(key, fallback = null) {
+    return DB._read(DB.KEYS.META, {})[key] ?? fallback;
+  },
+
+  async saveValueLookup(id, data) {
+    const vl = DB._read(DB.KEYS.VALUE_LOOKUPS, {});
+    vl[id] = data;
+    DB._write(DB.KEYS.VALUE_LOOKUPS, vl);
+  },
+
+  async exportBackup() {
+    const photoCount = await PhotoDB.countAll().catch(() => 0);
+    const data = {
+      version:       CFG.VERSION,
+      exported_at:   new Date().toISOString(),
+      photo_count:   photoCount,
+      cards:         DB._read(DB.KEYS.CARDS,  []),
+      sales:         DB._read(DB.KEYS.SALES,  []),
+      meta:          DB._read(DB.KEYS.META,   {}),
+      value_lookups: DB._read(DB.KEYS.VALUE_LOOKUPS, {}),
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `cpq-backup-${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+  },
+
+  async importBackup(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = e => {
+        try {
+          const data = JSON.parse(e.target.result);
+          if (!Array.isArray(data.cards))  throw new Error('Invalid backup: missing cards array');
+          if (!Array.isArray(data.sales))  throw new Error('Invalid backup: missing sales array');
+          DB._write(DB.KEYS.CARDS,  data.cards);
+          DB._write(DB.KEYS.SALES,  data.sales);
+          if (data.meta)          DB._write(DB.KEYS.META, data.meta);
+          if (data.value_lookups) DB._write(DB.KEYS.VALUE_LOOKUPS, data.value_lookups);
+          resolve(data);
+        } catch(err) { reject(err); }
+      };
+      reader.onerror = () => reject(reader.error);
+      reader.readAsText(file);
+    });
+  },
+};
+
+/* ══════════════════════════════════════════════════════
+   §2.5  PhotoDB  (IndexedDB — device-local photo store)
+   Photos live outside the JSON backup (IndexedDB ~50MB+).
+   Card records store photo keys; dataUrls fetched on demand.
+   Phase 2: swap put/getAll to Supabase Storage, no other changes.
+══════════════════════════════════════════════════════ */
+const PhotoDB = {
+  DB_NAME:    'cpq_photos',
+  DB_VERSION: 1,
+  STORE:      'photos',
+  _db:        null,
+
+  async open() {
+    if (this._db) return this._db;
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(this.DB_NAME, this.DB_VERSION);
+      req.onupgradeneeded = e => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains(this.STORE)) {
+          const s = db.createObjectStore(this.STORE, { keyPath: 'key' });
+          s.createIndex('cardId', 'cardId', { unique: false });
+        }
+      };
+      req.onsuccess = e => { this._db = e.target.result; resolve(this._db); };
+      req.onerror   = e => reject(e.target.error);
+    });
+  },
+
+  _key(cardId, index) { return `${cardId}::${index}`; },
+
+  async put(cardId, index, dataUrl) {
+    const db = await this.open();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(this.STORE, 'readwrite');
+      tx.objectStore(this.STORE).put({ key: this._key(cardId, index), cardId, index, dataUrl });
+      tx.oncomplete = () => resolve();
+      tx.onerror    = e => reject(e.target.error);
+    });
+  },
+
+  async getAll(cardId) {
+    const db = await this.open();
+    return new Promise((resolve, reject) => {
+      const tx    = db.transaction(this.STORE, 'readonly');
+      const idx   = tx.objectStore(this.STORE).index('cardId');
+      const range = IDBKeyRange.only(cardId);
+      const req   = idx.getAll(range);
+      req.onsuccess = e => {
+        const rows = e.target.result || [];
+        rows.sort((a, b) => a.index - b.index);
+        resolve(rows.map(r => r.dataUrl));
+      };
+      req.onerror = e => reject(e.target.error);
+    });
+  },
+
+  async delete(cardId, index) {
+    const db = await this.open();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(this.STORE, 'readwrite');
+      tx.objectStore(this.STORE).delete(this._key(cardId, index));
+      tx.oncomplete = () => resolve();
+      tx.onerror    = e => reject(e.target.error);
+    });
+  },
+
+  async deleteAll(cardId) {
+    const db    = await this.open();
+    const keys  = await new Promise((resolve, reject) => {
+      const tx    = db.transaction(this.STORE, 'readonly');
+      const idx   = tx.objectStore(this.STORE).index('cardId');
+      const req   = idx.getAllKeys(IDBKeyRange.only(cardId));
+      req.onsuccess = e => resolve(e.target.result || []);
+      req.onerror   = e => reject(e.target.error);
+    });
+    if (!keys.length) return 0;
+    return new Promise((resolve, reject) => {
+      const tx    = db.transaction(this.STORE, 'readwrite');
+      const store = tx.objectStore(this.STORE);
+      keys.forEach(k => store.delete(k));
+      tx.oncomplete = () => resolve(keys.length);
+      tx.onerror    = e => reject(e.target.error);
+    });
+  },
+
+  async countAll() {
+    const db = await this.open();
+    return new Promise((resolve, reject) => {
+      const tx  = db.transaction(this.STORE, 'readonly');
+      const req = tx.objectStore(this.STORE).count();
+      req.onsuccess = e => resolve(e.target.result);
+      req.onerror   = e => reject(e.target.error);
+    });
+  },
+
+  async clearAll() {
+    const db = await this.open();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(this.STORE, 'readwrite');
+      tx.objectStore(this.STORE).clear();
+      tx.oncomplete = () => resolve();
+      tx.onerror    = e => reject(e.target.error);
+    });
+  },
+};
+
+/* ══════════════════════════════════════════════════════
+   §3  STORE  (central state)
+══════════════════════════════════════════════════════ */
+const Store = {
+  state: {
+    cards:          [],
+    sales:          [],
+    checklists:     [],
+    custom_players: [],
+    custom_types:   [],
+    category_defs:  [],
+    value_lookups:  {},
+
+    page:        'dashboard',
+    panel:       null,
+    filters:     { q: '', type: '', status: '' },
+    sort:        { field: 'created_at', dir: 'desc' },
+    page_num:    0,
+    page_size:   CFG.PAGE_SIZE,
+    selected_ids: [],
+    receive_draft: null,
+    panel_edit:  false,
+  },
+
+  get(key)             { return this.state[key]; },
+  patch(key, partial)  { this.state[key] = typeof partial === 'object' && !Array.isArray(partial)
+                            ? { ...this.state[key], ...partial }
+                            : partial; },
+
+  setCards(cards)      { this.state.cards = cards; },
+  setSales(sales)      { this.state.sales = sales; },
+
+  getCard(id)  { return this.state.cards.find(c => c.id === id) ?? null; },
+  getSale(id)  { return this.state.sales.find(s => s.id === id) ?? null; },
+
+  patchCard(id, fields) {
+    const idx = this.state.cards.findIndex(c => c.id === id);
+    if (idx < 0) return;
+    const now = new Date().toISOString();
+    this.state.cards[idx] = { ...this.state.cards[idx], ...fields, updated_at: now };
+    DB.saveCard(this.state.cards[idx]);  // fire-and-forget async persist
+  },
+
+  patchSale(id, fields) {
+    const idx = this.state.sales.findIndex(s => s.id === id);
+    if (idx < 0) return;
+    const now = new Date().toISOString();
+    this.state.sales[idx] = { ...this.state.sales[idx], ...fields, updated_at: now };
+    DB.saveSale(this.state.sales[idx]);
+  },
+
+  loadFromBackup(data) {
+    if (Array.isArray(data.cards))  this.state.cards  = data.cards;
+    if (Array.isArray(data.sales))  this.state.sales  = data.sales;
+    if (data.value_lookups)         this.state.value_lookups = data.value_lookups;
+  },
+};
+
+/* ══════════════════════════════════════════════════════
+   §4  PARSERS  (pure functions — no side effects, no DOM)
+══════════════════════════════════════════════════════ */
+
+/* ── Player noise filter ── */
+const PLAYER_NOISE = new Set([
+  'chrome','topps','panini','donruss','prizm','finest','select','merlin',
+  'sapphire','refractor','lava','raywave','prism','wave','geometric',
+  'mojo','starball','logofractor','toppsfractor','pulsar','aqua','magenta',
+  'orange','green','blue','pink','red','gold','black','white','silver','purple',
+  'auto','autograph','rc','rookie','sp','ssp','case','hit','insert','variation',
+  'hero','image','wonder','kids','youthquake','radiating','shadow','etch',
+  'future','stars','golazo','tifo','noise','night','munich','brush','final',
+  'destination','club','competition','competitions','uefa','ucl','ucc','uel',
+  'fifa','premier','league','bundesliga','mls','serie','lot','patch','relic',
+  'japanese','edition','korea','england','germany','spain','france','brazil',
+  'argentina','usa','belgium','portugal','netherlands','italy','mexico',
+  'archives','signature','obsidian','magmatic','prized','footballers','fusion',
+  'skillset','top','world','cover','big','picture','circle','power','voltage',
+  'high','shockwave','monday','lights','xi','base','set','optic','cubic',
+  'cracked','ice','plum','blossom','animation','beautiful','game','huge',
+  'psv','man','city','chelsea','arsenal','liverpool','barcelona','madrid',
+  'juventus','milan','psg','dortmund','bayern','inter','napoli','spurs',
+  'aston','villa','newcastle','fulham','brentford','wolves','brighton',
+  'nottingham','forest','crystal','palace','everton','tottenham',
+  'leicester','bournemouth','ipswich','southampton','sunderland',
+  'rangers','celtic','atletico','sevilla','valencia','benfica','porto',
+  'ajax','feyenoord','galatasaray','fenerbahce','besiktas',
+  'legend','legends','icons',
+  'card','cards','trading','parallel','numbered','limited','short','print',
+  'bowman','fleer','score','leaf','skybox','playoff','pacific','sage','absolute',
+  'spectra','mosaic','noir','luminance','illusions','platinum','inception',
+  'immaculate','contenders','certified','revolution','elements','majestic',
+  'holo','holofoil','foil','sparkle','camo','atomic','inferno','neon','marble',
+  'superfractor','xfractor','prizmatic','negative','sepia','status',
+  'xrc','sir','sar','vmax','vstar','gx',
+  'signed','autographed','graded','slabbed',
+  'nfl','nba','mlb','nhl','wnba','tcg','pokemon',
+  'super','bowl','series','championship','trophy','cup',
+]);
+
+const _NOISE_STARTERS = [
+  'club','obsidian','patch','archives','lot','huge','japanese','blue','orange',
+  'green','magenta','gold','black','red','pink','white','purple','aqua','night',
+  'hero','image','wonder','shadow','future','final','radiating','cover','big',
+  'circle','monday','shockwave','prized','animation','beautiful','top',
+  'signed','auto','rc','rookie','sp','ssp','holo','foil','neon','cracked',
+];
+let _noiseStartRx = null;
+function _getNoiseStartRx() {
+  if (!_noiseStartRx) _noiseStartRx = new RegExp(
+    '^(?:' + _NOISE_STARTERS.map(n => n.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|') + ')\\s+', 'i'
+  );
+  return _noiseStartRx;
+}
+
+function cleanPlayer(raw) {
+  if (!raw) return raw;
+  const words = raw.trim().split(/\s+/);
+  if (words.every(w => PLAYER_NOISE.has(w.toLowerCase().replace(/[^a-z]/g,'')))) return '';
+  if (_NOISE_STARTERS.some(n => raw.toLowerCase().startsWith(n + ' '))) return '';
+  return raw;
+}
+
+/* ── Color extraction (used by scorer) ── */
+const _COLOR_WORDS = ['red','orange','yellow','gold','green','teal','aqua','blue','purple','pink','black','white','silver','bronze','rainbow','cosmic','neon','rose'];
+function _extractColor(str) {
+  if (!str) return '';
+  const s = str.toLowerCase();
+  for (const c of _COLOR_WORDS) { if (new RegExp('\\b' + c + '\\b').test(s)) return c; }
+  return '';
+}
+
+/* ── Checklist player lookup map ── */
+function buildPlayerMap() {
+  const map = new Map();
+  const norm = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+  const cls = Store.get('checklists') || {};
+  const clsObj = Array.isArray(cls) ? {} : cls;
+  for (const cl of Object.values(clsObj)) {
+    for (const p of (cl.players || [])) { const k = norm(p); if (!map.has(k)) map.set(k, { name:p, fromChecklist:true }); }
+  }
+  for (const p of (Store.get('custom_players') || [])) {
+    const k = norm(p); if (!map.has(k)) map.set(k, { name:p, fromChecklist:false });
+  }
+  return map;
+}
+
+/* ── Standard display name builder ── */
+function buildStandardName(p) {
+  if (!p.player) return p.display_name || p.raw_title || '';
+  const rest = [];
+  if (p.is_auto && !/auto/i.test(p.variation || '')) rest.push('Auto');
+  if (p.is_rc) rest.push('RC');
+  if (p.serial) rest.push(p.serial.includes('/') ? p.serial : '/' + p.serial);
+  if (p.year) rest.push(p.year);
+  if (p.set) rest.push(p.set);
+  const segments = [p.player];
+  if (p.variation) segments.push(p.variation);
+  if (rest.length) segments.push(rest.join(' '));
+  return segments.join(' ');
+}
+
+/* ── CSV utilities ── */
+function _csvSplitRow(line, delim) {
+  delim = delim || ',';
+  const cells = []; let cur = '', inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') { if (inQ && line[i+1]==='"') { cur+='"'; i++; } else inQ=!inQ; }
+    else if (c === delim && !inQ) { cells.push(cur.trim()); cur = ''; }
+    else cur += c;
+  }
+  cells.push(cur.trim());
+  return cells;
+}
+function _detectDelim(firstLine) {
+  return (firstLine.match(/\t/g)||[]).length > (firstLine.match(/,/g)||[]).length ? '\t' : ',';
+}
+function _csvCols(header) {
+  return names => {
+    for (const name of names)
+      for (let j = 0; j < header.length; j++)
+        if (header[j].replace(/[^a-z0-9]/g,'').includes(name.replace(/[^a-z0-9]/g,''))) return j;
+    return -1;
+  };
+}
+
+/* ── Main Parsers namespace ── */
+const Parsers = {
+
+  /* Title parser — returns new-schema fields, no side effects */
+  parseCardTitle(title) {
+    const t = title || '';
+    const out = {
+      raw_title: t, display_name: t,
+      player: '', year: '', brand: '', set: '', variation: '', serial: '',
+      grade: '', is_auto: false, is_rc: false, is_lot: false, lot_qty: 1,
+      type: '', comp: '',
+      _customPlayer: false,
+    };
+
+    // Year
+    const yearM = t.match(/\b((?:19|20)\d{2})(?:-(\d{2,4}))?\b/);
+    if (yearM) out.year = yearM[2] ? `${yearM[1]}-${yearM[2].length===2?yearM[1].slice(0,2)+yearM[2]:yearM[2]}` : yearM[1];
+
+    // Serial
+    const tNY = t.replace(/\b(?:19|20)\d{2}\/\d{2,4}\b/g,' ').replace(/\b\d{2}\/\d{2}\b(?=\s|$)/g,' ');
+    const sfM = tNY.match(/(?:^|\s)#?(\d+)\s*\/(\d+)\b/);
+    const sdM = !sfM && tNY.match(/(?:^|\s)\/(\d+)\b/);
+    if (sfM) out.serial = sfM[1]+'/'+sfM[2];
+    else if (sdM) out.serial = sdM[1];
+
+    // Grade
+    const gradeM = t.match(/\b(PSA|BGS|SGC|CGC|BVG)\s*(\d+(?:\.\d+)?)\b/i);
+    if (gradeM) out.grade = gradeM[1].toUpperCase()+gradeM[2];
+
+    // Flags
+    if (/\b(auto|autograph|signed)\b/i.test(t)) out.is_auto = true;
+    if (/\b(RC|rookie card|rookie)\b/i.test(t)) out.is_rc = true;
+    if (/\b(lot|bundle|collection)\b/i.test(t)) out.is_lot = true;
+
+    // Brand
+    for (const [kw,br] of [['Panini','Panini'],['Topps','Topps'],['Upper Deck','Upper Deck'],['Donruss','Donruss'],['Bowman','Bowman'],['Fleer','Fleer'],['Score','Score']]) {
+      if (t.toLowerCase().includes(kw.toLowerCase())) { out.brand=br; break; }
+    }
+
+    // Set
+    for (const [kw,sn] of [['Prizm','Prizm'],['Chrome','Chrome'],['Optic','Optic'],['Mosaic','Mosaic'],['Obsidian','Obsidian'],['National Treasures','National Treasures'],['Contenders','Contenders'],['Select','Select'],['Revolution','Revolution'],['Immaculate','Immaculate'],['Finest','Finest'],['Sapphire','Sapphire'],['Heritage','Heritage'],['Stadium Club','Stadium Club'],['Inception','Inception'],['Certified','Certified'],['Elements','Elements'],['Spectra','Spectra']]) {
+      if (t.toLowerCase().includes(kw.toLowerCase())) { out.set=sn; break; }
+    }
+
+    // Variation / parallel (most-specific first)
+    for (const [rx,vn] of [
+      [/\bBlack\s+Finite\b/i,'Black Finite'],[/\bBlack\s+Gold\b/i,'Black Gold'],
+      [/\bGold\s+Vinyl\b/i,'Gold Vinyl'],[/\bGold\s+Prizm\b/i,'Gold Prizm'],[/\bGold\s+Refractor\b/i,'Gold Refractor'],
+      [/\bSilver\s+Prizm\b/i,'Silver Prizm'],[/\bRainbow\s+Prizm\b/i,'Rainbow Prizm'],
+      [/\bRed\s+Wave\b/i,'Red Wave'],[/\bRed\s+Scope\b/i,'Red Scope'],[/\bRed\s+Ice\b/i,'Red Ice'],[/\bRed\s+Prizm\b/i,'Red Prizm'],
+      [/\bTrue\s+Blue\b/i,'True Blue'],[/\bBlue\s+Wave\b/i,'Blue Wave'],[/\bBlue\s+Prizm\b/i,'Blue Prizm'],
+      [/\bHolo\s+Gold\b/i,'Holo Gold'],[/\bHolo\s+Silver\b/i,'Holo Silver'],
+      [/\bSuperFractor\b/i,'Superfractor'],[/\bRefractor\b/i,'Refractor'],
+      [/\bSapphire\b/i,'Sapphire'],[/\bAqua\b/i,'Aqua'],[/\bOrange\b/i,'Orange'],
+      [/\bPurple\b/i,'Purple'],[/\bGreen\b/i,'Green'],[/\bPink\b/i,'Pink'],
+      [/\bCamo\b/i,'Camo'],[/\bWhite\s+Sparkle\b/i,'White Sparkle'],[/\bSparkle\b/i,'Sparkle'],
+      [/\bXRC\b/i,'XRC'],[/\bHolo\b/i,'Holo'],[/\bGold\b/i,'Gold'],[/\bSilver\b/i,'Silver'],
+      [/\bPrizm\b/i,'Base Prizm'],[/\bSIR\b/,'Special Illustration Rare'],[/\bSAR\b/,'Special Art Rare'],
+      [/\bFull\s+Art\b/i,'Full Art'],[/\bIllustration\s+Rare\b/i,'Illustration Rare'],
+      [/\bex\b/,'ex'],[/\bVmax\b/i,'VMAX'],[/\bVstar\b/i,'VSTAR'],
+    ]) { if (rx.test(t)) { out.variation=vn; break; } }
+
+    // Type / sport detection
+    if (/\b(Premier League|La Liga|Bundesliga|NWSL|FIFA|soccer|football club|Club World Cup)\b/i.test(t)||/\b(CWC|UCL|EPL)\b/.test(t)||(/\bMLS\b/.test(t)&&!/\bMLB\b/.test(t))) out.type='Soccer';
+    else if (/\b(Pokemon|Pok[eé]mon|TCG|Pikachu|Charizard|Bulbasaur|Squirtle|Mewtwo|Eevee|Vmax|Vstar|Illustration\s*Rare|Special\s*Art|Destined\s*Rivals|Scarlet|Violet|Paldea|Evolving\s*Skies|Silver\s*Tempest|Crown\s*Zenith)\b/i.test(t)) out.type='Pokémon';
+    else if (/\b(NFL|quarterback|qb|touchdown|Super Bowl|NFC|AFC)\b/i.test(t)||((/\bfootball\b/i.test(t))&&!/soccer/i.test(t)&&/\b(broncos|chiefs|eagles|saints|patriots|ravens|steelers|cowboys|packers|bears|rams|49ers|chargers|raiders|bengals|browns|titans|colts|seahawks|dolphins|bills|jets|giants|commanders|cardinals|falcons|panthers|buccaneers|vikings|lions)\b/i.test(t))) out.type='NFL';
+    else if (/\b(MLB|baseball|pitcher|batting|World Series|ALDS|NLCS)\b/i.test(t)||/\b(yankees|dodgers|mets|cubs|red sox|giants|braves|astros|phillies|padres|mariners|guardians|twins|brewers|pirates|rockies|diamondbacks|tigers|rays|orioles|blue jays|angels|athletics|rangers|royals|nationals|reds|white sox)\b/i.test(t)) out.type='MLB';
+    else if (/\b(NBA|basketball|dunk|three-point)\b/i.test(t)||/\b(lakers|celtics|warriors|bulls|heat|bucks|nets|knicks|76ers|suns|clippers|nuggets|jazz|thunder|rockets|spurs|mavericks|grizzlies|pelicans|hawks|hornets|pistons|pacers|magic|wizards|raptors|blazers|timberwolves|kings|cavaliers)\b/i.test(t)) out.type='NBA';
+    else if (/\b(Marvel|Spider-Man|Spider\s*Man|Avengers|Iron\s*Man|X-Men|Captain\s*America|Thor|Hulk|Wolverine|Deadpool|Black\s*Panther)\b/i.test(t)) out.type='Marvel';
+    else if (/\b(Yu-Gi-Oh|Yugioh|Duel\s*Monsters|Dark\s*Magician|Blue.Eyes)\b/i.test(t)) out.type='Yu-Gi-Oh';
+
+    // Competition
+    for (const [kw,cn] of [['UEFA Champions League','UCL'],['Champions League','UCL'],['UEFA','UEFA'],['UCL','UCL'],['Premier League','PL'],['EPL','PL'],['La Liga','La Liga'],['Bundesliga','Bundesliga'],['MLS','MLS'],['NWSL','NWSL'],['CWC','CWC'],['Serie A','Serie A'],['Ligue 1','Ligue 1']]) {
+      if (t.toLowerCase().includes(kw.toLowerCase())) { out.comp=cn; break; }
+    }
+
+    // ── Player extraction ──
+    let rem = t;
+    rem = rem.replace(/\b(PSA|BGS|SGC|CGC|BVG)\s*\d+(?:\.\d+)?\b/gi,' ');
+    rem = rem.replace(/\b(?:19|20)\d{2}(?:-\d{2,4})?\b/g,' ');
+    rem = rem.replace(/#?\s*\d+\s*\/\s*\d+/g,' ').replace(/\/\s*\d+\b/g,' ').replace(/#\s*\d+\b/g,' ');
+    rem = rem.replace(/\b(RC|Rookie\s*Card|Rookie|Auto|Autograph|Signed|Lot|Bundle|Collection|SIR|SAR|XRC|SP|SSP)\b/gi,' ');
+    rem = rem.replace(/\b(Panini|Topps|Upper\s*Deck|Donruss|Bowman|Fleer|Score|Leaf|Select|Skybox|Stadium\s*Club|Archives|Heritage|Gallery|Classics|Contenders|Certified|Absolute|Immaculate|Majestic|Sage|Playoff|Pacific)\b/gi,' ');
+    rem = rem.replace(/\b(Prizm|Chrome|Optic|Mosaic|Obsidian|National\s*Treasures|Finest|Topps\s*Now|Platinum|Luminance|Illusions|Spectra|Noir|Museum\s*Collection|Definitive|Inception|Revolution|Elements|Bowman\s*Draft)\b/gi,' ');
+    rem = rem.replace(/\b(Destined\s*Rivals|Scarlet\s*&?\s*Violet|Paldea|Evolving\s*Skies|Silver\s*Tempest|Crown\s*Zenith|Temporal\s*Forces|Stellar\s*Crown|Surging\s*Sparks|Twilight\s*Masquerade)\b/gi,' ');
+    rem = rem.replace(/\b(Refractor|Superfractor|Holo(?:\s+Gold|\s+Silver)?|Gold\s+Prizm|Silver\s+Prizm|Rainbow\s+Prizm|Red\s+(?:Wave|Scope|Ice|Prizm)|True\s+Blue|Blue\s+(?:Wave|Prizm)|Black\s+(?:Finite|Gold)|Gold\s+(?:Vinyl|Refractor)|Neon\s+Green\s+Refractor|White\s+Sparkle|Sparkle|Camo|Pulsar|Raywave|Lava|Mojo|Logofractor|Sapphire|Aqua|Marble|Magenta|Starball|Shockwave|Voltage|Prism|Holo|VMAX|VSTAR)\b/gi,' ');
+    rem = rem.replace(/\b(Premier\s*League|La\s*Liga|Bundesliga|MLS|NWSL|FIFA|UEFA|UCL|EPL|CWC|UEL|Club\s*World\s*Cup|Champions\s*League|World\s*Cup|Super\s*Bowl|World\s*Series|Football\s*Club)\b/gi,' ');
+    rem = rem.replace(/\b(Pokemon|Pok[eé]mon|TCG|Marvel|Avengers|X-?Men|Iron\s*Man|Spider-?Man|Yu-?Gi-?Oh|Yugioh|Duel\s*Monsters|NBA|NFL|MLB|NHL|NFC|AFC)\b/gi,' ');
+    rem = rem.replace(/\b(Illustration\s*Rare|Full\s*Art|Base|Insert|Variation|ex\b|GX|EX)\b/gi,' ');
+    rem = rem.replace(/[()[\]|\/\\#]/g,' ');
+    rem = rem.replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g,' ').replace(/[☀-➿⬀-⯿]/g,' ');
+    rem = rem.replace(/\s+/g,' ').trim();
+
+    const _nsRx = _getNoiseStartRx();
+    let playerCandidate = rem;
+    for (let safety = 0; safety < 6; safety++) {
+      const before = playerCandidate;
+      playerCandidate = playerCandidate.replace(_nsRx,'').trim();
+      if (playerCandidate === before) break;
+    }
+
+    const words = playerCandidate.split(/\s+/);
+    const allGroups = []; let curGroup = [];
+    for (const w of words) {
+      const wl = w.toLowerCase().replace(/[^a-z]/g,'');
+      if (wl.length >= 2 && !PLAYER_NOISE.has(wl) && /^[A-ZÀ-Þ][a-zß-ÿ]/.test(w)) {
+        curGroup.push(w);
+      } else {
+        if (curGroup.length) { allGroups.push(curGroup); curGroup = []; }
+      }
+    }
+    if (curGroup.length) allGroups.push(curGroup);
+
+    const _pMap = buildPlayerMap();
+    const norm = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+    let _found = null;
+    const nameTokens = words.filter(w => {
+      const wl = w.toLowerCase().replace(/[^a-z]/g,'');
+      return wl.length >= 2 && !PLAYER_NOISE.has(wl) && /^[A-ZÀ-Þ][a-zß-ÿ]/.test(w);
+    });
+    if (_pMap.size > 0 && nameTokens.length > 0) {
+      chkLoop: for (const wSz of [3,2,1]) {
+        for (let i = 0; i <= nameTokens.length - wSz; i++) {
+          const cand = nameTokens.slice(i, i+wSz).join(' ');
+          const match = _pMap.get(norm(cand));
+          if (match) { _found = match; break chkLoop; }
+        }
+      }
+    }
+    if (_found) {
+      out.player = _found.name;
+      if (!_found.fromChecklist) out._customPlayer = true;
+    } else {
+      const bestGroup = allGroups.find(g => g.length >= 2) || allGroups.find(g => g.length >= 1) || [];
+      if (bestGroup.length) out.player = bestGroup.slice(0,3).join(' ');
+      if (out.player && _pMap.size > 0) out._customPlayer = true;
+    }
+
+    if (out.player) out.display_name = buildStandardName(out);
+    return out;
+  },
+
+  parseSaleTitle(raw) {
+    const p = Parsers.parseCardTitle(raw);
+    return { ...p, title: p.display_name || raw };
+  },
+
+  /* Sale-purchase fuzzy scorer — returns numeric score; <0 = definitive mismatch */
+  scoreSalePurchase(s, p) {
+    let score = 0;
+    const sPlayer = (s.player||'').toLowerCase().trim();
+    const pPlayer = (p.player||'').toLowerCase().trim();
+    const sSerial = (s.serial||'').replace(/[^0-9]/g,'');
+    const pSerial = (p.serial||'').replace(/[^0-9]/g,'');
+    const sVar    = (s.variation||'').toLowerCase().trim();
+    const pVar    = (p.variation||'').toLowerCase().trim();
+    const sYear   = (s.year||'').trim();
+    const pYear   = (p.year||'').trim();
+    const sSet    = (s.set||'').toLowerCase().trim();
+    const pSet    = (p.set||'').toLowerCase().trim();
+
+    if (sSerial && pSerial) {
+      if (sSerial === pSerial) score += 55;
+      else return -999;
+    }
+    if (sPlayer && pPlayer) {
+      if (sPlayer === pPlayer) score += 30;
+      else if (sPlayer.includes(pPlayer) || pPlayer.includes(sPlayer)) score += 12;
+      else return -999;
+    }
+    if (sYear && pYear) {
+      if (sYear === pYear) score += 15;
+      else score -= 25;
+    }
+    if (sSet && pSet) {
+      if (sSet === pSet) score += 20;
+      else if (sSet.includes(pSet) || pSet.includes(sSet)) score += 8;
+    }
+    if (sVar && pVar) {
+      if (sVar === pVar) score += 22;
+      else if (sVar.includes(pVar) || pVar.includes(sVar)) score += 10;
+      else score -= 10;
+    }
+    const sColor = _extractColor(sVar) || _extractColor((s.raw_title||s.title||'').toLowerCase());
+    const pColor = _extractColor(pVar) || _extractColor((p.display_name||p.raw_title||'').toLowerCase());
+    if (sColor && pColor) {
+      if (sColor === pColor) score += 12;
+      else score -= 20;
+    }
+    if (s.type && p.type && s.type === p.type) score += 8;
+    if (s.grade && p.grade && s.grade === p.grade) score += 8;
+    if (s.is_auto && p.is_auto) score += 6;
+    else if (s.is_auto && !p.is_auto) score -= 8;
+
+    const sTitle = (s.raw_title || s.title || '').toLowerCase();
+    const sw = new Set(sTitle.split(/\W+/).filter(w => w.length > 3));
+    const pWords = (p.display_name || p.raw_title || '').toLowerCase();
+    const pw = new Set(pWords.split(/\W+/).filter(w => w.length > 3));
+    let overlap = 0;
+    sw.forEach(w => { if (pw.has(w)) overlap++; });
+    score += Math.min(overlap * 2, 10);
+
+    return score;
+  },
+
+  /* Returns top card candidates for linking to a sale */
+  getTopCandidates(sale, n = 10) {
+    const sold = Computed.soldCardIds();
+    const alreadyLinked = new Set(sale.linked_card_ids || []);
+    return Store.get('cards')
+      .filter(c => !sold.has(c.id) || alreadyLinked.has(c.id))
+      .map(c => ({ id: c.id, score: Parsers.scoreSalePurchase(sale, c) }))
+      .filter(c => c.score > 20)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, n);
+  },
+
+  /* eBay order CSV → array of card draft objects (new schema) */
+  parseOrderCsv(text) {
+    if (!text || !text.trim()) return { records:[], skipped:0, duplicates:0, error:'No text provided' };
+    const lines = text.trim().split(/\r?\n/).filter(l => l.trim());
+    if (lines.length < 2) return { records:[], skipped:0, duplicates:0, error:'Need header + data rows' };
+
+    const delim  = _detectDelim(lines[0]);
+    const header = _csvSplitRow(lines[0], delim).map(h => h.toLowerCase().replace(/['"]/g,'').trim());
+    const col    = _csvCols(header);
+
+    const iName    = col(['title','itemtitle','name','card','description','item']);
+    const iCost    = col(['cost','price','paid','amount','purchaseprice','totalprice']);
+    const iDate    = col(['date','purchasedate','orderdate','bought','saledate']);
+    const iPlayer  = col(['player','subject','athlete','person']);
+    const iSeller  = col(['seller','source','vendor','from','sellerid']);
+    const iType    = col(['type','sport','category']);
+    const iYear    = col(['year']);
+    const iSet     = col(['set','series']);
+    const iGrade   = col(['grade','grading']);
+    const iNotes   = col(['notes','note','comments']);
+    const iOrderNum= col(['ordernumber','orderid','ordernum','order#','transactionid']);
+    const iItemId  = col(['itemnumber','itemid','item number','listingid','ebayitemid','item#']);
+
+    if (iName < 0) return { records:[], skipped:0, duplicates:0, error:'No title column. Got: '+header.join(', ') };
+
+    const existingItemIds = new Set(Store.get('cards').map(c => c.item_id).filter(Boolean));
+    const records = []; let skipped = 0, duplicates = 0;
+    const g  = (cells, i) => i >= 0 ? (cells[i]||'').replace(/['"]/g,'').trim() : '';
+    const gn = (cells, i) => parseFloat(g(cells,i).replace(/[^0-9.]/g,'')) || 0;
+
+    for (let r = 1; r < lines.length; r++) {
+      const cells   = _csvSplitRow(lines[r], delim);
+      const rawTitle = g(cells, iName);
+      if (!rawTitle) { skipped++; continue; }
+      const itemId = g(cells, iItemId);
+      if (itemId && existingItemIds.has(itemId)) { duplicates++; continue; }
+
+      const cleanTitle = rawTitle.replace(/\s*\|\s*Quantity:\s*\d+.*/i,'').replace(/^\d+\s+x\s+/i,'').trim();
+      const parsed  = Parsers.parseCardTitle(cleanTitle);
+      const player  = g(cells, iPlayer)  || parsed.player;
+      const type    = g(cells, iType)    || parsed.type;
+      const year    = g(cells, iYear)    || parsed.year;
+      const set     = g(cells, iSet)     || parsed.set;
+      const grade   = g(cells, iGrade)   || parsed.grade;
+      const costRaw = gn(cells, iCost);
+      const lotQty  = Math.max(parsed.lot_qty || 1, 1);
+      const now     = new Date().toISOString();
+
+      const draft = {
+        id:           null,  // assigned when committed
+        raw_title:    rawTitle,
+        display_name: player ? buildStandardName({...parsed, player, year, set, grade}) : (parsed.display_name || cleanTitle),
+        raw_cost:     String(costRaw),
+        raw_date:     g(cells, iDate),
+        source:       'ebay_csv',
+        order_num:    g(cells, iOrderNum),
+        item_id:      itemId,
+        seller:       g(cells, iSeller),
+        player, year, set,
+        variation:    parsed.variation,
+        serial:       parsed.serial,
+        grade,
+        is_auto:      parsed.is_auto,
+        is_rc:        parsed.is_rc,
+        is_lot:       parsed.is_lot,
+        lot_qty:      lotQty,
+        type,
+        cost:         costRaw / lotQty,
+        photos:       [],
+        notes:        g(cells, iNotes),
+        tags:         [],
+        _customPlayer: parsed._customPlayer,
+        created_at:   now,
+        updated_at:   now,
+      };
+      records.push(draft);
+    }
+    return { records, skipped, duplicates };
+  },
+
+  /* eBay sold CSV → array of sale draft objects (new schema) */
+  parseSaleCsv(text) {
+    if (!text || !text.trim()) return { records:[], skipped:0, error:'No text provided' };
+    const lines = text.trim().split(/\r?\n/).filter(l => l.trim());
+    if (lines.length < 2) return { records:[], skipped:0, error:'Need header + data rows' };
+
+    const delim  = _detectDelim(lines[0]);
+    const header = _csvSplitRow(lines[0], delim).map(h => h.toLowerCase().replace(/['"]/g,'').trim());
+    const col    = _csvCols(header);
+
+    const iTitle    = col(['title','itemtitle','item title','name','card','description']);
+    const iPrice    = col(['soldfor','saleamount','saleprice','totalprice','itemprice','price','amount']);
+    const iDate     = col(['saledate','orderdate','date','solddate','created date']);
+    const iOrderNum = col(['ordernumber','orderid','ordernum','order#','transactionid']);
+    const iQty      = col(['quantity','qty','quantitysold']);
+    const iBuyer    = col(['buyer','buyerusername','buyername','buyerid']);
+    const iItemNum  = col(['itemnumber','itemid','item number','listingid']);
+    const iType     = col(['type','sport','category']);
+    const iPlayer   = col(['player','playercard','subject','athlete']);
+    const iYear     = col(['year']);
+    const iSet      = col(['set','setname','series']);
+    const iGrade    = col(['grade','grading']);
+    const iSerial   = col(['serial','serialnumber','serial number','serial#']);
+    const iVar      = col(['parallel','variation']);
+    const iBuyerShip= col(['buyerpaidship','buyershipcost','shipping','buyershipping','buyer paid ship']);
+    const iFees     = col(['totalfees','total fees','fees','ebay fees','platformfees']);
+    const iPlatform = col(['platform','marketplace','channel']);
+
+    if (iTitle < 0) return { records:[], skipped:0, error:'No title column. Got: '+header.join(', ') };
+
+    const records = []; let skipped = 0;
+    const g  = (cells, i) => i >= 0 ? (cells[i]||'').replace(/['"]/g,'').trim() : '';
+    const gn = (cells, i) => parseFloat(g(cells,i).replace(/[^0-9.]/g,'')) || 0;
+
+    for (let r = 1; r < lines.length; r++) {
+      const cells    = _csvSplitRow(lines[r], delim);
+      let rawTitle   = g(cells, iTitle);
+      if (!rawTitle) { skipped++; continue; }
+      rawTitle = rawTitle.replace(/\s*\|\s*Quantity:\s*\d+.*/i,'').replace(/^\d+\s+x\s+/i,'').trim();
+
+      const parsed   = Parsers.parseCardTitle(rawTitle);
+      const player   = g(cells, iPlayer)  || parsed.player;
+      const type     = g(cells, iType)    || parsed.type;
+      const year     = g(cells, iYear)    || parsed.year;
+      const set      = g(cells, iSet)     || parsed.set;
+      const grade    = g(cells, iGrade)   || parsed.grade;
+      const serial   = g(cells, iSerial).replace(/[^0-9\/]/g,'') || parsed.serial || '';
+      const variation= g(cells, iVar)     || parsed.variation || '';
+      const now      = new Date().toISOString();
+
+      records.push({
+        id:              null,
+        raw_title:       rawTitle,
+        raw_price:       g(cells, iPrice),
+        raw_date:        g(cells, iDate),
+        source:          'ebay_csv',
+        platform:        g(cells, iPlatform) || 'eBay',
+        order_num:       g(cells, iOrderNum),
+        buyer:           g(cells, iBuyer),
+        player, year, set, variation, serial, grade,
+        is_auto:         parsed.is_auto,
+        type,
+        title:           player ? buildStandardName({...parsed, player, year, set, grade, variation, serial}) : rawTitle,
+        price:           gn(cells, iPrice),
+        qty:             parseInt(g(cells, iQty)) || 1,
+        fees:            gn(cells, iFees),
+        buyer_ship:      gn(cells, iBuyerShip),
+        linked_card_ids: [],
+        photos:          [],
+        notes:           '',
+        _customPlayer:   parsed._customPlayer,
+        created_at:      now,
+        updated_at:      now,
+      });
+    }
+    return { records, skipped };
+  },
+};
+
+/* ══════════════════════════════════════════════════════
+   §5  COMPUTED  (derived values)
+══════════════════════════════════════════════════════ */
+const Computed = {
+  soldCardIds() {
+    const ids = new Set();
+    Store.get('sales').forEach(s =>
+      (s.linked_card_ids || []).forEach(id => ids.add(id))
+    );
+    return ids;
+  },
+
+  invCards() {
+    const sold = this.soldCardIds();
+    return Store.get('cards').filter(c => !sold.has(c.id));
+  },
+
+  invCount() { return this.invCards().length; },
+
+  totalCostBasis() {
+    return this.invCards().reduce((sum, c) => sum + (c.cost || 0), 0);
+  },
+
+  totalRevenue() {
+    return Store.get('sales').reduce((sum, s) => sum + (s.price || 0), 0);
+  },
+
+  totalFees() {
+    return Store.get('sales').reduce((sum, s) => sum + (s.fees || 0) + (s.buyer_ship || 0), 0);
+  },
+
+  totalProfit() {
+    const revenue = this.totalRevenue();
+    const fees = this.totalFees();
+    const sold = this.soldCardIds();
+    const cogs = Store.get('cards')
+      .filter(c => sold.has(c.id))
+      .reduce((sum, c) => sum + (c.cost || 0), 0);
+    return revenue - fees - cogs;
+  },
+
+  cardFinancials(id) {
+    const card = Store.getCard(id);
+    if (!card) return null;
+    const sale = Store.get('sales').find(s => (s.linked_card_ids || []).includes(id));
+    const vl = Store.get('value_lookups')[id];
+    const cost = card.cost || 0;
+    const mktVal = vl?.avgPrice || 0;
+    const salePrice = sale?.price || 0;
+    const fees = sale ? (sale.fees || 0) + (sale.buyer_ship || 0) : 0;
+    const isSold = !!sale;
+    const pnl = isSold ? (salePrice - fees - cost) : (mktVal - cost);
+    return { cost, mktVal, salePrice, fees, pnl, isSold, sale };
+  },
+
+  linkedPnl(saleId) {
+    const sale = Store.getSale(saleId);
+    if (!sale) return 0;
+    const cogs = (sale.linked_card_ids || [])
+      .reduce((sum, id) => sum + (Store.getCard(id)?.cost || 0), 0);
+    return (sale.price || 0) - (sale.fees || 0) - (sale.buyer_ship || 0) - cogs;
+  },
+
+  salesByMonth(n = 12) {
+    const now = new Date();
+    const months = [];
+    for (let i = n - 1; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      months.push({
+        key:   `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`,
+        label: d.toLocaleString('default', { month: 'short', year: '2-digit' }),
+        revenue: 0, profit: 0, count: 0,
+      });
+    }
+    const idx = Object.fromEntries(months.map(m => [m.key, m]));
+    Store.get('sales').forEach(s => {
+      const key = (s.raw_date || s.created_at || '').slice(0, 7);
+      if (!key || !idx[key]) return;
+      idx[key].revenue += s.price || 0;
+      idx[key].profit  += this.linkedPnl(s.id);
+      idx[key].count   += 1;
+    });
+    return months;
+  },
+
+  typeBreakdown() {
+    const types = {};
+    Store.get('cards').forEach(c => {
+      const t = c.type || 'Other';
+      if (!types[t]) types[t] = { count: 0, cost: 0 };
+      types[t].count++;
+      types[t].cost += c.cost || 0;
+    });
+    return Object.entries(types).sort((a, b) => b[1].count - a[1].count);
+  },
+
+  recentSales(n = 5) {
+    return [...Store.get('sales')]
+      .sort((a, b) => ((b.raw_date||b.created_at||'') > (a.raw_date||a.created_at||'') ? 1 : -1))
+      .slice(0, n);
+  },
+
+  topCardsByCost(n = 5) {
+    return [...this.invCards()]
+      .sort((a, b) => (b.cost||0) - (a.cost||0))
+      .slice(0, n);
+  },
+};
+
+/* ══════════════════════════════════════════════════════
+   §6  ACTIONS  (stubs — implemented in Step 6)
+══════════════════════════════════════════════════════ */
+const Actions = {
+  addCard(fields)         { toast('Actions.addCard — coming soon'); },
+  updateCard(id, fields)  { Store.patchCard(id, fields); render(); toast('Saved'); },
+  deleteCard(id)          { toast('Actions.deleteCard — coming soon'); },
+  addSale(fields)         { toast('Actions.addSale — coming soon'); },
+  updateSale(id, fields)  { Store.patchSale(id, fields); render(); toast('Saved'); },
+  async deleteSale(id) {
+    const sales = Store.get('sales').filter(s => s.id !== id);
+    Store.setSales(sales);
+    await DB.saveSales(sales);
+    closePanel();
+    render();
+    toast('Sale deleted');
+  },
+
+  autoLinkAll() {
+    const sales = Store.get('sales');
+    let linked = 0;
+    sales.forEach(sale => {
+      if ((sale.linked_card_ids||[]).length) return;
+      const top = Parsers.getTopCandidates(sale, 1);
+      if (top.length && top[0].score > 50) {
+        Store.patchSale(sale.id, { linked_card_ids: [top[0].id] });
+        linked++;
+      }
+    });
+    if (linked) {
+      DB.saveSales(Store.get('sales'));
+      render();
+      toast(`Auto-linked ${linked} sale${linked>1?'s':''}`);
+    } else {
+      toast('No confident matches found');
+    }
+  },
+
+  deleteCard(id) {
+    const cards = Store.get('cards').filter(c => c.id !== id);
+    Store.setCards(cards);
+    DB.saveCards(cards);
+    PhotoDB.deleteAll(id).catch(() => {});
+    closePanel();
+    render();
+    toast('Card deleted');
+  },
+
+  linkCardToSale(cardId, saleId) {
+    const sale = Store.getSale(saleId);
+    if (!sale) return;
+    const ids = new Set(sale.linked_card_ids || []);
+    ids.add(cardId);
+    Store.patchSale(saleId, { linked_card_ids: [...ids] });
+    render();
+    toast('Linked');
+  },
+
+  unlinkCardFromSale(cardId, saleId) {
+    const sale = Store.getSale(saleId);
+    if (!sale) return;
+    const ids = (sale.linked_card_ids || []).filter(id => id !== cardId);
+    Store.patchSale(saleId, { linked_card_ids: ids });
+    render();
+    toast('Unlinked');
+  },
+  async importCards(drafts) {
+    if (!drafts || !drafts.length) return;
+    const now = new Date().toISOString();
+    const newCards = drafts.map(d => ({ ...d, id: d.id || newId('P') }));
+    const cards = [...Store.get('cards'), ...newCards];
+    Store.setCards(cards);
+    await DB.saveCards(cards);
+    // Register any newly discovered custom players
+    const customs = new Set(Store.get('custom_players') || []);
+    newCards.filter(c => c._customPlayer && c.player).forEach(c => customs.add(c.player));
+    Store.patch('custom_players', [...customs]);
+    render();
+    toast(`Imported ${newCards.length} card${newCards.length===1?'':'s'}`);
+  },
+
+  async importSales(drafts) {
+    if (!drafts || !drafts.length) return;
+    const newSales = drafts.map(d => ({ ...d, id: d.id || newId('S') }));
+    const sales = [...Store.get('sales'), ...newSales];
+    Store.setSales(sales);
+    await DB.saveSales(sales);
+    render();
+    toast(`Imported ${newSales.length} sale${newSales.length===1?'':'s'}`);
+  },
+
+  async attachPhoto(cardId, dataUrl) {
+    const card = Store.getCard(cardId);
+    if (!card) return;
+    const index = (card.photos || []).length;
+    await PhotoDB.put(cardId, index, dataUrl);
+    Store.patchCard(cardId, { photos: [...(card.photos || []), `photo::${cardId}::${index}`] });
+    render();
+    toast('Photo attached');
+  },
+
+  async deletePhoto(cardId, index) {
+    const card = Store.getCard(cardId);
+    if (!card) return;
+    await PhotoDB.delete(cardId, index);
+    const photos = (card.photos || []).filter((_, i) => i !== index);
+    Store.patchCard(cardId, { photos });
+    render();
+    toast('Photo removed');
+  },
+
+  async restoreBackup(file) {
+    try {
+      const data = await DB.importBackup(file);
+      Store.loadFromBackup(data);
+      render();
+      toast(`Restored: ${data.cards.length} cards, ${data.sales.length} sales`);
+    } catch(err) {
+      toast(`Restore failed: ${err.message}`);
+    }
+  },
+
+  startReceive(orderInfo) {
+    Store.patch('receive_draft', { ...orderInfo, cards: [] });
+    nav('receive');
+  },
+
+  addReceiveCard(fields) {
+    const draft = Store.get('receive_draft');
+    if (!draft) return;
+    const cards = [...(draft.cards||[]), { ...fields, tempId: newId('T') }];
+    Store.patch('receive_draft', { ...draft, cards });
+    render();
+  },
+
+  removeReceiveCard(tempId) {
+    const draft = Store.get('receive_draft');
+    if (!draft) return;
+    const cards = (draft.cards||[]).filter(c => c.tempId !== tempId);
+    Store.patch('receive_draft', { ...draft, cards });
+    render();
+  },
+
+  async commitReceive() {
+    const draft = Store.get('receive_draft');
+    if (!draft?.cards?.length) { toast('No cards staged'); return; }
+    const now    = new Date().toISOString();
+    const count  = draft.cards.length;
+    const drafts = draft.cards.map(c => ({
+      raw_title:     c.raw_title,
+      display_name:  c.display_name || c.raw_title,
+      cost:          c.cost  || 0,
+      raw_cost:      String(c.cost || 0),
+      source:        draft.seller    || null,
+      order_num:     draft.order_num || null,
+      received_date: draft.date      || null,
+      player:        c.player        || null,
+      year:          c.year          || null,
+      set:           c.set           || null,
+      variation:     c.variation     || null,
+      serial:        c.serial        || null,
+      grade:         c.grade         || null,
+      is_auto:       c.is_auto  || false,
+      is_rc:         c.is_rc    || false,
+      photos:        [],
+      created_at:    now,
+      updated_at:    now,
+    }));
+    await Actions.importCards(drafts);
+    Store.patch('receive_draft', null);
+    nav('inventory');
+    toast(`Received ${count} card${count>1?'s':''}`);
+  },
+};
+
+/* ══════════════════════════════════════════════════════
+   §7  COMPONENTS
+══════════════════════════════════════════════════════ */
+const Components = {
+
+  parsedTags(card) {
+    const t = [];
+    if (card.year)      t.push(`<span class="pt year">${esc(card.year)}</span>`);
+    if (card.set)       t.push(`<span class="pt set">${esc(card.set)}</span>`);
+    if (card.variation) t.push(`<span class="pt var">${esc(card.variation)}</span>`);
+    if (card.serial)    t.push(`<span class="pt serial">/${esc(card.serial)}</span>`);
+    if (card.grade)     t.push(`<span class="pt grade">${esc(card.grade)}</span>`);
+    if (card.is_auto)   t.push(`<span class="pt auto">AUTO</span>`);
+    if (card.is_rc)     t.push(`<span class="pt rc">RC</span>`);
+    return t.length ? `<div class="ptags">${t.join('')}</div>` : '';
+  },
+
+  typeBadge(type) {
+    if (!type) return '';
+    const cls = type.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9-]/g,'');
+    return `<span class="tb ${cls}">${esc(type)}</span>`;
+  },
+
+  finBadge(fin) {
+    if (!fin) return '';
+    if (fin.isSold) return `<span class="sb sold">SOLD</span>`;
+    return `<span class="sb stock">IN STOCK</span>`;
+  },
+
+  cardRow(card) {
+    const fin    = Computed.cardFinancials(card.id);
+    const isSold = fin?.isSold;
+    const mkt    = fin?.mktVal || 0;
+    const pnl    = fin?.pnl ?? 0;
+    return `<tr onclick="openCardPanel('${card.id}')">
+      <td class="cic"><div class="ctp">🃏</div></td>
+      <td>
+        <div class="cn">${esc(card.display_name || card.raw_title || card.id)}</div>
+        ${Components.parsedTags(card)}
+      </td>
+      <td>${Components.typeBadge(card.type)}</td>
+      <td><span class="pr o">${f$(card.cost)}</span></td>
+      <td>${mkt ? `<span class="pr ${isSold?'d':'g'}">${isSold?'—':f$(mkt)}</span>` : `<span class="pr d">—</span>`}</td>
+      <td>${Components.finBadge(fin)}</td>
+    </tr>`;
+  },
+
+  saleRow(sale) {
+    const pnl = Computed.linkedPnl(sale.id);
+    const cls = pnl >= 0 ? 'g' : 'r';
+    const linked = (sale.linked_card_ids||[]).length;
+    return `<tr onclick="openSalePanel('${sale.id}')">
+      <td>
+        <div class="cn">${esc(sale.title || sale.raw_title || sale.id)}</div>
+        ${sale.player ? `<div class="cm">${esc(sale.player)}${sale.year?' · '+esc(sale.year):''}${sale.set?' '+esc(sale.set):''}</div>` : ''}
+      </td>
+      <td>${sale.platform ? `<span style="font-size:10px;font-family:var(--mono);color:var(--dim)">${esc(sale.platform)}</span>` : ''}</td>
+      <td><span class="pr g">${f$(sale.price)}</span></td>
+      <td><span class="pr ${cls}">${pnl>=0?'+':''}${f$(pnl)}</span></td>
+      <td><span class="${linked?'sb linked':'sb unlinked'}">${linked ? linked+' card'+(linked>1?'s':'') : 'unlinked'}</span></td>
+      <td><span class="pr d">${sale.raw_date||sale.created_at?.slice(0,10)||'—'}</span></td>
+    </tr>`;
+  },
+
+  statGrid() {
+    const inv    = Computed.invCount();
+    const cost   = Computed.totalCostBasis();
+    const rev    = Computed.totalRevenue();
+    const profit = Computed.totalProfit();
+    const cls    = profit >= 0 ? 'g' : 'r';
+    return `<div class="sg">
+      <div class="sc"><div class="sc-lbl">In Inventory</div><div class="sc-val o">${inv}</div></div>
+      <div class="sc"><div class="sc-lbl">Cost Basis</div><div class="sc-val">${f$(cost)}</div></div>
+      <div class="sc"><div class="sc-lbl">Total Revenue</div><div class="sc-val g">${f$(rev)}</div></div>
+      <div class="sc"><div class="sc-lbl">Net Profit</div><div class="sc-val ${cls}">${profit>=0?'+':''}${f$(profit)}</div></div>
+    </div>`;
+  },
+
+  /* 3-col financial mini-grid used in panels */
+  finGrid(cells) {
+    return `<div style="display:grid;grid-template-columns:repeat(${cells.length},1fr);gap:8px">
+      ${cells.map(({label,value,color})=>`
+        <div style="background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);padding:10px;text-align:center">
+          <div style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:1px;margin-bottom:4px">${label}</div>
+          <div style="font-size:15px;font-weight:700;font-family:var(--mono)${color?';color:'+color:''}">${value}</div>
+        </div>`).join('')}
+    </div>`;
+  },
+
+  /* Editable inline field for panels */
+  editField(label, field, value, opts={}) {
+    const { type='text', cardId, saleId, mono=false } = opts;
+    const val  = type === 'number' ? `parseFloat(this.value)||0` : `this.value`;
+    const target = cardId ? `Store.patchCard('${cardId}',{${field}:${val}});updateSidebar()` :
+                   saleId ? `Store.patchSale('${saleId}',{${field}:${val}})` : '';
+    return `<div class="field-item">
+      <label>${esc(label)}</label>
+      <input class="field-input${mono?' mono':''}" type="${type}" value="${esc(value??'')}"
+        onchange="${target}" placeholder="—">
+    </div>`;
+  },
+
+  checkField(label, field, checked, opts={}) {
+    const { cardId, saleId } = opts;
+    const target = cardId ? `Store.patchCard('${cardId}',{${field}:this.checked})` :
+                   saleId ? `Store.patchSale('${saleId}',{${field}:this.checked})` : '';
+    return `<label class="cb-row"><input type="checkbox" ${checked?'checked':''} onchange="${target}"> ${esc(label)}</label>`;
+  },
+};
+
+/* ══════════════════════════════════════════════════════
+   §8  PAGES  (stub renderers)
+══════════════════════════════════════════════════════ */
+const Pages = {
+  dashboard() {
+    const months    = Computed.salesByMonth(12);
+    const recentSls = Computed.recentSales(5);
+    const topCards  = Computed.topCardsByCost(5);
+    const typeBreak = Computed.typeBreakdown();
+    const maxRev    = Math.max(...months.map(m => m.revenue), 1);
+
+    const barW = 26, gap = 4, h = 80;
+    const svgW = months.length * (barW + gap) - gap;
+    const bars = months.map((m, i) => {
+      const bh  = Math.max(2, Math.round(m.revenue / maxRev * h));
+      const x   = i * (barW + gap);
+      const y   = h - bh;
+      const clr = m.profit >= 0 ? 'var(--green)' : 'var(--red)';
+      return `<g>
+        <title>${m.label}: ${f$(m.revenue)} · ${m.count} sale${m.count!==1?'s':''}</title>
+        <rect x="${x}" y="${y}" width="${barW}" height="${bh}" rx="3" fill="${clr}" opacity=".75"/>
+        <text x="${x+barW/2}" y="${h+13}" font-size="7" text-anchor="middle" fill="var(--faint)" font-family="var(--mono)">${m.label}</text>
+      </g>`;
+    }).join('');
+
+    return `
+      <div class="topbar"><div class="pg-title">Dashboard</div></div>
+      <div class="content">
+        ${Components.statGrid()}
+
+        <div class="ps" style="margin-top:16px">
+          <div class="ps-title">Monthly Revenue — last 12 months</div>
+          <div style="overflow-x:auto;padding-top:4px">
+            <svg viewBox="0 0 ${svgW} ${h+20}" style="width:100%;max-width:${svgW}px;height:${h+20}px;display:block">
+              ${bars}
+            </svg>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+
+          <div class="ps">
+            <div class="ps-title">Recent Sales</div>
+            ${recentSls.length ? recentSls.map(s => {
+              const pnl = Computed.linkedPnl(s.id);
+              return `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);cursor:pointer" onclick="openSalePanel('${s.id}')">
+                <div style="flex:1;min-width:0">
+                  <div style="font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(s.title||s.raw_title)}</div>
+                  <div style="font-size:9px;font-family:var(--mono);color:var(--faint);margin-top:1px">${s.raw_date||s.created_at?.slice(0,10)||'—'}</div>
+                </div>
+                <span style="font-size:11px;font-family:var(--mono);font-weight:600;white-space:nowrap;color:${pnl>=0?'var(--green)':'var(--red)'}">${pnl>=0?'+':''}${f$(pnl)}</span>
+              </div>`;
+            }).join('') : '<div style="font-size:11px;color:var(--faint)">No sales yet</div>'}
+          </div>
+
+          <div class="ps">
+            <div class="ps-title">Top Inventory by Cost</div>
+            ${topCards.length ? topCards.map(c => `
+              <div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);cursor:pointer" onclick="openCardPanel('${c.id}')">
+                <div style="flex:1;min-width:0">
+                  <div style="font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(c.display_name||c.raw_title)}</div>
+                  <div style="font-size:9px;font-family:var(--mono);color:var(--faint);margin-top:1px">${c.player||'—'}</div>
+                </div>
+                <span style="font-size:11px;font-family:var(--mono);font-weight:600;white-space:nowrap;color:var(--orange)">${f$(c.cost)}</span>
+              </div>`).join('')
+            : '<div style="font-size:11px;color:var(--faint)">No inventory</div>'}
+          </div>
+
+        </div>
+
+        ${typeBreak.length ? `
+        <div class="ps" style="margin-top:12px">
+          <div class="ps-title">Inventory by Type</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px">
+            ${typeBreak.map(([type, data]) => `
+              <div style="background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);padding:10px 14px;text-align:center;min-width:72px">
+                ${Components.typeBadge(type)}
+                <div style="font-size:15px;font-weight:700;font-family:var(--mono);margin-top:6px">${data.count}</div>
+                <div style="font-size:9px;color:var(--faint);font-family:var(--mono)">${f$(data.cost)}</div>
+              </div>`).join('')}
+          </div>
+        </div>` : ''}
+
+      </div>`;
+  },
+
+  inventory() {
+    const filters = Store.get('filters');
+    const { q, type, status } = filters;
+    const auto_only = filters.auto_only || false;
+    const rc_only   = filters.rc_only   || false;
+    const sort  = Store.get('sort');
+    const pageN = Store.get('page_num');
+    const pageS = Store.get('page_size');
+    const sold  = Computed.soldCardIds();
+
+    let list = Store.get('cards').filter(c => {
+      if (q) {
+        const hay = [c.display_name,c.raw_title,c.player,c.set,c.variation,c.seller,c.year,c.grade,c.type,c.serial,c.order_num].join(' ').toLowerCase();
+        if (!hay.includes(q.toLowerCase())) return false;
+      }
+      if (type   && c.type     !== type)   return false;
+      if (status === 'sold'  && !sold.has(c.id)) return false;
+      if (status === 'stock' &&  sold.has(c.id)) return false;
+      if (auto_only && !c.is_auto) return false;
+      if (rc_only   && !c.is_rc)  return false;
+      return true;
+    });
+
+    const sh = f => `<th class="sh${sort.field===f?' on':''}" onclick="setSort('${f}')">${{display_name:'Card',cost:'Cost',player:'Player',created_at:'Added'}[f]||f}${sort.field===f?(sort.dir==='asc'?' ↑':' ↓'):''}</th>`;
+
+    list = [...list].sort((a, b) => {
+      const av = a[sort.field] ?? '', bv = b[sort.field] ?? '';
+      return sort.dir === 'asc' ? (av > bv ? 1 : -1) : (av < bv ? 1 : -1);
+    });
+
+    const total = list.length;
+    const page  = list.slice(pageN * pageS, (pageN + 1) * pageS);
+    const pages = Math.ceil(total / pageS);
+
+    const typeOpts = ['', ...CFG.CARD_TYPES].map(t =>
+      `<option value="${esc(t)}" ${type===t?'selected':''}>${t||'All Types'}</option>`).join('');
+
+    const rows = page.length
+      ? page.map(c => Components.cardRow(c)).join('')
+      : `<tr><td colspan="6"><div class="empty"><div class="ei">▦</div>No cards match your filters</div></td></tr>`;
+
+    return `
+      <div class="topbar">
+        <div class="pg-title">Inventory</div>
+        <span class="pg-sub"><span class="stat-num">${total}</span> of ${Store.get('cards').length} cards</span>
+        <button class="btn pri sm" onclick="openReceivePanel()">+ Add Card</button>
+      </div>
+      <div class="content">
+        <div class="fb">
+          <div class="sw">
+            <span class="si">⌕</span>
+            <input type="text" placeholder="Search player, set, year, grade…" value="${esc(q)}" oninput="setFilter('q',this.value)">
+            <button class="s-clr" onclick="setFilter('q','')">✕</button>
+          </div>
+          <select onchange="setFilter('type',this.value)">${typeOpts}</select>
+          <select onchange="setFilter('status',this.value)">
+            <option value="" ${!status?'selected':''}>All Status</option>
+            <option value="stock" ${status==='stock'?'selected':''}>In Stock</option>
+            <option value="sold"  ${status==='sold'?'selected':''}>Sold</option>
+          </select>
+          <button class="btn sm${auto_only?' pri':''}" onclick="setFilter('auto_only',${!auto_only})">AUTO</button>
+          <button class="btn sm${rc_only?' pri':''}"   onclick="setFilter('rc_only',${!rc_only})">RC</button>
+        </div>
+        <div class="tw">
+          <table>
+            <thead><tr>
+              <th style="width:46px"></th>
+              ${sh('display_name')}
+              <th>Type</th>
+              ${sh('cost')}
+              <th>Market</th>
+              <th>Status</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+        ${pages > 1 ? Pages._pager(pageN, pages) : ''}
+      </div>`;
+  },
+
+  sales() {
+    const { q } = Store.get('filters');
+    const sort  = Store.get('sort');
+    const pageN = Store.get('page_num');
+    const pageS = Store.get('page_size');
+
+    let list = Store.get('sales').filter(s => {
+      if (!q) return true;
+      const hay = [s.title,s.raw_title,s.player,s.platform,s.buyer,s.order_num].join(' ').toLowerCase();
+      return hay.includes(q.toLowerCase());
+    });
+    list = [...list].sort((a, b) => {
+      const av = a[sort.field] ?? '', bv = b[sort.field] ?? '';
+      return sort.dir === 'asc' ? (av > bv ? 1 : -1) : (av < bv ? 1 : -1);
+    });
+
+    const total = list.length;
+    const page  = list.slice(pageN * pageS, (pageN + 1) * pageS);
+    const pages = Math.ceil(total / pageS);
+    const sh = (f,label) => `<th class="sh${sort.field===f?' on':''}" onclick="setSort('${f}')">${label}${sort.field===f?(sort.dir==='asc'?' ↑':' ↓'):''}</th>`;
+
+    const rows = page.length
+      ? page.map(s => Components.saleRow(s)).join('')
+      : `<tr><td colspan="6"><div class="empty"><div class="ei">◎</div>No sales yet</div></td></tr>`;
+
+    return `
+      <div class="topbar">
+        <div class="pg-title">Sales</div>
+        <span class="pg-sub"><span class="stat-num">${total}</span> sales
+          <span class="stat-sep">·</span>
+          <span class="stat-money">${f$(Computed.totalRevenue())}</span> revenue
+        </span>
+        <button class="btn sm" onclick="Actions.autoLinkAll()">⚡ Auto-Link</button>
+        <button class="btn pri sm" onclick="openAddSalePanel()">+ Add Sale</button>
+      </div>
+      <div class="content">
+        <div class="fb">
+          <div class="sw">
+            <span class="si">⌕</span>
+            <input type="text" placeholder="Search player, buyer, platform…" value="${esc(q)}" oninput="setFilter('q',this.value)">
+            <button class="s-clr" onclick="setFilter('q','')">✕</button>
+          </div>
+        </div>
+        <div class="tw">
+          <table>
+            <thead><tr>
+              ${sh('title','Sale')}
+              <th>Platform</th>
+              ${sh('price','Revenue')}
+              <th>Profit</th>
+              <th>Links</th>
+              ${sh('raw_date','Date')}
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+        ${pages > 1 ? Pages._pager(pageN, pages) : ''}
+      </div>`;
+  },
+
+  import() {
+    const cards = Store.get('cards').length;
+    const sales = Store.get('sales').length;
+    return `
+      <div class="topbar"><div class="pg-title">Import</div></div>
+      <div class="content">
+
+        <!-- ── Backup / Restore ── -->
+        <div style="margin-bottom:24px">
+          <div style="font-size:11px;font-family:var(--mono);color:var(--faint);letter-spacing:1px;text-transform:uppercase;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid var(--border)">Backup & Restore</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+
+            <div style="background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:18px">
+              <div style="font-weight:700;margin-bottom:6px">⬇ Export Backup</div>
+              <p style="font-size:12px;color:var(--dim);margin-bottom:14px">
+                Save all ${cards} cards and ${sales} sales to a JSON file.
+                Photos (IndexedDB) are <em style="color:var(--orange)">not</em> included — they're device-local.
+              </p>
+              <button class="btn sm" onclick="DB.exportBackup()">Download JSON Backup</button>
+            </div>
+
+            <div style="background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:18px">
+              <div style="font-weight:700;margin-bottom:6px">⬆ Restore Backup</div>
+              <p style="font-size:12px;color:var(--dim);margin-bottom:10px">
+                Load a CPQ backup JSON. This <strong style="color:var(--red)">replaces</strong> all current data.
+              </p>
+              <div id="restore-drop" style="border:2px dashed var(--border2);border-radius:var(--r2);padding:16px;text-align:center;cursor:pointer;transition:border-color .15s"
+                onclick="document.getElementById('restore-file').click()"
+                ondragover="event.preventDefault();this.style.borderColor='var(--gold)'"
+                ondragleave="this.style.borderColor=''"
+                ondrop="_handleRestoreDrop(event)">
+                <div style="font-size:22px;margin-bottom:6px">📂</div>
+                <div style="font-size:12px;color:var(--dim);font-family:var(--mono)">Drop .json file or click to browse</div>
+              </div>
+              <input type="file" id="restore-file" accept=".json" style="display:none" onchange="_handleRestoreFile(this)">
+            </div>
+
+          </div>
+        </div>
+
+        <!-- ── CSV Import ── -->
+        <div>
+          <div style="font-size:11px;font-family:var(--mono);color:var(--faint);letter-spacing:1px;text-transform:uppercase;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid var(--border)">CSV Import</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+
+            <div style="background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:18px">
+              <div style="font-weight:700;margin-bottom:6px">📦 Import Cards (Orders CSV)</div>
+              <p style="font-size:12px;color:var(--dim);margin-bottom:10px">Paste an eBay order export, COMC CSV, or any file with a <code style="font-size:10px;background:var(--surf2);padding:1px 4px;border-radius:3px">title</code> and <code style="font-size:10px;background:var(--surf2);padding:1px 4px;border-radius:3px">cost</code> column.</p>
+              <textarea id="imp-cards-csv" style="width:100%;height:90px;background:var(--surf2);border:1px solid var(--border2);color:var(--text);padding:8px;border-radius:var(--r2);font-size:10px;font-family:var(--mono);resize:vertical;outline:none" placeholder="Paste CSV here…"></textarea>
+              <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+                <button class="btn pri sm" onclick="_parseCardsCsv()">⚡ Parse</button>
+                <button class="btn ghost sm" onclick="document.getElementById('imp-cards-csv').value=''">Clear</button>
+                <span id="imp-cards-status" style="font-size:10px;font-family:var(--mono);color:var(--faint)"></span>
+              </div>
+              <div id="imp-cards-review"></div>
+            </div>
+
+            <div style="background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:18px">
+              <div style="font-weight:700;margin-bottom:6px">💰 Import Sales (Sold CSV)</div>
+              <p style="font-size:12px;color:var(--dim);margin-bottom:10px">Paste an eBay sold listings export or any file with a <code style="font-size:10px;background:var(--surf2);padding:1px 4px;border-radius:3px">title</code> and <code style="font-size:10px;background:var(--surf2);padding:1px 4px;border-radius:3px">price</code> column.</p>
+              <textarea id="imp-sales-csv" style="width:100%;height:90px;background:var(--surf2);border:1px solid var(--border2);color:var(--text);padding:8px;border-radius:var(--r2);font-size:10px;font-family:var(--mono);resize:vertical;outline:none" placeholder="Paste CSV here…"></textarea>
+              <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+                <button class="btn pri sm" onclick="_parseSalesCsv()">⚡ Parse</button>
+                <button class="btn ghost sm" onclick="document.getElementById('imp-sales-csv').value=''">Clear</button>
+                <span id="imp-sales-status" style="font-size:10px;font-family:var(--mono);color:var(--faint)"></span>
+              </div>
+              <div id="imp-sales-review"></div>
+            </div>
+
+          </div>
+        </div>
+
+      </div>`;
+  },
+
+  receive() {
+    const draft = Store.get('receive_draft');
+
+    if (!draft) {
+      return `
+        <div class="topbar"><div class="pg-title">Receive Order</div></div>
+        <div class="content">
+          <div class="ps" style="max-width:480px;margin:0 auto">
+            <div class="ps-title">Order Info</div>
+            <div style="display:flex;flex-direction:column;gap:10px">
+              <div>
+                <label style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:.8px;text-transform:uppercase;display:block;margin-bottom:4px">Order Number</label>
+                <input class="field-input mono" type="text" id="rcv-order" placeholder="123-456-7890">
+              </div>
+              <div>
+                <label style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:.8px;text-transform:uppercase;display:block;margin-bottom:4px">Seller / Source</label>
+                <input class="field-input" type="text" id="rcv-seller" placeholder="eBay seller, COMC, BSC…">
+              </div>
+              <div>
+                <label style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:.8px;text-transform:uppercase;display:block;margin-bottom:4px">Date Received</label>
+                <input class="field-input mono" type="date" id="rcv-date" value="${new Date().toISOString().slice(0,10)}">
+              </div>
+              <div style="margin-top:6px">
+                <button class="btn pri" onclick="Actions.startReceive({order_num:document.getElementById('rcv-order')?.value,seller:document.getElementById('rcv-seller')?.value,date:document.getElementById('rcv-date')?.value})">Start →</button>
+              </div>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    const cards = draft.cards || [];
+    const total = cards.reduce((s, c) => s + (c.cost||0), 0);
+
+    return `
+      <div class="topbar">
+        <div class="pg-title">Receive${draft.order_num ? ': '+esc(draft.order_num) : ''}</div>
+        ${draft.seller ? `<span class="pg-sub">${esc(draft.seller)}</span>` : ''}
+        <button class="btn ghost sm" style="margin-left:auto" onclick="if(confirm('Cancel this receive?')){Store.patch('receive_draft',null);render()}">Cancel</button>
+        ${cards.length ? `<button class="btn pri sm" onclick="Actions.commitReceive()">✓ Commit ${cards.length} card${cards.length>1?'s':''}</button>` : ''}
+      </div>
+      <div class="content">
+
+        <div class="ps">
+          <div class="ps-title">Add Card</div>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div>
+              <label style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:.8px;text-transform:uppercase;display:block;margin-bottom:4px">Title / Description</label>
+              <input class="field-input" type="text" id="rcv-card-title" placeholder="e.g. 2023 Panini Prizm Patrick Mahomes /25 PSA 10" oninput="_rcPreview2(this.value)">
+            </div>
+            <div id="rcv-preview" style="display:none;background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);padding:8px 10px;font-size:11px"></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <div>
+                <label style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:.8px;text-transform:uppercase;display:block;margin-bottom:4px">Cost ($)</label>
+                <input class="field-input mono" type="number" id="rcv-cost" placeholder="0.00" step="0.01">
+              </div>
+              <div style="display:flex;align-items:flex-end">
+                <button class="btn pri" style="width:100%" onclick="_addReceiveCard()">+ Add Card</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        ${cards.length ? `
+        <div class="ps">
+          <div class="ps-title">Staged (${cards.length}) · <span style="font-family:var(--mono);color:var(--green)">${f$(total)}</span></div>
+          ${cards.map(c => `
+            <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);margin-bottom:5px">
+              <div style="flex:1;min-width:0">
+                <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(c.display_name||c.raw_title)}</div>
+                <div style="font-size:10px;font-family:var(--mono);color:var(--dim);margin-top:2px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+                  ${c.player ? `<span>${esc(c.player)}</span>` : ''}
+                  ${c.year   ? `<span class="pt year" style="height:auto;padding:1px 5px">${esc(c.year)}</span>` : ''}
+                  ${c.serial ? `<span class="pt serial" style="height:auto;padding:1px 5px">/${esc(c.serial)}</span>` : ''}
+                  ${c.grade  ? `<span class="pt grade" style="height:auto;padding:1px 5px">${esc(c.grade)}</span>` : ''}
+                  ${c.is_auto ? `<span class="pt auto" style="height:auto;padding:1px 5px">AUTO</span>` : ''}
+                  <span style="color:var(--green);font-weight:600;margin-left:auto">${f$(c.cost)}</span>
+                </div>
+              </div>
+              <button class="btn xs red" onclick="Actions.removeReceiveCard('${c.tempId}')">✕</button>
+            </div>`).join('')}
+          <div style="margin-top:10px;padding-top:12px;border-top:1px solid var(--border)">
+            <button class="btn pri" onclick="Actions.commitReceive()">✓ Commit ${cards.length} Card${cards.length>1?'s':''} to Inventory</button>
+          </div>
+        </div>`
+        : '<div style="font-size:12px;color:var(--faint);text-align:center;padding:24px 0">No cards staged — add some above</div>'}
+
+      </div>`;
+  },
+
+  analytics() {
+    const cards    = Store.get('cards');
+    const sales    = Store.get('sales');
+    const sold     = Computed.soldCardIds();
+    const revenue  = Computed.totalRevenue();
+    const fees     = Computed.totalFees();
+    const cogs     = cards.filter(c => sold.has(c.id)).reduce((s,c) => s+(c.cost||0), 0);
+    const profit   = Computed.totalProfit();
+    const margin   = revenue > 0 ? (profit / revenue * 100) : 0;
+    const avgProfit= sales.length ? profit / sales.length : 0;
+
+    // Platform breakdown
+    const platMap = {};
+    sales.forEach(s => {
+      const p = s.platform || 'Unknown';
+      if (!platMap[p]) platMap[p] = { rev:0, pnl:0, n:0 };
+      platMap[p].rev += s.price || 0;
+      platMap[p].pnl += Computed.linkedPnl(s.id);
+      platMap[p].n++;
+    });
+    const plats = Object.entries(platMap).sort((a,b) => b[1].rev - a[1].rev);
+
+    // Best sold by profit
+    const topSold = cards
+      .filter(c => sold.has(c.id))
+      .map(c => { const fin = Computed.cardFinancials(c.id); return {...c, _pnl: fin?.pnl||0}; })
+      .sort((a,b) => b._pnl - a._pnl)
+      .slice(0, 8);
+
+    // Unlinked sales
+    const unlinked = sales.filter(s => !(s.linked_card_ids||[]).length);
+
+    return `
+      <div class="topbar"><div class="pg-title">Analytics</div></div>
+      <div class="content">
+
+        ${Components.finGrid([
+          { label:'REVENUE', value: f$(revenue),                        color:'var(--green)'  },
+          { label:'FEES',    value: f$(fees),                           color:'var(--red)'    },
+          { label:'COGS',    value: f$(cogs),                           color:'var(--orange)' },
+          { label:'PROFIT',  value: (profit>=0?'+':'')+f$(profit),      color: profit>=0?'var(--green)':'var(--red)' },
+        ])}
+        <div style="font-size:10px;font-family:var(--mono);color:var(--faint);margin-top:6px;display:flex;gap:16px">
+          <span>Margin: <span style="color:var(--text)">${margin.toFixed(1)}%</span></span>
+          <span>Avg profit/sale: <span style="color:var(--text)">${avgProfit>=0?'+':''}${f$(avgProfit)}</span></span>
+          <span>Sold cards: <span style="color:var(--text)">${sold.size}</span></span>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px">
+
+          <div class="ps">
+            <div class="ps-title">By Platform</div>
+            ${plats.length ? `
+            <table style="width:100%;border-collapse:collapse;font-size:11px">
+              <thead><tr style="border-bottom:1px solid var(--border)">
+                <th style="text-align:left;padding:4px 0;color:var(--faint);font-family:var(--mono);font-size:9px;letter-spacing:.8px;font-weight:400">PLATFORM</th>
+                <th style="text-align:right;padding:4px 4px;color:var(--faint);font-family:var(--mono);font-size:9px;letter-spacing:.8px;font-weight:400">SALES</th>
+                <th style="text-align:right;padding:4px 4px;color:var(--faint);font-family:var(--mono);font-size:9px;letter-spacing:.8px;font-weight:400">REVENUE</th>
+                <th style="text-align:right;padding:4px 0;color:var(--faint);font-family:var(--mono);font-size:9px;letter-spacing:.8px;font-weight:400">PROFIT</th>
+              </tr></thead>
+              <tbody>
+                ${plats.map(([plat, d]) => `
+                <tr style="border-bottom:1px solid var(--border)">
+                  <td style="padding:6px 0;font-weight:600">${esc(plat)}</td>
+                  <td style="padding:6px 4px;text-align:right;font-family:var(--mono);color:var(--dim)">${d.n}</td>
+                  <td style="padding:6px 4px;text-align:right;font-family:var(--mono);color:var(--green)">${f$(d.rev)}</td>
+                  <td style="padding:6px 0;text-align:right;font-family:var(--mono);color:${d.pnl>=0?'var(--green)':'var(--red)'}">${d.pnl>=0?'+':''}${f$(d.pnl)}</td>
+                </tr>`).join('')}
+              </tbody>
+            </table>` : '<div style="font-size:11px;color:var(--faint)">No sales yet</div>'}
+          </div>
+
+          <div class="ps">
+            <div class="ps-title">Best Sold by Profit</div>
+            ${topSold.length ? topSold.map(c => `
+              <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);cursor:pointer" onclick="openCardPanel('${c.id}')">
+                <div style="flex:1;min-width:0">
+                  <div style="font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(c.display_name||c.raw_title)}</div>
+                  <div style="font-size:9px;font-family:var(--mono);color:var(--faint);margin-top:1px">${c.player||'—'}</div>
+                </div>
+                <span style="font-size:11px;font-family:var(--mono);font-weight:600;white-space:nowrap;color:${c._pnl>=0?'var(--green)':'var(--red)'}">${c._pnl>=0?'+':''}${f$(c._pnl)}</span>
+              </div>`).join('')
+            : '<div style="font-size:11px;color:var(--faint)">No sold cards yet</div>'}
+          </div>
+
+        </div>
+
+        ${unlinked.length ? `
+        <div class="ps" style="margin-top:12px">
+          <div class="ps-title" style="display:flex;align-items:center">
+            Unlinked Sales <span style="color:var(--faint);font-weight:400;margin-left:4px">(${unlinked.length})</span>
+            <button class="btn xs" style="margin-left:auto" onclick="Actions.autoLinkAll();render()">⚡ Auto-Link All</button>
+          </div>
+          ${unlinked.slice(0, 10).map(s => `
+            <div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);margin-bottom:5px;cursor:pointer" onclick="openSalePanel('${s.id}')">
+              <div style="flex:1;min-width:0">
+                <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(s.title||s.raw_title)}</div>
+                <div style="font-size:10px;font-family:var(--mono);color:var(--dim);margin-top:1px">${f$(s.price)} · ${s.raw_date||s.created_at?.slice(0,10)||'—'}</div>
+              </div>
+              <span style="font-size:10px;font-family:var(--mono);background:var(--red);color:#fff;padding:2px 7px;border-radius:var(--r2)">unlinked</span>
+            </div>`).join('')}
+          ${unlinked.length > 10 ? `<div style="font-size:11px;color:var(--faint);margin-top:4px">…and ${unlinked.length-10} more</div>` : ''}
+        </div>` : ''}
+
+      </div>`;
+  },
+
+  settings() {
+    const customPlayers = [...(Store.get('custom_players') || [])].sort();
+    const customTypes   = [...(Store.get('custom_types')   || [])].sort();
+    const pageSize      = Store.get('page_size') || 50;
+    const cardCount     = Store.get('cards').length;
+    const salesCount    = Store.get('sales').length;
+    const photoCount    = Store.get('cards').reduce((s, c) => s + (c.photos||[]).length, 0);
+    let lsBytes = 0;
+    try { for (const k of Object.keys(localStorage)) { if (k.startsWith('cpq_')) lsBytes += (localStorage.getItem(k)||'').length * 2; } } catch {}
+    const lsKb = (lsBytes / 1024).toFixed(1);
+
+    return `
+      <div class="topbar"><div class="pg-title">Settings</div></div>
+      <div class="content">
+
+        <div class="ps">
+          <div class="ps-title">Data</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <button class="btn sm" onclick="DB.exportBackup()">⬇ Export Backup</button>
+            <button class="btn sm" onclick="nav('import')">⬆ Import / Restore</button>
+            <button class="btn red sm" style="margin-left:auto" onclick="_clearAllData()">⚠ Clear All Data</button>
+          </div>
+          <div style="font-size:10px;font-family:var(--mono);color:var(--faint);margin-top:8px">${cardCount} cards · ${salesCount} sales · ${photoCount} photos · ${lsKb} KB localStorage</div>
+        </div>
+
+        <div class="ps">
+          <div class="ps-title">Display</div>
+          <div style="display:flex;align-items:center;gap:12px">
+            <label style="font-size:12px;color:var(--dim)">Cards per page</label>
+            <select class="field-input" style="width:auto;padding:4px 8px" onchange="Store.patch('page_size',parseInt(this.value));render()">
+              ${[25, 50, 100, 250].map(n => `<option value="${n}"${pageSize===n?' selected':''}>${n}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+
+        <div class="ps">
+          <div class="ps-title">Custom Players</div>
+          <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Names not in the built-in library. Added automatically from CSV imports; manage them here.</p>
+          <div style="display:flex;gap:8px;margin-bottom:10px">
+            <input class="field-input" type="text" id="cfg-player-input" placeholder="Player name…" style="flex:1" onkeydown="if(event.key==='Enter')_addCustomPlayer()">
+            <button class="btn sm" onclick="_addCustomPlayer()">Add</button>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px">
+            ${customPlayers.length
+              ? customPlayers.map(p => `<span style="display:inline-flex;align-items:center;gap:5px;background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);padding:3px 10px;font-size:11px">${esc(p)}<button data-v="${esc(p)}" onclick="_removeCustomPlayer(this.dataset.v)" style="background:none;border:none;color:var(--faint);cursor:pointer;padding:0;font-size:14px;line-height:1;margin-left:3px">×</button></span>`).join('')
+              : '<span style="font-size:11px;color:var(--faint)">None yet</span>'}
+          </div>
+        </div>
+
+        <div class="ps">
+          <div class="ps-title">Custom Card Types</div>
+          <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Extends the built-in types: ${esc(CFG.CARD_TYPES.join(', '))}.</p>
+          <div style="display:flex;gap:8px;margin-bottom:10px">
+            <input class="field-input" type="text" id="cfg-type-input" placeholder="Type name…" style="flex:1" onkeydown="if(event.key==='Enter')_addCustomType()">
+            <button class="btn sm" onclick="_addCustomType()">Add</button>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px">
+            ${customTypes.length
+              ? customTypes.map(t => `<span style="display:inline-flex;align-items:center;gap:5px;background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);padding:3px 10px;font-size:11px">${esc(t)}<button data-v="${esc(t)}" onclick="_removeCustomType(this.dataset.v)" style="background:none;border:none;color:var(--faint);cursor:pointer;padding:0;font-size:14px;line-height:1;margin-left:3px">×</button></span>`).join('')
+              : '<span style="font-size:11px;color:var(--faint)">None yet</span>'}
+          </div>
+        </div>
+
+        <div class="ps">
+          <div class="ps-title">About</div>
+          <div style="font-size:12px;font-family:var(--mono);color:var(--dim);line-height:2">
+            <div>${esc(CFG.APP)} <span style="color:var(--text)">v${esc(CFG.VERSION)}</span></div>
+            <div>${cardCount} card${cardCount!==1?'s':''} · ${salesCount} sale${salesCount!==1?'s':''} · ${photoCount} photo${photoCount!==1?'s':''}</div>
+            <div>localStorage used: <span style="color:var(--text)">${lsKb} KB</span></div>
+          </div>
+        </div>
+
+      </div>`;
+  },
+
+  _pager(current, total) {
+    const prev = current > 0;
+    const next = current < total - 1;
+    return `<div class="pag">
+      <button class="btn sm" ${prev?'':'disabled'} onclick="setPage(${current-1})">‹ Prev</button>
+      <span>Page ${current+1} / ${total}</span>
+      <button class="btn sm" ${next?'':'disabled'} onclick="setPage(${current+1})">Next ›</button>
+    </div>`;
+  },
+};
+
+/* ══════════════════════════════════════════════════════
+   §9  INIT  (routing, panels, utilities, boot)
+══════════════════════════════════════════════════════ */
+
+/* ── Utilities ── */
+function newId(prefix = 'P') {
+  const ts  = Date.now();
+  const rnd = Math.random().toString(36).slice(2, 6);
+  return `${prefix}_${ts}_${rnd}`;
+}
+
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function f$(n) {
+  if (n == null || n === '') return '—';
+  return '$' + Number(n).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
+function toast(msg, dur = 2200) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove('show'), dur);
+}
+
+/* ── Routing ── */
+function nav(page) {
+  Store.patch('page', page);
+  Store.patch('page_num', 0);
+  Store.patch('filters', { q: '', type: '', status: '' });
+  render();
+}
+
+function render() {
+  const page = Store.get('page');
+  const renderer = Pages[page];
+  document.getElementById('main').innerHTML = renderer ? renderer() : Pages.dashboard();
+
+  document.querySelectorAll('.ni').forEach(el => {
+    el.classList.toggle('on', el.dataset.page === page);
+  });
+
+  updateSidebar();
+}
+
+function updateSidebar() {
+  const inv  = Computed.invCount();
+  const cost = Computed.totalCostBasis();
+  const rev  = Computed.totalRevenue();
+  const sfInv  = document.getElementById('sf-inv');
+  const sfCost = document.getElementById('sf-cost');
+  const sfRev  = document.getElementById('sf-rev');
+  if (sfInv)  sfInv.textContent  = inv;
+  if (sfCost) sfCost.textContent = f$(cost);
+  if (sfRev)  sfRev.textContent  = f$(rev);
+}
+
+/* ── Filters & Sort ── */
+function setFilter(key, val) {
+  const filters = { ...Store.get('filters'), [key]: val };
+  Store.patch('filters', filters);
+  Store.patch('page_num', 0);
+  render();
+}
+
+function setSort(field) {
+  const cur = Store.get('sort');
+  const dir = cur.field === field && cur.dir === 'asc' ? 'desc' : 'asc';
+  Store.patch('sort', { field, dir });
+  render();
+}
+
+function setPage(n) {
+  Store.patch('page_num', n);
+  render();
+}
+
+/* ── Panel ── */
+function openPanel(html) {
+  document.getElementById('pn').innerHTML = html;
+  document.getElementById('ov').classList.add('open');
+}
+
+function closePanel() {
+  document.getElementById('ov').classList.remove('open');
+  document.getElementById('pn').innerHTML = '';
+  Store.patch('panel', null);
+}
+
+function openCardPanel(id) {
+  const card = Store.getCard(id);
+  if (!card) return;
+  const fin    = Computed.cardFinancials(id);
+  const isSold = fin?.isSold;
+  const pnl    = fin?.pnl ?? 0;
+  const eTitle = _ebayTitle(card);
+  const eTitleLen = eTitle.length;
+  const eTitleColor = eTitleLen > 80 ? 'var(--red)' : eTitleLen > 72 ? 'var(--orange)' : 'var(--faint)';
+  const compsUrl = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(eTitle)}&_sop=13`;
+
+  const linkedSales = Store.get('sales').filter(s => (s.linked_card_ids||[]).includes(id));
+
+  openPanel(`
+    <div class="pn-head">
+      <div style="flex:1;min-width:0">
+        <div class="pn-title">${esc(card.display_name || card.raw_title || id)}</div>
+        <div class="pn-meta" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:3px">
+          ${card.player ? `<span>${esc(card.player)}</span>` : ''}
+          ${card.year   ? `<span style="color:var(--blue)">${esc(card.year)}</span>` : ''}
+          ${card.set    ? `<span style="color:var(--purple)">${esc(card.set)}</span>` : ''}
+          ${Components.typeBadge(card.type)}
+          ${isSold ? `<span class="sb sold">SOLD</span>` : `<span class="sb stock">IN STOCK</span>`}
+        </div>
+      </div>
+      <span class="pn-close" onclick="closePanel()">✕</span>
+    </div>
+    <div class="pn-body">
+
+      <!-- Photos -->
+      <div class="ps">
+        <div class="ps-title">Photos
+          <button class="btn xs" style="margin-left:auto" onclick="_triggerPhotoCapture('${id}')">+ Add Photo</button>
+        </div>
+        <div id="cpq-photo-grid-${id}" style="display:flex;gap:8px;flex-wrap:wrap;min-height:24px">
+          ${(card.photos||[]).length ? '<span style="font-size:10px;font-family:var(--mono);color:var(--faint)">Loading photos…</span>' : '<span style="font-size:11px;color:var(--faint)">No photos</span>'}
+        </div>
+      </div>
+
+      <!-- Financials -->
+      <div class="ps">
+        <div class="ps-title">Financials</div>
+        ${Components.finGrid([
+          { label:'COST',    value: f$(fin?.cost),   color: '' },
+          { label:'MKT VAL', value: f$(fin?.mktVal), color: 'var(--gold)' },
+          { label:'P&L',     value: (pnl>=0?'+':'')+f$(pnl), color: pnl>=0?'var(--green)':'var(--red)' },
+        ])}
+        ${isSold && fin?.sale ? `<div style="font-size:11px;font-family:var(--mono);color:var(--dim);margin-top:8px">
+          Sold for <span style="color:var(--green)">${f$(fin.sale.price)}</span>
+          · fees <span style="color:var(--red)">${f$((fin.sale.fees||0)+(fin.sale.buyer_ship||0))}</span>
+          · net <span style="color:${pnl>=0?'var(--green)':'var(--red)'}">${pnl>=0?'+':''}${f$(pnl)}</span>
+        </div>` : ''}
+      </div>
+
+      <!-- Listing Tools -->
+      <div class="ps">
+        <div class="ps-title">Listing Tools</div>
+        <div style="background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);padding:10px 12px;margin-bottom:10px">
+          <div style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:.8px;text-transform:uppercase;margin-bottom:5px">eBay Title</div>
+          <div id="cpq-etitle-${id}" style="font-size:12px;font-family:var(--mono);line-height:1.5;word-break:break-word;color:var(--text)">${esc(eTitle)||'<span style="color:var(--faint)">No title generated — fill in card fields</span>'}</div>
+          <div style="font-size:9px;font-family:var(--mono);color:${eTitleColor};margin-top:4px">${eTitleLen} / 80 chars</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn sm" onclick="_copyEbayTitle('${id}',this)">📋 Copy Title</button>
+          <a class="btn sm" href="${esc(compsUrl)}" target="_blank" rel="noopener noreferrer">🔍 Find Comps</a>
+        </div>
+      </div>
+
+      <!-- Card Details (editable) -->
+      <div class="ps">
+        <div class="ps-title">Card Details</div>
+        <div class="field-grid">
+          ${Components.editField('Player',    'player',    card.player,    {cardId:id})}
+          ${Components.editField('Year',      'year',      card.year,      {cardId:id})}
+          ${Components.editField('Set',       'set',       card.set,       {cardId:id})}
+          ${Components.editField('Variation', 'variation', card.variation, {cardId:id})}
+          ${Components.editField('Serial',    'serial',    card.serial,    {cardId:id,mono:true})}
+          ${Components.editField('Grade',     'grade',     card.grade,     {cardId:id})}
+          ${Components.editField('Cost ($)',  'cost',      card.cost,      {cardId:id,type:'number',mono:true})}
+          <div class="field-item"><label>Type</label>
+            <select class="field-input" style="padding:4px 6px" onchange="Store.patchCard('${id}',{type:this.value})">
+              <option value="">—</option>
+              ${CFG.CARD_TYPES.map(t=>`<option value="${esc(t)}" ${card.type===t?'selected':''}>${esc(t)}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <div style="display:flex;gap:16px;margin-top:10px;flex-wrap:wrap">
+          ${Components.checkField('Auto',   'is_auto', card.is_auto, {cardId:id})}
+          ${Components.checkField('Rookie', 'is_rc',   card.is_rc,   {cardId:id})}
+          ${Components.checkField('Lot',    'is_lot',  card.is_lot,  {cardId:id})}
+        </div>
+      </div>
+
+      <!-- Tags (read-only parsed view) -->
+      <div class="ps">
+        <div class="ps-title">Tags</div>
+        ${Components.parsedTags(card)||'<span style="font-size:11px;color:var(--faint)">No parsed tags — fill in year, set, serial…</span>'}
+      </div>
+
+      <!-- Notes -->
+      <div class="ps">
+        <div class="ps-title">Notes</div>
+        <textarea class="field-input" style="width:100%;height:70px;resize:vertical;font-family:var(--mono);font-size:11px"
+          placeholder="Add notes…"
+          onchange="Store.patchCard('${id}',{notes:this.value})">${esc(card.notes||'')}</textarea>
+      </div>
+
+      <!-- Source -->
+      <div class="ps">
+        <div class="ps-title">Source</div>
+        <div class="field-grid">
+          ${_panelField('Acquired', card.raw_date)}
+          ${_panelField('Source',   card.source)}
+          ${_panelField('Seller',   card.seller)}
+          ${_panelField('Order #',  card.order_num)}
+          ${_panelField('Item ID',  card.item_id)}
+          ${_panelField('Added',    card.created_at?.slice(0,10))}
+        </div>
+      </div>
+
+      <!-- Linked Sales -->
+      <div class="ps">
+        <div class="ps-title">Linked Sales (${linkedSales.length})</div>
+        ${linkedSales.length ? linkedSales.map(s => `
+          <div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);margin-bottom:5px;cursor:pointer" onclick="closePanel();openSalePanel('${s.id}')">
+            <div style="flex:1;min-width:0">
+              <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(s.title||s.raw_title)}</div>
+              <div style="font-size:10px;font-family:var(--mono);color:var(--dim);margin-top:1px">${f$(s.price)} · ${s.raw_date||s.created_at?.slice(0,10)||'—'}</div>
+            </div>
+            <button class="btn xs red" onclick="event.stopPropagation();Actions.unlinkCardFromSale('${id}','${s.id}');openCardPanel('${id}')">Unlink</button>
+          </div>`).join('')
+        : `<div style="font-size:11px;color:var(--faint)">Not linked to any sale</div>`}
+      </div>
+
+      <!-- Danger -->
+      <div class="ps" style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border)">
+        <button class="btn red sm" onclick="if(confirm('Delete this card?'))Actions.deleteCard('${id}')">Delete Card</button>
+      </div>
+
+    </div>`);
+
+  // Async-load photos after panel HTML is in the DOM
+  if ((card.photos||[]).length) _loadCardPhotos(id);
+}
+
+function openSalePanel(id) {
+  const sale = Store.getSale(id);
+  if (!sale) return;
+  const pnl  = Computed.linkedPnl(id);
+  const cogs = (sale.linked_card_ids||[]).reduce((s, cid) => s + (Store.getCard(cid)?.cost||0), 0);
+  const candidates = Parsers.getTopCandidates(sale, 5)
+    .filter(c => !(sale.linked_card_ids||[]).includes(c.id));
+
+  openPanel(`
+    <div class="pn-head">
+      <div style="flex:1;min-width:0">
+        <div class="pn-title">${esc(sale.title || sale.raw_title || id)}</div>
+        <div class="pn-meta" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:3px">
+          ${sale.player   ? `<span>${esc(sale.player)}</span>` : ''}
+          ${sale.platform ? `<span style="color:var(--blue)">${esc(sale.platform)}</span>` : ''}
+          ${sale.raw_date ? `<span style="color:var(--faint)">${esc(sale.raw_date)}</span>` : ''}
+        </div>
+      </div>
+      <span class="pn-close" onclick="closePanel()">✕</span>
+    </div>
+    <div class="pn-body">
+
+      <!-- Financials -->
+      <div class="ps">
+        <div class="ps-title">Financials</div>
+        ${Components.finGrid([
+          { label:'REVENUE', value: f$(sale.price),                          color:'var(--green)'  },
+          { label:'FEES',    value: f$((sale.fees||0)+(sale.buyer_ship||0)), color:'var(--red)'    },
+          { label:'COGS',    value: f$(cogs),                                color:'var(--orange)' },
+          { label:'PROFIT',  value: (pnl>=0?'+':'')+f$(pnl),                color: pnl>=0?'var(--green)':'var(--red)' },
+        ])}
+      </div>
+
+      <!-- Editable Fields -->
+      <div class="ps">
+        <div class="ps-title">Sale Details</div>
+        <div class="field-grid">
+          ${Components.editField('Title',    'title',      sale.title||sale.raw_title||'', {saleId:id})}
+          ${Components.editField('Player',   'player',     sale.player||'',    {saleId:id})}
+          ${Components.editField('Year',     'year',       sale.year||'',      {saleId:id})}
+          ${Components.editField('Set',      'set',        sale.set||'',       {saleId:id})}
+          ${Components.editField('Platform', 'platform',   sale.platform||'',  {saleId:id})}
+          ${Components.editField('Date',     'raw_date',   sale.raw_date||'',  {saleId:id})}
+          ${Components.editField('Order #',  'order_num',  sale.order_num||'', {saleId:id,mono:true})}
+          ${Components.editField('Buyer',    'buyer',      sale.buyer||'',     {saleId:id})}
+          ${Components.editField('Price $',  'price',      sale.price||'',     {saleId:id,type:'number',mono:true})}
+          ${Components.editField('Fees $',   'fees',       sale.fees||'',      {saleId:id,type:'number',mono:true})}
+          ${Components.editField('Ship $',   'buyer_ship', sale.buyer_ship||'',{saleId:id,type:'number',mono:true})}
+          ${Components.checkField('Autograph','is_auto',   sale.is_auto,       {saleId:id})}
+        </div>
+      </div>
+
+      <!-- Linked Cards -->
+      <div class="ps">
+        <div class="ps-title" style="display:flex;align-items:center">
+          Linked Cards <span style="color:var(--faint);font-weight:400;margin-left:4px">(${(sale.linked_card_ids||[]).length})</span>
+          <button class="btn xs" style="margin-left:auto" onclick="Actions.autoLinkAll();openSalePanel('${id}')">Auto-Link</button>
+        </div>
+        ${(sale.linked_card_ids||[]).map(cid => {
+          const c = Store.getCard(cid);
+          return c
+            ? `<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);margin-bottom:5px">
+                <div style="flex:1;min-width:0;cursor:pointer" onclick="closePanel();openCardPanel('${cid}')">
+                  <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(c.display_name||c.raw_title||cid)}</div>
+                  <div style="font-size:10px;font-family:var(--mono);color:var(--dim);margin-top:1px">${f$(c.cost)} cost${c.year?' · '+esc(c.year):''}</div>
+                </div>
+                <button class="btn xs red" onclick="Actions.unlinkCardFromSale('${cid}','${id}');openSalePanel('${id}')">Unlink</button>
+              </div>`
+            : `<div style="font-size:11px;color:var(--faint);font-family:var(--mono);margin-bottom:3px">${esc(cid)}</div>`;
+        }).join('') || '<div style="font-size:11px;color:var(--faint);margin-bottom:8px">No cards linked</div>'}
+        <div style="margin-top:8px">
+          <input class="field-input" type="text" placeholder="Search cards to link…" oninput="_saleLinkSearch('${id}',this.value)">
+          <div id="sale-link-results-${id}" style="margin-top:5px"></div>
+        </div>
+      </div>
+
+      ${candidates.length ? `
+      <!-- Suggested Matches -->
+      <div class="ps">
+        <div class="ps-title">Suggested Matches</div>
+        ${candidates.map(c => {
+          const card = Store.getCard(c.id);
+          if (!card) return '';
+          return `<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);margin-bottom:5px">
+            <div style="flex:1;min-width:0">
+              <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(card.display_name||card.raw_title)}</div>
+              <div style="font-size:10px;font-family:var(--mono);color:var(--dim);margin-top:1px">Score: ${c.score} · ${f$(card.cost)}</div>
+            </div>
+            <button class="btn xs" onclick="Actions.linkCardToSale('${c.id}','${id}');openSalePanel('${id}')">Link</button>
+          </div>`;
+        }).join('')}
+      </div>` : ''}
+
+      <!-- Danger -->
+      <div class="ps" style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border)">
+        <button class="btn red sm" onclick="if(confirm('Delete this sale?'))Actions.deleteSale('${id}')">Delete Sale</button>
+      </div>
+
+    </div>`);
+}
+
+function openReceivePanel() {
+  openPanel(`
+    <div class="pn-head">
+      <div><div class="pn-title">Add Card</div></div>
+      <span class="pn-close" onclick="closePanel()">✕</span>
+    </div>
+    <div class="pn-body">
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div>
+          <label style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:.8px;text-transform:uppercase;display:block;margin-bottom:4px">Title / Description</label>
+          <input class="field-input" type="text" id="rc-title" placeholder="e.g. 2023 Panini Prizm Patrick Mahomes /25 PSA 10" oninput="_rcPreview(this.value)">
+        </div>
+        <div id="rc-preview" style="display:none;background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);padding:8px 10px;font-size:11px"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div>
+            <label style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:.8px;text-transform:uppercase;display:block;margin-bottom:4px">Cost ($)</label>
+            <input class="field-input mono" type="number" id="rc-cost" placeholder="0.00" step="0.01">
+          </div>
+          <div>
+            <label style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:.8px;text-transform:uppercase;display:block;margin-bottom:4px">Source</label>
+            <input class="field-input" type="text" id="rc-source" placeholder="eBay, COMC, BSC…">
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:6px">
+          <button class="btn pri" onclick="_quickAddCard()">Add Card</button>
+          <button class="btn ghost" onclick="closePanel()">Cancel</button>
+        </div>
+      </div>
+    </div>`);
+}
+
+function openAddSalePanel() {
+  openPanel(`
+    <div class="pn-head">
+      <div><div class="pn-title">Add Sale</div></div>
+      <span class="pn-close" onclick="closePanel()">✕</span>
+    </div>
+    <div class="pn-body">
+      <div class="alert info">Full sale import coming in Step 3.</div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div><label style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:.8px;text-transform:uppercase;display:block;margin-bottom:4px">Title</label>
+          <input class="field-input" type="text" id="as-title" placeholder="Sale title"></div>
+        <div><label style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:.8px;text-transform:uppercase;display:block;margin-bottom:4px">Sale Price ($)</label>
+          <input class="field-input mono" type="number" id="as-price" placeholder="0.00" step="0.01"></div>
+        <div><label style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:.8px;text-transform:uppercase;display:block;margin-bottom:4px">Platform</label>
+          <input class="field-input" type="text" id="as-platform" placeholder="eBay, StockX…"></div>
+        <div style="display:flex;gap:8px;margin-top:6px">
+          <button class="btn pri" onclick="_quickAddSale()">Add Sale</button>
+          <button class="btn ghost" onclick="closePanel()">Cancel</button>
+        </div>
+      </div>
+    </div>`);
+}
+
+/* ── Quick-add helpers (minimal, real implementation in Step 6) ── */
+async function _quickAddCard() {
+  const raw  = document.getElementById('rc-title')?.value?.trim();
+  const cost = parseFloat(document.getElementById('rc-cost')?.value) || 0;
+  const src  = document.getElementById('rc-source')?.value?.trim();
+  if (!raw) { toast('Title is required'); return; }
+  const now = new Date().toISOString();
+  const card = {
+    id: newId('P'),
+    raw_title: raw,
+    display_name: raw,
+    cost,
+    raw_cost: String(cost),
+    source: src || null,
+    photos: [],
+    created_at: now,
+    updated_at: now,
+  };
+  const cards = [...Store.get('cards'), card];
+  Store.setCards(cards);
+  await DB.saveCards(cards);
+  closePanel();
+  render();
+  toast('Card added');
+}
+
+async function _quickAddSale() {
+  const title    = document.getElementById('as-title')?.value?.trim();
+  const price    = parseFloat(document.getElementById('as-price')?.value) || 0;
+  const platform = document.getElementById('as-platform')?.value?.trim();
+  if (!title) { toast('Title is required'); return; }
+  const now = new Date().toISOString();
+  const sale = {
+    id: newId('S'),
+    raw_title: title,
+    title,
+    price,
+    raw_price: String(price),
+    platform: platform || null,
+    linked_card_ids: [],
+    photos: [],
+    fees: 0,
+    buyer_ship: 0,
+    created_at: now,
+    updated_at: now,
+  };
+  const sales = [...Store.get('sales'), sale];
+  Store.setSales(sales);
+  await DB.saveSales(sales);
+  closePanel();
+  render();
+  toast('Sale added');
+}
+
+function _panelField(label, val) {
+  return `<div class="field-item">
+    <label>${esc(label)}</label>
+    <div class="field-val">${val != null && val !== '' ? esc(String(val)) : '<span style="color:var(--faint)">—</span>'}</div>
+  </div>`;
+}
+
+function _saleLinkSearch(saleId, q) {
+  const el = document.getElementById(`sale-link-results-${saleId}`);
+  if (!el) return;
+  if (!q.trim()) { el.innerHTML = ''; return; }
+  const lq   = q.toLowerCase();
+  const sale = Store.getSale(saleId);
+  const linked = new Set(sale?.linked_card_ids || []);
+  const matches = Store.get('cards')
+    .filter(c => !linked.has(c.id))
+    .filter(c => (c.display_name||c.raw_title||'').toLowerCase().includes(lq) ||
+                 (c.player||'').toLowerCase().includes(lq))
+    .slice(0, 8);
+  if (!matches.length) {
+    el.innerHTML = '<div style="font-size:11px;color:var(--faint);padding:4px 0">No matches</div>';
+    return;
+  }
+  el.innerHTML = matches.map(c => `
+    <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);margin-bottom:4px">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(c.display_name||c.raw_title)}</div>
+        <div style="font-size:10px;font-family:var(--mono);color:var(--dim)">${f$(c.cost)}</div>
+      </div>
+      <button class="btn xs" onclick="Actions.linkCardToSale('${c.id}','${saleId}');openSalePanel('${saleId}')">Link</button>
+    </div>`).join('');
+}
+
+/* ── eBay title builder ── */
+function _ebayTitle(card) {
+  const parts = [];
+  if (card.player)    parts.push(card.player);
+  if (card.variation) parts.push(card.variation);
+  if (card.year)      parts.push(card.year);
+  if (card.set)       parts.push(card.set);
+  if (card.serial)    parts.push(card.serial.includes('/') ? card.serial : '/'+card.serial);
+  if (card.grade)     parts.push(card.grade);
+  if (card.is_auto && !/auto/i.test(card.variation||'')) parts.push('Auto');
+  if (card.is_rc)     parts.push('RC');
+  return parts.join(' ').trim();
+}
+
+function _copyEbayTitle(id, btn) {
+  const el = document.getElementById(`cpq-etitle-${id}`);
+  const text = el?.textContent?.trim() || _ebayTitle(Store.getCard(id)||{});
+  if (!text) return;
+  navigator.clipboard?.writeText(text).then(() => {
+    const orig = btn.textContent; btn.textContent = '✓ Copied!';
+    setTimeout(() => btn.textContent = orig, 1800);
+  }).catch(() => {
+    const ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta); ta.select();
+    document.execCommand('copy'); ta.remove();
+    const orig = btn.textContent; btn.textContent = '✓ Copied!';
+    setTimeout(() => btn.textContent = orig, 1800);
+  });
+}
+
+/* ── Receive panel live preview ── */
+function _rcPreview(title) {
+  const el = document.getElementById('rc-preview');
+  if (!el) return;
+  if (!title.trim()) { el.style.display = 'none'; return; }
+  const p = Parsers.parseCardTitle(title);
+  const tags = [];
+  if (p.player)    tags.push(`<strong>${esc(p.player)}</strong>`);
+  if (p.year)      tags.push(`<span class="pt year" style="height:auto;padding:1px 5px">${esc(p.year)}</span>`);
+  if (p.set)       tags.push(`<span class="pt set"  style="height:auto;padding:1px 5px">${esc(p.set)}</span>`);
+  if (p.variation) tags.push(`<span class="pt var"  style="height:auto;padding:1px 5px">${esc(p.variation)}</span>`);
+  if (p.serial)    tags.push(`<span class="pt serial" style="height:auto;padding:1px 5px">/${esc(p.serial)}</span>`);
+  if (p.grade)     tags.push(`<span class="pt grade" style="height:auto;padding:1px 5px">${esc(p.grade)}</span>`);
+  if (p.is_auto)   tags.push(`<span class="pt auto" style="height:auto;padding:1px 5px">AUTO</span>`);
+  if (p.is_rc)     tags.push(`<span class="pt rc"   style="height:auto;padding:1px 5px">RC</span>`);
+  if (p.type)      tags.push(Components.typeBadge(p.type));
+  el.style.display = tags.length ? 'block' : 'none';
+  el.innerHTML = `<div style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:.8px;text-transform:uppercase;margin-bottom:5px">Parsed</div>
+    <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">${tags.join('')}</div>`;
+}
+
+/* ── Photo loading ── */
+async function _loadCardPhotos(id) {
+  const card = Store.getCard(id);
+  if (!card || !(card.photos||[]).length) return;
+  const urls = await PhotoDB.getAll(id).catch(() => []);
+  const el   = document.getElementById(`cpq-photo-grid-${id}`);
+  if (!el) return;
+  el.innerHTML = urls.length
+    ? urls.map((url, i) => `
+        <div style="position:relative">
+          <img src="${esc(url)}" style="width:80px;height:112px;object-fit:cover;border-radius:6px;border:1px solid var(--border);cursor:zoom-in;display:block" onclick="window.open(this.src)">
+          <button onclick="Actions.deletePhoto('${id}',${i});openCardPanel('${id}')"
+            style="position:absolute;top:3px;right:3px;background:rgba(0,0,0,.65);border:none;color:#fff;border-radius:50%;width:18px;height:18px;font-size:10px;cursor:pointer;line-height:18px;text-align:center;padding:0">✕</button>
+        </div>`).join('')
+    : '<span style="font-size:11px;color:var(--faint)">No photos stored</span>';
+}
+
+/* ── CSV parse helpers ── */
+let _cardDrafts = [], _saleDrafts = [];
+
+function _parseCardsCsv() {
+  const text = document.getElementById('imp-cards-csv')?.value || '';
+  const result = Parsers.parseOrderCsv(text);
+  const status = document.getElementById('imp-cards-status');
+  const review = document.getElementById('imp-cards-review');
+  if (result.error) { if (status) status.textContent = '✕ ' + result.error; return; }
+  _cardDrafts = result.records;
+  const notes = [];
+  if (result.skipped)    notes.push(`${result.skipped} blank skipped`);
+  if (result.duplicates) notes.push(`${result.duplicates} dupes skipped`);
+  if (status) status.textContent = `${_cardDrafts.length} parsed${notes.length ? ' · '+notes.join(' · ') : ''}`;
+  if (review) review.innerHTML = _renderCardDraftReview();
+}
+
+function _parseSalesCsv() {
+  const text = document.getElementById('imp-sales-csv')?.value || '';
+  const result = Parsers.parseSaleCsv(text);
+  const status = document.getElementById('imp-sales-status');
+  const review = document.getElementById('imp-sales-review');
+  if (result.error) { if (status) status.textContent = '✕ ' + result.error; return; }
+  _saleDrafts = result.records;
+  const notes = result.skipped ? `${result.skipped} blank skipped` : '';
+  if (status) status.textContent = `${_saleDrafts.length} parsed${notes ? ' · '+notes : ''}`;
+  if (review) review.innerHTML = _renderSaleDraftReview();
+}
+
+function _renderCardDraftReview() {
+  if (!_cardDrafts.length) return '';
+  const rows = _cardDrafts.map((d, i) => `
+    <div style="background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);padding:8px 10px;margin-top:5px;font-size:11px">
+      <div style="font-weight:600;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(d.raw_title)}">${esc(d.display_name || d.raw_title)}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;font-family:var(--mono);font-size:10px;color:var(--dim)">
+        ${d.player ? `<span style="color:var(--text)">${esc(d.player)}</span>` : ''}
+        ${d.year   ? `<span class="pt year" style="height:auto;padding:1px 5px">${esc(d.year)}</span>` : ''}
+        ${d.set    ? `<span class="pt set"  style="height:auto;padding:1px 5px">${esc(d.set)}</span>` : ''}
+        ${d.serial ? `<span class="pt serial" style="height:auto;padding:1px 5px">/${esc(d.serial)}</span>` : ''}
+        ${d.grade  ? `<span class="pt grade" style="height:auto;padding:1px 5px">${esc(d.grade)}</span>` : ''}
+        ${d.is_auto ? `<span class="pt auto" style="height:auto;padding:1px 5px">AUTO</span>` : ''}
+        ${d.is_rc   ? `<span class="pt rc"   style="height:auto;padding:1px 5px">RC</span>` : ''}
+        <span style="margin-left:auto;color:var(--green);font-weight:600">${f$(d.cost)}</span>
+      </div>
+    </div>`).join('');
+  return `
+    <div style="margin-top:10px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <span style="font-size:11px;font-family:var(--mono);color:var(--dim)">${_cardDrafts.length} cards ready to import</span>
+        <button class="btn pri sm" style="margin-left:auto" onclick="_confirmCardImport()">✓ Import All</button>
+        <button class="btn ghost sm" onclick="_cardDrafts=[];document.getElementById('imp-cards-review').innerHTML=''">✕</button>
+      </div>
+      <div style="max-height:280px;overflow-y:auto">${rows}</div>
+    </div>`;
+}
+
+function _renderSaleDraftReview() {
+  if (!_saleDrafts.length) return '';
+  const rows = _saleDrafts.map((d, i) => `
+    <div style="background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);padding:8px 10px;margin-top:5px;font-size:11px">
+      <div style="font-weight:600;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(d.raw_title)}">${esc(d.title || d.raw_title)}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;font-family:var(--mono);font-size:10px;color:var(--dim)">
+        ${d.player   ? `<span style="color:var(--text)">${esc(d.player)}</span>` : ''}
+        ${d.platform ? `<span>${esc(d.platform)}</span>` : ''}
+        ${d.raw_date ? `<span>${esc(d.raw_date)}</span>` : ''}
+        <span style="margin-left:auto;color:var(--green);font-weight:600">${f$(d.price)}</span>
+        ${d.fees     ? `<span style="color:var(--red)">-${f$(d.fees)} fees</span>` : ''}
+      </div>
+    </div>`).join('');
+  return `
+    <div style="margin-top:10px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <span style="font-size:11px;font-family:var(--mono);color:var(--dim)">${_saleDrafts.length} sales ready to import</span>
+        <button class="btn pri sm" style="margin-left:auto" onclick="_confirmSaleImport()">✓ Import All</button>
+        <button class="btn ghost sm" onclick="_saleDrafts=[];document.getElementById('imp-sales-review').innerHTML=''">✕</button>
+      </div>
+      <div style="max-height:280px;overflow-y:auto">${rows}</div>
+    </div>`;
+}
+
+async function _confirmCardImport() {
+  await Actions.importCards(_cardDrafts);
+  _cardDrafts = [];
+  const review = document.getElementById('imp-cards-review');
+  const status = document.getElementById('imp-cards-status');
+  if (review) review.innerHTML = '';
+  if (status) status.textContent = '';
+  document.getElementById('imp-cards-csv').value = '';
+}
+
+async function _confirmSaleImport() {
+  await Actions.importSales(_saleDrafts);
+  _saleDrafts = [];
+  const review = document.getElementById('imp-sales-review');
+  const status = document.getElementById('imp-sales-status');
+  if (review) review.innerHTML = '';
+  if (status) status.textContent = '';
+  document.getElementById('imp-sales-csv').value = '';
+}
+
+/* ── Restore helpers (called from Import page) ── */
+function _handleRestoreFile(input) {
+  const file = input.files?.[0];
+  if (file) _confirmRestore(file);
+  input.value = '';
+}
+
+function _handleRestoreDrop(event) {
+  event.preventDefault();
+  document.getElementById('restore-drop').style.borderColor = '';
+  const file = event.dataTransfer.files?.[0];
+  if (file) _confirmRestore(file);
+}
+
+function _confirmRestore(file) {
+  const cards = Store.get('cards').length;
+  const sales = Store.get('sales').length;
+  if (cards + sales > 0) {
+    if (!confirm(`This will replace your current ${cards} cards and ${sales} sales with the backup. Continue?`)) return;
+  }
+  Actions.restoreBackup(file);
+}
+
+/* ── Photo input trigger (called from card panel) ── */
+function _triggerPhotoCapture(cardId) {
+  const inp = document.createElement('input');
+  inp.type = 'file';
+  inp.accept = 'image/*';
+  inp.capture = 'environment';
+  inp.onchange = async e => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const dataUrl = await new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = ev => res(ev.target.result);
+      r.onerror = () => rej(r.error);
+      r.readAsDataURL(file);
+    });
+    await Actions.attachPhoto(cardId, dataUrl);
+  };
+  inp.click();
+}
+
+/* ── Settings helpers ── */
+function _addCustomPlayer() {
+  const inp = document.getElementById('cfg-player-input');
+  const val = inp?.value?.trim();
+  if (!val) { toast('Enter a name'); return; }
+  const arr = [...new Set([...(Store.get('custom_players')||[]), val])];
+  Store.patch('custom_players', arr);
+  DB._write(DB.KEYS.CUSTOM_PLAYERS, arr);
+  if (inp) inp.value = '';
+  render();
+  toast(`Added: ${val}`);
+}
+
+function _removeCustomPlayer(name) {
+  const arr = (Store.get('custom_players') || []).filter(p => p !== name);
+  Store.patch('custom_players', arr);
+  DB._write(DB.KEYS.CUSTOM_PLAYERS, arr);
+  render();
+  toast('Removed');
+}
+
+function _addCustomType() {
+  const inp = document.getElementById('cfg-type-input');
+  const val = inp?.value?.trim();
+  if (!val) { toast('Enter a type'); return; }
+  const arr = [...new Set([...(Store.get('custom_types')||[]), val])];
+  Store.patch('custom_types', arr);
+  DB._write(DB.KEYS.CUSTOM_TYPES, arr);
+  if (inp) inp.value = '';
+  render();
+  toast(`Added: ${val}`);
+}
+
+function _removeCustomType(type) {
+  const arr = (Store.get('custom_types') || []).filter(t => t !== type);
+  Store.patch('custom_types', arr);
+  DB._write(DB.KEYS.CUSTOM_TYPES, arr);
+  render();
+  toast('Removed');
+}
+
+async function _clearAllData() {
+  const cc = Store.get('cards').length, sc = Store.get('sales').length;
+  if (!confirm(`Permanently delete all ${cc} cards and ${sc} sales? This cannot be undone.`)) return;
+  const ids = Store.get('cards').map(c => c.id);
+  Store.setCards([]);
+  Store.setSales([]);
+  await DB.saveCards([]);
+  await DB.saveSales([]);
+  await Promise.all(ids.map(id => PhotoDB.deleteAll(id).catch(()=>{})));
+  render();
+  toast('All data cleared');
+}
+
+/* ── Receive page helpers ── */
+function _rcPreview2(title) {
+  const el = document.getElementById('rcv-preview');
+  if (!el) return;
+  if (!title.trim()) { el.style.display = 'none'; return; }
+  const p    = Parsers.parseCardTitle(title);
+  const tags = [];
+  if (p.player)    tags.push(`<strong>${esc(p.player)}</strong>`);
+  if (p.year)      tags.push(`<span class="pt year"  style="height:auto;padding:1px 5px">${esc(p.year)}</span>`);
+  if (p.set)       tags.push(`<span class="pt set"   style="height:auto;padding:1px 5px">${esc(p.set)}</span>`);
+  if (p.variation) tags.push(`<span class="pt var"   style="height:auto;padding:1px 5px">${esc(p.variation)}</span>`);
+  if (p.serial)    tags.push(`<span class="pt serial" style="height:auto;padding:1px 5px">/${esc(p.serial)}</span>`);
+  if (p.grade)     tags.push(`<span class="pt grade" style="height:auto;padding:1px 5px">${esc(p.grade)}</span>`);
+  if (p.is_auto)   tags.push(`<span class="pt auto"  style="height:auto;padding:1px 5px">AUTO</span>`);
+  if (p.is_rc)     tags.push(`<span class="pt rc"    style="height:auto;padding:1px 5px">RC</span>`);
+  if (p.type)      tags.push(Components.typeBadge(p.type));
+  el.style.display = tags.length ? 'block' : 'none';
+  el.innerHTML = `<div style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:.8px;text-transform:uppercase;margin-bottom:5px">Parsed</div>
+    <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">${tags.join('')}</div>`;
+}
+
+function _addReceiveCard() {
+  const raw  = document.getElementById('rcv-card-title')?.value?.trim();
+  const cost = parseFloat(document.getElementById('rcv-cost')?.value) || 0;
+  if (!raw) { toast('Title required'); return; }
+  const p = Parsers.parseCardTitle(raw);
+  Actions.addReceiveCard({
+    raw_title:    raw,
+    display_name: p.display_name || raw,
+    player:       p.player    || null,
+    year:         p.year      || null,
+    set:          p.set       || null,
+    variation:    p.variation || null,
+    serial:       p.serial    || null,
+    grade:        p.grade     || null,
+    is_auto:      p.is_auto   || false,
+    is_rc:        p.is_rc     || false,
+    cost,
+  });
+}
+
+/* ── Legacy migration (cardbiz → CPQ) ── */
+function _migrateFromLegacy() {
+  let purchases = [], sales = [], purchaseEdits = {}, saleEdits = {};
+  try { purchases     = JSON.parse(localStorage.getItem('cb_purchases')     || '[]'); } catch {}
+  try { sales         = JSON.parse(localStorage.getItem('cb_sales')         || '[]'); } catch {}
+  try { purchaseEdits = JSON.parse(localStorage.getItem('cb_purchaseEdits') || '{}'); } catch {}
+  try { saleEdits     = JSON.parse(localStorage.getItem('cb_saleEdits')     || '{}'); } catch {}
+
+  if (!purchases.length && !sales.length) return null;
+
+  const now = new Date().toISOString();
+
+  const cards = purchases.map(p => {
+    const e = purchaseEdits[p.id] || {};
+    const m = { ...p, ...e };
+    return {
+      id:           p.id,
+      raw_title:    m.name || '',
+      display_name: m.name || '',
+      player:       m.player    || null,
+      year:         m.year      || null,
+      set:          m.set       || null,
+      variation:    m.variation || null,
+      serial:       m.serial    || null,
+      grade:        m.grade     || null,
+      is_auto:      !!m.is_auto,
+      is_rc:        !!m.is_rc,
+      is_lot:       !!m.is_lot,
+      lot_qty:      m.lotQty    || 1,
+      type:         m.type      || null,
+      cost:         parseFloat(m.cost) || 0,
+      raw_cost:     String(m.cost || 0),
+      source:       m.seller    || null,
+      order_num:    m.orderNum  || null,
+      brand:        m.brand     || null,
+      notes:        m.notes     || '',
+      raw_date:     m.date      || null,
+      photos:       [],
+      created_at:   now,
+      updated_at:   now,
+    };
+  });
+
+  const migSales = sales.map(s => {
+    const e = saleEdits[s.id] || {};
+    const m = { ...s, ...e };
+    // old schema: linkedPids (array, in edits) or linkedPid (singular, in base)
+    const linkedArr = Array.isArray(m.linkedPids) ? m.linkedPids
+      : (m.linkedPid ? [m.linkedPid] : []);
+    return {
+      id:             s.id,
+      raw_title:      m.title    || '',
+      title:          m.title    || '',
+      player:         m.player   || null,
+      year:           m.year     || null,
+      set:            m.set      || null,
+      variation:      m.variation || null,
+      serial:         m.serial   || null,
+      grade:          m.grade    || null,
+      is_auto:        !!m.is_auto,
+      type:           m.type     || null,
+      price:          parseFloat(m.price) || 0,
+      raw_price:      String(m.price || 0),
+      fees:           parseFloat(m.fees)  || 0,
+      buyer_ship:     parseFloat(m.ship || m.buyer_ship) || 0,
+      platform:       m.platform || null,
+      buyer:          m.buyer    || null,
+      raw_date:       m.date     || null,
+      order_num:      m.itemNum  || m.orderNum || null,
+      qty:            m.qty      || 1,
+      linked_card_ids: linkedArr.filter(Boolean),
+      photos:         [],
+      notes:          m.notes    || '',
+      created_at:     now,
+      updated_at:     now,
+    };
+  });
+
+  let custom_players = [];
+  try { custom_players = JSON.parse(localStorage.getItem('cb_custom_players') || '[]'); } catch {}
+
+  return { cards, sales: migSales, custom_players };
+}
+
+/* ── Boot ── */
+document.addEventListener('DOMContentLoaded', async () => {
+  let data = await DB.load();
+
+  // One-time migration: if new keys are empty but old cardbiz keys have data, migrate them
+  let migratedMsg = '';
+  if (!data.cards.length && !data.sales.length) {
+    const leg = _migrateFromLegacy();
+    if (leg && (leg.cards.length || leg.sales.length)) {
+      data.cards          = leg.cards;
+      data.sales          = leg.sales;
+      data.custom_players = leg.custom_players;
+      await DB.saveCards(leg.cards);
+      await DB.saveSales(leg.sales);
+      if (leg.custom_players.length) DB._write(DB.KEYS.CUSTOM_PLAYERS, leg.custom_players);
+      migratedMsg = `Migrated ${leg.cards.length} cards + ${leg.sales.length} sales from legacy data`;
+    }
+  }
+
+  Store.setCards(data.cards);
+  Store.setSales(data.sales);
+  Store.patch('value_lookups',   data.value_lookups   || {});
+  Store.patch('custom_players',  data.custom_players  || []);
+  Store.patch('custom_types',    data.custom_types    || []);
+
+  // Warm up IndexedDB connection in background
+  PhotoDB.open().catch(err => console.warn('PhotoDB init:', err));
+
+  render();
+  if (migratedMsg) toast(migratedMsg, 5000);
+});
+</script>
+</body>
+</html>
