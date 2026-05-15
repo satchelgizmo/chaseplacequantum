@@ -1234,6 +1234,58 @@ const Actions = {
       toast(`Restore failed: ${err.message}`);
     }
   },
+
+  startReceive(orderInfo) {
+    Store.patch('receive_draft', { ...orderInfo, cards: [] });
+    nav('receive');
+  },
+
+  addReceiveCard(fields) {
+    const draft = Store.get('receive_draft');
+    if (!draft) return;
+    const cards = [...(draft.cards||[]), { ...fields, tempId: newId('T') }];
+    Store.patch('receive_draft', { ...draft, cards });
+    render();
+  },
+
+  removeReceiveCard(tempId) {
+    const draft = Store.get('receive_draft');
+    if (!draft) return;
+    const cards = (draft.cards||[]).filter(c => c.tempId !== tempId);
+    Store.patch('receive_draft', { ...draft, cards });
+    render();
+  },
+
+  async commitReceive() {
+    const draft = Store.get('receive_draft');
+    if (!draft?.cards?.length) { toast('No cards staged'); return; }
+    const now    = new Date().toISOString();
+    const count  = draft.cards.length;
+    const drafts = draft.cards.map(c => ({
+      raw_title:     c.raw_title,
+      display_name:  c.display_name || c.raw_title,
+      cost:          c.cost  || 0,
+      raw_cost:      String(c.cost || 0),
+      source:        draft.seller    || null,
+      order_num:     draft.order_num || null,
+      received_date: draft.date      || null,
+      player:        c.player        || null,
+      year:          c.year          || null,
+      set:           c.set           || null,
+      variation:     c.variation     || null,
+      serial:        c.serial        || null,
+      grade:         c.grade         || null,
+      is_auto:       c.is_auto  || false,
+      is_rc:         c.is_rc    || false,
+      photos:        [],
+      created_at:    now,
+      updated_at:    now,
+    }));
+    await Actions.importCards(drafts);
+    Store.patch('receive_draft', null);
+    nav('inventory');
+    toast(`Received ${count} card${count>1?'s':''}`);
+  },
 };
 
 /* ══════════════════════════════════════════════════════
@@ -1648,10 +1700,91 @@ const Pages = {
   },
 
   receive() {
+    const draft = Store.get('receive_draft');
+
+    if (!draft) {
+      return `
+        <div class="topbar"><div class="pg-title">Receive Order</div></div>
+        <div class="content">
+          <div class="ps" style="max-width:480px;margin:0 auto">
+            <div class="ps-title">Order Info</div>
+            <div style="display:flex;flex-direction:column;gap:10px">
+              <div>
+                <label style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:.8px;text-transform:uppercase;display:block;margin-bottom:4px">Order Number</label>
+                <input class="field-input mono" type="text" id="rcv-order" placeholder="123-456-7890">
+              </div>
+              <div>
+                <label style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:.8px;text-transform:uppercase;display:block;margin-bottom:4px">Seller / Source</label>
+                <input class="field-input" type="text" id="rcv-seller" placeholder="eBay seller, COMC, BSC…">
+              </div>
+              <div>
+                <label style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:.8px;text-transform:uppercase;display:block;margin-bottom:4px">Date Received</label>
+                <input class="field-input mono" type="date" id="rcv-date" value="${new Date().toISOString().slice(0,10)}">
+              </div>
+              <div style="margin-top:6px">
+                <button class="btn pri" onclick="Actions.startReceive({order_num:document.getElementById('rcv-order')?.value,seller:document.getElementById('rcv-seller')?.value,date:document.getElementById('rcv-date')?.value})">Start →</button>
+              </div>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    const cards = draft.cards || [];
+    const total = cards.reduce((s, c) => s + (c.cost||0), 0);
+
     return `
-      <div class="topbar"><div class="pg-title">Receive</div></div>
+      <div class="topbar">
+        <div class="pg-title">Receive${draft.order_num ? ': '+esc(draft.order_num) : ''}</div>
+        ${draft.seller ? `<span class="pg-sub">${esc(draft.seller)}</span>` : ''}
+        <button class="btn ghost sm" style="margin-left:auto" onclick="if(confirm('Cancel this receive?')){Store.patch('receive_draft',null);render()}">Cancel</button>
+        ${cards.length ? `<button class="btn pri sm" onclick="Actions.commitReceive()">✓ Commit ${cards.length} card${cards.length>1?'s':''}</button>` : ''}
+      </div>
       <div class="content">
-        <div class="alert info">Receive / bulk-add flow — coming in Step 6 (Actions).</div>
+
+        <div class="ps">
+          <div class="ps-title">Add Card</div>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div>
+              <label style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:.8px;text-transform:uppercase;display:block;margin-bottom:4px">Title / Description</label>
+              <input class="field-input" type="text" id="rcv-card-title" placeholder="e.g. 2023 Panini Prizm Patrick Mahomes /25 PSA 10" oninput="_rcPreview2(this.value)">
+            </div>
+            <div id="rcv-preview" style="display:none;background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);padding:8px 10px;font-size:11px"></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <div>
+                <label style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:.8px;text-transform:uppercase;display:block;margin-bottom:4px">Cost ($)</label>
+                <input class="field-input mono" type="number" id="rcv-cost" placeholder="0.00" step="0.01">
+              </div>
+              <div style="display:flex;align-items:flex-end">
+                <button class="btn pri" style="width:100%" onclick="_addReceiveCard()">+ Add Card</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        ${cards.length ? `
+        <div class="ps">
+          <div class="ps-title">Staged (${cards.length}) · <span style="font-family:var(--mono);color:var(--green)">${f$(total)}</span></div>
+          ${cards.map(c => `
+            <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);margin-bottom:5px">
+              <div style="flex:1;min-width:0">
+                <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(c.display_name||c.raw_title)}</div>
+                <div style="font-size:10px;font-family:var(--mono);color:var(--dim);margin-top:2px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+                  ${c.player ? `<span>${esc(c.player)}</span>` : ''}
+                  ${c.year   ? `<span class="pt year" style="height:auto;padding:1px 5px">${esc(c.year)}</span>` : ''}
+                  ${c.serial ? `<span class="pt serial" style="height:auto;padding:1px 5px">/${esc(c.serial)}</span>` : ''}
+                  ${c.grade  ? `<span class="pt grade" style="height:auto;padding:1px 5px">${esc(c.grade)}</span>` : ''}
+                  ${c.is_auto ? `<span class="pt auto" style="height:auto;padding:1px 5px">AUTO</span>` : ''}
+                  <span style="color:var(--green);font-weight:600;margin-left:auto">${f$(c.cost)}</span>
+                </div>
+              </div>
+              <button class="btn xs red" onclick="Actions.removeReceiveCard('${c.tempId}')">✕</button>
+            </div>`).join('')}
+          <div style="margin-top:10px;padding-top:12px;border-top:1px solid var(--border)">
+            <button class="btn pri" onclick="Actions.commitReceive()">✓ Commit ${cards.length} Card${cards.length>1?'s':''} to Inventory</button>
+          </div>
+        </div>`
+        : '<div style="font-size:12px;color:var(--faint);text-align:center;padding:24px 0">No cards staged — add some above</div>'}
+
       </div>`;
   },
 
@@ -2373,6 +2506,47 @@ function _triggerPhotoCapture(cardId) {
     await Actions.attachPhoto(cardId, dataUrl);
   };
   inp.click();
+}
+
+/* ── Receive page helpers ── */
+function _rcPreview2(title) {
+  const el = document.getElementById('rcv-preview');
+  if (!el) return;
+  if (!title.trim()) { el.style.display = 'none'; return; }
+  const p    = Parsers.parseCardTitle(title);
+  const tags = [];
+  if (p.player)    tags.push(`<strong>${esc(p.player)}</strong>`);
+  if (p.year)      tags.push(`<span class="pt year"  style="height:auto;padding:1px 5px">${esc(p.year)}</span>`);
+  if (p.set)       tags.push(`<span class="pt set"   style="height:auto;padding:1px 5px">${esc(p.set)}</span>`);
+  if (p.variation) tags.push(`<span class="pt var"   style="height:auto;padding:1px 5px">${esc(p.variation)}</span>`);
+  if (p.serial)    tags.push(`<span class="pt serial" style="height:auto;padding:1px 5px">/${esc(p.serial)}</span>`);
+  if (p.grade)     tags.push(`<span class="pt grade" style="height:auto;padding:1px 5px">${esc(p.grade)}</span>`);
+  if (p.is_auto)   tags.push(`<span class="pt auto"  style="height:auto;padding:1px 5px">AUTO</span>`);
+  if (p.is_rc)     tags.push(`<span class="pt rc"    style="height:auto;padding:1px 5px">RC</span>`);
+  if (p.type)      tags.push(Components.typeBadge(p.type));
+  el.style.display = tags.length ? 'block' : 'none';
+  el.innerHTML = `<div style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:.8px;text-transform:uppercase;margin-bottom:5px">Parsed</div>
+    <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">${tags.join('')}</div>`;
+}
+
+function _addReceiveCard() {
+  const raw  = document.getElementById('rcv-card-title')?.value?.trim();
+  const cost = parseFloat(document.getElementById('rcv-cost')?.value) || 0;
+  if (!raw) { toast('Title required'); return; }
+  const p = Parsers.parseCardTitle(raw);
+  Actions.addReceiveCard({
+    raw_title:    raw,
+    display_name: p.display_name || raw,
+    player:       p.player    || null,
+    year:         p.year      || null,
+    set:          p.set       || null,
+    variation:    p.variation || null,
+    serial:       p.serial    || null,
+    grade:        p.grade     || null,
+    is_auto:      p.is_auto   || false,
+    is_rc:        p.is_rc     || false,
+    cost,
+  });
 }
 
 /* ── Boot ── */
