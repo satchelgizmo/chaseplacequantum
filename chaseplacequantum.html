@@ -1066,6 +1066,51 @@ const Computed = {
       .reduce((sum, id) => sum + (Store.getCard(id)?.cost || 0), 0);
     return (sale.price || 0) - (sale.fees || 0) - (sale.buyer_ship || 0) - cogs;
   },
+
+  salesByMonth(n = 12) {
+    const now = new Date();
+    const months = [];
+    for (let i = n - 1; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      months.push({
+        key:   `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`,
+        label: d.toLocaleString('default', { month: 'short', year: '2-digit' }),
+        revenue: 0, profit: 0, count: 0,
+      });
+    }
+    const idx = Object.fromEntries(months.map(m => [m.key, m]));
+    Store.get('sales').forEach(s => {
+      const key = (s.raw_date || s.created_at || '').slice(0, 7);
+      if (!key || !idx[key]) return;
+      idx[key].revenue += s.price || 0;
+      idx[key].profit  += this.linkedPnl(s.id);
+      idx[key].count   += 1;
+    });
+    return months;
+  },
+
+  typeBreakdown() {
+    const types = {};
+    Store.get('cards').forEach(c => {
+      const t = c.type || 'Other';
+      if (!types[t]) types[t] = { count: 0, cost: 0 };
+      types[t].count++;
+      types[t].cost += c.cost || 0;
+    });
+    return Object.entries(types).sort((a, b) => b[1].count - a[1].count);
+  },
+
+  recentSales(n = 5) {
+    return [...Store.get('sales')]
+      .sort((a, b) => ((b.raw_date||b.created_at||'') > (a.raw_date||a.created_at||'') ? 1 : -1))
+      .slice(0, n);
+  },
+
+  topCardsByCost(n = 5) {
+    return [...this.invCards()]
+      .sort((a, b) => (b.cost||0) - (a.cost||0))
+      .slice(0, n);
+  },
 };
 
 /* ══════════════════════════════════════════════════════
@@ -1306,16 +1351,84 @@ const Components = {
 ══════════════════════════════════════════════════════ */
 const Pages = {
   dashboard() {
-    const cards = Store.get('cards');
-    const sales = Store.get('sales');
+    const months    = Computed.salesByMonth(12);
+    const recentSls = Computed.recentSales(5);
+    const topCards  = Computed.topCardsByCost(5);
+    const typeBreak = Computed.typeBreakdown();
+    const maxRev    = Math.max(...months.map(m => m.revenue), 1);
+
+    const barW = 26, gap = 4, h = 80;
+    const svgW = months.length * (barW + gap) - gap;
+    const bars = months.map((m, i) => {
+      const bh  = Math.max(2, Math.round(m.revenue / maxRev * h));
+      const x   = i * (barW + gap);
+      const y   = h - bh;
+      const clr = m.profit >= 0 ? 'var(--green)' : 'var(--red)';
+      return `<g>
+        <title>${m.label}: ${f$(m.revenue)} · ${m.count} sale${m.count!==1?'s':''}</title>
+        <rect x="${x}" y="${y}" width="${barW}" height="${bh}" rx="3" fill="${clr}" opacity=".75"/>
+        <text x="${x+barW/2}" y="${h+13}" font-size="7" text-anchor="middle" fill="var(--faint)" font-family="var(--mono)">${m.label}</text>
+      </g>`;
+    }).join('');
+
     return `
       <div class="topbar"><div class="pg-title">Dashboard</div></div>
       <div class="content">
         ${Components.statGrid()}
-        <div class="alert info">
-          <strong>Chase Place Quantum v2</strong> — Dashboard analytics coming in Step 5.
-          You have <strong>${cards.length}</strong> cards and <strong>${sales.length}</strong> sales loaded.
+
+        <div class="ps" style="margin-top:16px">
+          <div class="ps-title">Monthly Revenue — last 12 months</div>
+          <div style="overflow-x:auto;padding-top:4px">
+            <svg viewBox="0 0 ${svgW} ${h+20}" style="width:100%;max-width:${svgW}px;height:${h+20}px;display:block">
+              ${bars}
+            </svg>
+          </div>
         </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+
+          <div class="ps">
+            <div class="ps-title">Recent Sales</div>
+            ${recentSls.length ? recentSls.map(s => {
+              const pnl = Computed.linkedPnl(s.id);
+              return `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);cursor:pointer" onclick="openSalePanel('${s.id}')">
+                <div style="flex:1;min-width:0">
+                  <div style="font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(s.title||s.raw_title)}</div>
+                  <div style="font-size:9px;font-family:var(--mono);color:var(--faint);margin-top:1px">${s.raw_date||s.created_at?.slice(0,10)||'—'}</div>
+                </div>
+                <span style="font-size:11px;font-family:var(--mono);font-weight:600;white-space:nowrap;color:${pnl>=0?'var(--green)':'var(--red)'}">${pnl>=0?'+':''}${f$(pnl)}</span>
+              </div>`;
+            }).join('') : '<div style="font-size:11px;color:var(--faint)">No sales yet</div>'}
+          </div>
+
+          <div class="ps">
+            <div class="ps-title">Top Inventory by Cost</div>
+            ${topCards.length ? topCards.map(c => `
+              <div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);cursor:pointer" onclick="openCardPanel('${c.id}')">
+                <div style="flex:1;min-width:0">
+                  <div style="font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(c.display_name||c.raw_title)}</div>
+                  <div style="font-size:9px;font-family:var(--mono);color:var(--faint);margin-top:1px">${c.player||'—'}</div>
+                </div>
+                <span style="font-size:11px;font-family:var(--mono);font-weight:600;white-space:nowrap;color:var(--orange)">${f$(c.cost)}</span>
+              </div>`).join('')
+            : '<div style="font-size:11px;color:var(--faint)">No inventory</div>'}
+          </div>
+
+        </div>
+
+        ${typeBreak.length ? `
+        <div class="ps" style="margin-top:12px">
+          <div class="ps-title">Inventory by Type</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px">
+            ${typeBreak.map(([type, data]) => `
+              <div style="background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);padding:10px 14px;text-align:center;min-width:72px">
+                ${Components.typeBadge(type)}
+                <div style="font-size:15px;font-weight:700;font-family:var(--mono);margin-top:6px">${data.count}</div>
+                <div style="font-size:9px;color:var(--faint);font-family:var(--mono)">${f$(data.cost)}</div>
+              </div>`).join('')}
+          </div>
+        </div>` : ''}
+
       </div>`;
   },
 
