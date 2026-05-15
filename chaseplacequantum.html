@@ -237,7 +237,9 @@ const CFG = {
 };
 
 /* ══════════════════════════════════════════════════════
-   §2  DB  (localStorage — Supabase-ready interface)
+   §2  DB  (localStorage — Supabase-ready async interface)
+   Swap this section for a Supabase implementation later;
+   all callers use await DB.method() already.
 ══════════════════════════════════════════════════════ */
 const DB = {
   KEYS: {
@@ -259,7 +261,7 @@ const DB = {
     try { localStorage.setItem(key, JSON.stringify(val)); } catch(e) { console.error('DB write', key, e); }
   },
 
-  load() {
+  async load() {
     return {
       cards:          DB._read(DB.KEYS.CARDS,          []),
       sales:          DB._read(DB.KEYS.SALES,          []),
@@ -271,24 +273,24 @@ const DB = {
     };
   },
 
-  saveCards(cards) { DB._write(DB.KEYS.CARDS, cards); },
-  saveSales(sales) { DB._write(DB.KEYS.SALES, sales); },
+  async saveCards(cards)        { DB._write(DB.KEYS.CARDS, cards); },
+  async saveSales(sales)        { DB._write(DB.KEYS.SALES, sales); },
 
-  saveCard(card) {
+  async saveCard(card) {
     const cards = DB._read(DB.KEYS.CARDS, []);
     const idx = cards.findIndex(c => c.id === card.id);
     if (idx >= 0) cards[idx] = card; else cards.push(card);
     DB._write(DB.KEYS.CARDS, cards);
   },
 
-  saveSale(sale) {
+  async saveSale(sale) {
     const sales = DB._read(DB.KEYS.SALES, []);
     const idx = sales.findIndex(s => s.id === sale.id);
     if (idx >= 0) sales[idx] = sale; else sales.push(sale);
     DB._write(DB.KEYS.SALES, sales);
   },
 
-  saveMeta(key, value) {
+  async saveMeta(key, value) {
     const meta = DB._read(DB.KEYS.META, {});
     meta[key] = value;
     DB._write(DB.KEYS.META, meta);
@@ -298,19 +300,21 @@ const DB = {
     return DB._read(DB.KEYS.META, {})[key] ?? fallback;
   },
 
-  saveValueLookup(id, data) {
+  async saveValueLookup(id, data) {
     const vl = DB._read(DB.KEYS.VALUE_LOOKUPS, {});
     vl[id] = data;
     DB._write(DB.KEYS.VALUE_LOOKUPS, vl);
   },
 
-  exportBackup() {
+  async exportBackup() {
+    const photoCount = await PhotoDB.countAll().catch(() => 0);
     const data = {
-      version: CFG.VERSION,
-      exported_at: new Date().toISOString(),
-      cards:   DB._read(DB.KEYS.CARDS,  []),
-      sales:   DB._read(DB.KEYS.SALES,  []),
-      meta:    DB._read(DB.KEYS.META,   {}),
+      version:       CFG.VERSION,
+      exported_at:   new Date().toISOString(),
+      photo_count:   photoCount,
+      cards:         DB._read(DB.KEYS.CARDS,  []),
+      sales:         DB._read(DB.KEYS.SALES,  []),
+      meta:          DB._read(DB.KEYS.META,   {}),
       value_lookups: DB._read(DB.KEYS.VALUE_LOOKUPS, {}),
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -318,6 +322,122 @@ const DB = {
     a.href = URL.createObjectURL(blob);
     a.download = `cpq-backup-${new Date().toISOString().slice(0,10)}.json`;
     a.click();
+  },
+
+  async importBackup(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = e => {
+        try {
+          const data = JSON.parse(e.target.result);
+          if (!Array.isArray(data.cards))  throw new Error('Invalid backup: missing cards array');
+          if (!Array.isArray(data.sales))  throw new Error('Invalid backup: missing sales array');
+          DB._write(DB.KEYS.CARDS,  data.cards);
+          DB._write(DB.KEYS.SALES,  data.sales);
+          if (data.meta)          DB._write(DB.KEYS.META, data.meta);
+          if (data.value_lookups) DB._write(DB.KEYS.VALUE_LOOKUPS, data.value_lookups);
+          resolve(data);
+        } catch(err) { reject(err); }
+      };
+      reader.onerror = () => reject(reader.error);
+      reader.readAsText(file);
+    });
+  },
+};
+
+/* ══════════════════════════════════════════════════════
+   §2.5  PhotoDB  (IndexedDB — device-local photo store)
+   Photos live outside the JSON backup (IndexedDB ~50MB+).
+   Card records store photo keys; dataUrls fetched on demand.
+   Phase 2: swap put/getAll to Supabase Storage, no other changes.
+══════════════════════════════════════════════════════ */
+const PhotoDB = {
+  DB_NAME:    'cpq_photos',
+  DB_VERSION: 1,
+  STORE:      'photos',
+  _db:        null,
+
+  async open() {
+    if (this._db) return this._db;
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(this.DB_NAME, this.DB_VERSION);
+      req.onupgradeneeded = e => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains(this.STORE)) {
+          const s = db.createObjectStore(this.STORE, { keyPath: 'key' });
+          s.createIndex('cardId', 'cardId', { unique: false });
+        }
+      };
+      req.onsuccess = e => { this._db = e.target.result; resolve(this._db); };
+      req.onerror   = e => reject(e.target.error);
+    });
+  },
+
+  _key(cardId, index) { return `${cardId}::${index}`; },
+
+  async put(cardId, index, dataUrl) {
+    const db = await this.open();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(this.STORE, 'readwrite');
+      tx.objectStore(this.STORE).put({ key: this._key(cardId, index), cardId, index, dataUrl });
+      tx.oncomplete = () => resolve();
+      tx.onerror    = e => reject(e.target.error);
+    });
+  },
+
+  async getAll(cardId) {
+    const db = await this.open();
+    return new Promise((resolve, reject) => {
+      const tx    = db.transaction(this.STORE, 'readonly');
+      const idx   = tx.objectStore(this.STORE).index('cardId');
+      const range = IDBKeyRange.only(cardId);
+      const req   = idx.getAll(range);
+      req.onsuccess = e => {
+        const rows = e.target.result || [];
+        rows.sort((a, b) => a.index - b.index);
+        resolve(rows.map(r => r.dataUrl));
+      };
+      req.onerror = e => reject(e.target.error);
+    });
+  },
+
+  async delete(cardId, index) {
+    const db = await this.open();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(this.STORE, 'readwrite');
+      tx.objectStore(this.STORE).delete(this._key(cardId, index));
+      tx.oncomplete = () => resolve();
+      tx.onerror    = e => reject(e.target.error);
+    });
+  },
+
+  async deleteAll(cardId) {
+    const db    = await this.open();
+    const keys  = await new Promise((resolve, reject) => {
+      const tx    = db.transaction(this.STORE, 'readonly');
+      const idx   = tx.objectStore(this.STORE).index('cardId');
+      const req   = idx.getAllKeys(IDBKeyRange.only(cardId));
+      req.onsuccess = e => resolve(e.target.result || []);
+      req.onerror   = e => reject(e.target.error);
+    });
+    if (!keys.length) return 0;
+    return new Promise((resolve, reject) => {
+      const tx    = db.transaction(this.STORE, 'readwrite');
+      const store = tx.objectStore(this.STORE);
+      keys.forEach(k => store.delete(k));
+      tx.oncomplete = () => resolve(keys.length);
+      tx.onerror    = e => reject(e.target.error);
+    });
+  },
+
+  async countAll() {
+    const db = await this.open();
+    return new Promise((resolve, reject) => {
+      const tx  = db.transaction(this.STORE, 'readonly');
+      const req = tx.objectStore(this.STORE).count();
+      req.onsuccess = e => resolve(e.target.result);
+      req.onerror   = e => reject(e.target.error);
+    });
   },
 };
 
@@ -361,7 +481,7 @@ const Store = {
     if (idx < 0) return;
     const now = new Date().toISOString();
     this.state.cards[idx] = { ...this.state.cards[idx], ...fields, updated_at: now };
-    DB.saveCard(this.state.cards[idx]);
+    DB.saveCard(this.state.cards[idx]);  // fire-and-forget async persist
   },
 
   patchSale(id, fields) {
@@ -370,6 +490,12 @@ const Store = {
     const now = new Date().toISOString();
     this.state.sales[idx] = { ...this.state.sales[idx], ...fields, updated_at: now };
     DB.saveSale(this.state.sales[idx]);
+  },
+
+  loadFromBackup(data) {
+    if (Array.isArray(data.cards))  this.state.cards  = data.cards;
+    if (Array.isArray(data.sales))  this.state.sales  = data.sales;
+    if (data.value_lookups)         this.state.value_lookups = data.value_lookups;
   },
 };
 
@@ -475,6 +601,37 @@ const Actions = {
   linkCardToSale(cardId, saleId) { toast('Actions.linkCardToSale — coming soon'); },
   importCards(records)    { toast('Actions.importCards — coming soon'); },
   importSales(records)    { toast('Actions.importSales — coming soon'); },
+
+  async attachPhoto(cardId, dataUrl) {
+    const card = Store.getCard(cardId);
+    if (!card) return;
+    const index = (card.photos || []).length;
+    await PhotoDB.put(cardId, index, dataUrl);
+    Store.patchCard(cardId, { photos: [...(card.photos || []), `photo::${cardId}::${index}`] });
+    render();
+    toast('Photo attached');
+  },
+
+  async deletePhoto(cardId, index) {
+    const card = Store.getCard(cardId);
+    if (!card) return;
+    await PhotoDB.delete(cardId, index);
+    const photos = (card.photos || []).filter((_, i) => i !== index);
+    Store.patchCard(cardId, { photos });
+    render();
+    toast('Photo removed');
+  },
+
+  async restoreBackup(file) {
+    try {
+      const data = await DB.importBackup(file);
+      Store.loadFromBackup(data);
+      render();
+      toast(`Restored: ${data.cards.length} cards, ${data.sales.length} sales`);
+    } catch(err) {
+      toast(`Restore failed: ${err.message}`);
+    }
+  },
 };
 
 /* ══════════════════════════════════════════════════════
@@ -649,25 +806,62 @@ const Pages = {
   },
 
   import() {
+    const cards = Store.get('cards').length;
+    const sales = Store.get('sales').length;
     return `
       <div class="topbar"><div class="pg-title">Import</div></div>
       <div class="content">
-        <div class="alert warn">Import UI — coming in Step 3 (Parsers).</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
-          <div style="background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:18px">
-            <div style="font-weight:700;margin-bottom:8px">📦 Import Cards</div>
-            <p style="font-size:12px;color:var(--dim);margin-bottom:12px">Paste eBay order CSV or COMC export to add cards to inventory.</p>
-            <button class="btn ghost sm" disabled>Coming Soon</button>
-          </div>
-          <div style="background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:18px">
-            <div style="font-weight:700;margin-bottom:8px">💰 Import Sales</div>
-            <p style="font-size:12px;color:var(--dim);margin-bottom:12px">Paste eBay sold listings CSV to record sales.</p>
-            <button class="btn ghost sm" disabled>Coming Soon</button>
+
+        <!-- ── Backup / Restore ── -->
+        <div style="margin-bottom:24px">
+          <div style="font-size:11px;font-family:var(--mono);color:var(--faint);letter-spacing:1px;text-transform:uppercase;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid var(--border)">Backup & Restore</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+
+            <div style="background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:18px">
+              <div style="font-weight:700;margin-bottom:6px">⬇ Export Backup</div>
+              <p style="font-size:12px;color:var(--dim);margin-bottom:14px">
+                Save all ${cards} cards and ${sales} sales to a JSON file.
+                Photos (IndexedDB) are <em style="color:var(--orange)">not</em> included — they're device-local.
+              </p>
+              <button class="btn sm" onclick="DB.exportBackup()">Download JSON Backup</button>
+            </div>
+
+            <div style="background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:18px">
+              <div style="font-weight:700;margin-bottom:6px">⬆ Restore Backup</div>
+              <p style="font-size:12px;color:var(--dim);margin-bottom:10px">
+                Load a CPQ backup JSON. This <strong style="color:var(--red)">replaces</strong> all current data.
+              </p>
+              <div id="restore-drop" style="border:2px dashed var(--border2);border-radius:var(--r2);padding:16px;text-align:center;cursor:pointer;transition:border-color .15s"
+                onclick="document.getElementById('restore-file').click()"
+                ondragover="event.preventDefault();this.style.borderColor='var(--gold)'"
+                ondragleave="this.style.borderColor=''"
+                ondrop="_handleRestoreDrop(event)">
+                <div style="font-size:22px;margin-bottom:6px">📂</div>
+                <div style="font-size:12px;color:var(--dim);font-family:var(--mono)">Drop .json file or click to browse</div>
+              </div>
+              <input type="file" id="restore-file" accept=".json" style="display:none" onchange="_handleRestoreFile(this)">
+            </div>
+
           </div>
         </div>
-        <div style="margin-top:16px;text-align:right">
-          <button class="btn sm" onclick="DB.exportBackup()">⬇ Export Backup</button>
+
+        <!-- ── CSV Import (Step 3) ── -->
+        <div>
+          <div style="font-size:11px;font-family:var(--mono);color:var(--faint);letter-spacing:1px;text-transform:uppercase;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid var(--border)">CSV Import — Step 3</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+            <div style="background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:18px">
+              <div style="font-weight:700;margin-bottom:6px">📦 Import Cards</div>
+              <p style="font-size:12px;color:var(--dim);margin-bottom:12px">eBay order CSV or COMC export → inventory cards with parsed fields.</p>
+              <button class="btn ghost sm" disabled>Coming in Step 3</button>
+            </div>
+            <div style="background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:18px">
+              <div style="font-weight:700;margin-bottom:6px">💰 Import Sales</div>
+              <p style="font-size:12px;color:var(--dim);margin-bottom:12px">eBay sold listings CSV → sale records with auto-linking.</p>
+              <button class="btn ghost sm" disabled>Coming in Step 3</button>
+            </div>
+          </div>
         </div>
+
       </div>`;
   },
 
@@ -948,7 +1142,7 @@ function openAddSalePanel() {
 }
 
 /* ── Quick-add helpers (minimal, real implementation in Step 6) ── */
-function _quickAddCard() {
+async function _quickAddCard() {
   const raw  = document.getElementById('rc-title')?.value?.trim();
   const cost = parseFloat(document.getElementById('rc-cost')?.value) || 0;
   const src  = document.getElementById('rc-source')?.value?.trim();
@@ -967,13 +1161,13 @@ function _quickAddCard() {
   };
   const cards = [...Store.get('cards'), card];
   Store.setCards(cards);
-  DB.saveCards(cards);
+  await DB.saveCards(cards);
   closePanel();
   render();
   toast('Card added');
 }
 
-function _quickAddSale() {
+async function _quickAddSale() {
   const title    = document.getElementById('as-title')?.value?.trim();
   const price    = parseFloat(document.getElementById('as-price')?.value) || 0;
   const platform = document.getElementById('as-platform')?.value?.trim();
@@ -995,7 +1189,7 @@ function _quickAddSale() {
   };
   const sales = [...Store.get('sales'), sale];
   Store.setSales(sales);
-  DB.saveSales(sales);
+  await DB.saveSales(sales);
   closePanel();
   render();
   toast('Sale added');
@@ -1008,12 +1202,58 @@ function _panelField(label, val) {
   </div>`;
 }
 
+/* ── Restore helpers (called from Import page) ── */
+function _handleRestoreFile(input) {
+  const file = input.files?.[0];
+  if (file) _confirmRestore(file);
+  input.value = '';
+}
+
+function _handleRestoreDrop(event) {
+  event.preventDefault();
+  document.getElementById('restore-drop').style.borderColor = '';
+  const file = event.dataTransfer.files?.[0];
+  if (file) _confirmRestore(file);
+}
+
+function _confirmRestore(file) {
+  const cards = Store.get('cards').length;
+  const sales = Store.get('sales').length;
+  if (cards + sales > 0) {
+    if (!confirm(`This will replace your current ${cards} cards and ${sales} sales with the backup. Continue?`)) return;
+  }
+  Actions.restoreBackup(file);
+}
+
+/* ── Photo input trigger (called from card panel) ── */
+function _triggerPhotoCapture(cardId) {
+  const inp = document.createElement('input');
+  inp.type = 'file';
+  inp.accept = 'image/*';
+  inp.capture = 'environment';
+  inp.onchange = async e => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const dataUrl = await new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = ev => res(ev.target.result);
+      r.onerror = () => rej(r.error);
+      r.readAsDataURL(file);
+    });
+    await Actions.attachPhoto(cardId, dataUrl);
+  };
+  inp.click();
+}
+
 /* ── Boot ── */
-document.addEventListener('DOMContentLoaded', () => {
-  const data = DB.load();
+document.addEventListener('DOMContentLoaded', async () => {
+  const data = await DB.load();
   Store.setCards(data.cards);
   Store.setSales(data.sales);
   Store.patch('value_lookups', data.value_lookups);
+
+  // Warm up IndexedDB connection in background
+  PhotoDB.open().catch(err => console.warn('PhotoDB init:', err));
 
   render();
 });
