@@ -2776,9 +2776,109 @@ function _addReceiveCard() {
   });
 }
 
+/* ── Legacy migration (cardbiz → CPQ) ── */
+function _migrateFromLegacy() {
+  let purchases = [], sales = [], purchaseEdits = {}, saleEdits = {};
+  try { purchases     = JSON.parse(localStorage.getItem('cb_purchases')     || '[]'); } catch {}
+  try { sales         = JSON.parse(localStorage.getItem('cb_sales')         || '[]'); } catch {}
+  try { purchaseEdits = JSON.parse(localStorage.getItem('cb_purchaseEdits') || '{}'); } catch {}
+  try { saleEdits     = JSON.parse(localStorage.getItem('cb_saleEdits')     || '{}'); } catch {}
+
+  if (!purchases.length && !sales.length) return null;
+
+  const now = new Date().toISOString();
+
+  const cards = purchases.map(p => {
+    const e = purchaseEdits[p.id] || {};
+    const m = { ...p, ...e };
+    return {
+      id:           p.id,
+      raw_title:    m.name || '',
+      display_name: m.name || '',
+      player:       m.player    || null,
+      year:         m.year      || null,
+      set:          m.set       || null,
+      variation:    m.variation || null,
+      serial:       m.serial    || null,
+      grade:        m.grade     || null,
+      is_auto:      !!m.is_auto,
+      is_rc:        !!m.is_rc,
+      is_lot:       !!m.is_lot,
+      lot_qty:      m.lotQty    || 1,
+      type:         m.type      || null,
+      cost:         parseFloat(m.cost) || 0,
+      raw_cost:     String(m.cost || 0),
+      source:       m.seller    || null,
+      order_num:    m.orderNum  || null,
+      brand:        m.brand     || null,
+      notes:        m.notes     || '',
+      raw_date:     m.date      || null,
+      photos:       [],
+      created_at:   now,
+      updated_at:   now,
+    };
+  });
+
+  const migSales = sales.map(s => {
+    const e = saleEdits[s.id] || {};
+    const m = { ...s, ...e };
+    // old schema: linkedPids (array, in edits) or linkedPid (singular, in base)
+    const linkedArr = Array.isArray(m.linkedPids) ? m.linkedPids
+      : (m.linkedPid ? [m.linkedPid] : []);
+    return {
+      id:             s.id,
+      raw_title:      m.title    || '',
+      title:          m.title    || '',
+      player:         m.player   || null,
+      year:           m.year     || null,
+      set:            m.set      || null,
+      variation:      m.variation || null,
+      serial:         m.serial   || null,
+      grade:          m.grade    || null,
+      is_auto:        !!m.is_auto,
+      type:           m.type     || null,
+      price:          parseFloat(m.price) || 0,
+      raw_price:      String(m.price || 0),
+      fees:           parseFloat(m.fees)  || 0,
+      buyer_ship:     parseFloat(m.ship || m.buyer_ship) || 0,
+      platform:       m.platform || null,
+      buyer:          m.buyer    || null,
+      raw_date:       m.date     || null,
+      order_num:      m.itemNum  || m.orderNum || null,
+      qty:            m.qty      || 1,
+      linked_card_ids: linkedArr.filter(Boolean),
+      photos:         [],
+      notes:          m.notes    || '',
+      created_at:     now,
+      updated_at:     now,
+    };
+  });
+
+  let custom_players = [];
+  try { custom_players = JSON.parse(localStorage.getItem('cb_custom_players') || '[]'); } catch {}
+
+  return { cards, sales: migSales, custom_players };
+}
+
 /* ── Boot ── */
 document.addEventListener('DOMContentLoaded', async () => {
-  const data = await DB.load();
+  let data = await DB.load();
+
+  // One-time migration: if new keys are empty but old cardbiz keys have data, migrate them
+  let migratedMsg = '';
+  if (!data.cards.length && !data.sales.length) {
+    const leg = _migrateFromLegacy();
+    if (leg && (leg.cards.length || leg.sales.length)) {
+      data.cards          = leg.cards;
+      data.sales          = leg.sales;
+      data.custom_players = leg.custom_players;
+      await DB.saveCards(leg.cards);
+      await DB.saveSales(leg.sales);
+      if (leg.custom_players.length) DB._write(DB.KEYS.CUSTOM_PLAYERS, leg.custom_players);
+      migratedMsg = `Migrated ${leg.cards.length} cards + ${leg.sales.length} sales from legacy data`;
+    }
+  }
+
   Store.setCards(data.cards);
   Store.setSales(data.sales);
   Store.patch('value_lookups',   data.value_lookups   || {});
@@ -2789,6 +2889,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   PhotoDB.open().catch(err => console.warn('PhotoDB init:', err));
 
   render();
+  if (migratedMsg) toast(migratedMsg, 5000);
 });
 </script>
 </body>
