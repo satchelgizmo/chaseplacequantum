@@ -440,6 +440,16 @@ const PhotoDB = {
       req.onerror   = e => reject(e.target.error);
     });
   },
+
+  async clearAll() {
+    const db = await this.open();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(this.STORE, 'readwrite');
+      tx.objectStore(this.STORE).clear();
+      tx.oncomplete = () => resolve();
+      tx.onerror    = e => reject(e.target.error);
+    });
+  },
 };
 
 /* ══════════════════════════════════════════════════════
@@ -1789,21 +1799,184 @@ const Pages = {
   },
 
   analytics() {
+    const cards    = Store.get('cards');
+    const sales    = Store.get('sales');
+    const sold     = Computed.soldCardIds();
+    const revenue  = Computed.totalRevenue();
+    const fees     = Computed.totalFees();
+    const cogs     = cards.filter(c => sold.has(c.id)).reduce((s,c) => s+(c.cost||0), 0);
+    const profit   = Computed.totalProfit();
+    const margin   = revenue > 0 ? (profit / revenue * 100) : 0;
+    const avgProfit= sales.length ? profit / sales.length : 0;
+
+    // Platform breakdown
+    const platMap = {};
+    sales.forEach(s => {
+      const p = s.platform || 'Unknown';
+      if (!platMap[p]) platMap[p] = { rev:0, pnl:0, n:0 };
+      platMap[p].rev += s.price || 0;
+      platMap[p].pnl += Computed.linkedPnl(s.id);
+      platMap[p].n++;
+    });
+    const plats = Object.entries(platMap).sort((a,b) => b[1].rev - a[1].rev);
+
+    // Best sold by profit
+    const topSold = cards
+      .filter(c => sold.has(c.id))
+      .map(c => { const fin = Computed.cardFinancials(c.id); return {...c, _pnl: fin?.pnl||0}; })
+      .sort((a,b) => b._pnl - a._pnl)
+      .slice(0, 8);
+
+    // Unlinked sales
+    const unlinked = sales.filter(s => !(s.linked_card_ids||[]).length);
+
     return `
       <div class="topbar"><div class="pg-title">Analytics</div></div>
       <div class="content">
-        <div class="alert info">Analytics charts — coming in Step 5.</div>
+
+        ${Components.finGrid([
+          { label:'REVENUE', value: f$(revenue),                        color:'var(--green)'  },
+          { label:'FEES',    value: f$(fees),                           color:'var(--red)'    },
+          { label:'COGS',    value: f$(cogs),                           color:'var(--orange)' },
+          { label:'PROFIT',  value: (profit>=0?'+':'')+f$(profit),      color: profit>=0?'var(--green)':'var(--red)' },
+        ])}
+        <div style="font-size:10px;font-family:var(--mono);color:var(--faint);margin-top:6px;display:flex;gap:16px">
+          <span>Margin: <span style="color:var(--text)">${margin.toFixed(1)}%</span></span>
+          <span>Avg profit/sale: <span style="color:var(--text)">${avgProfit>=0?'+':''}${f$(avgProfit)}</span></span>
+          <span>Sold cards: <span style="color:var(--text)">${sold.size}</span></span>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px">
+
+          <div class="ps">
+            <div class="ps-title">By Platform</div>
+            ${plats.length ? `
+            <table style="width:100%;border-collapse:collapse;font-size:11px">
+              <thead><tr style="border-bottom:1px solid var(--border)">
+                <th style="text-align:left;padding:4px 0;color:var(--faint);font-family:var(--mono);font-size:9px;letter-spacing:.8px;font-weight:400">PLATFORM</th>
+                <th style="text-align:right;padding:4px 4px;color:var(--faint);font-family:var(--mono);font-size:9px;letter-spacing:.8px;font-weight:400">SALES</th>
+                <th style="text-align:right;padding:4px 4px;color:var(--faint);font-family:var(--mono);font-size:9px;letter-spacing:.8px;font-weight:400">REVENUE</th>
+                <th style="text-align:right;padding:4px 0;color:var(--faint);font-family:var(--mono);font-size:9px;letter-spacing:.8px;font-weight:400">PROFIT</th>
+              </tr></thead>
+              <tbody>
+                ${plats.map(([plat, d]) => `
+                <tr style="border-bottom:1px solid var(--border)">
+                  <td style="padding:6px 0;font-weight:600">${esc(plat)}</td>
+                  <td style="padding:6px 4px;text-align:right;font-family:var(--mono);color:var(--dim)">${d.n}</td>
+                  <td style="padding:6px 4px;text-align:right;font-family:var(--mono);color:var(--green)">${f$(d.rev)}</td>
+                  <td style="padding:6px 0;text-align:right;font-family:var(--mono);color:${d.pnl>=0?'var(--green)':'var(--red)'}">${d.pnl>=0?'+':''}${f$(d.pnl)}</td>
+                </tr>`).join('')}
+              </tbody>
+            </table>` : '<div style="font-size:11px;color:var(--faint)">No sales yet</div>'}
+          </div>
+
+          <div class="ps">
+            <div class="ps-title">Best Sold by Profit</div>
+            ${topSold.length ? topSold.map(c => `
+              <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);cursor:pointer" onclick="openCardPanel('${c.id}')">
+                <div style="flex:1;min-width:0">
+                  <div style="font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(c.display_name||c.raw_title)}</div>
+                  <div style="font-size:9px;font-family:var(--mono);color:var(--faint);margin-top:1px">${c.player||'—'}</div>
+                </div>
+                <span style="font-size:11px;font-family:var(--mono);font-weight:600;white-space:nowrap;color:${c._pnl>=0?'var(--green)':'var(--red)'}">${c._pnl>=0?'+':''}${f$(c._pnl)}</span>
+              </div>`).join('')
+            : '<div style="font-size:11px;color:var(--faint)">No sold cards yet</div>'}
+          </div>
+
+        </div>
+
+        ${unlinked.length ? `
+        <div class="ps" style="margin-top:12px">
+          <div class="ps-title" style="display:flex;align-items:center">
+            Unlinked Sales <span style="color:var(--faint);font-weight:400;margin-left:4px">(${unlinked.length})</span>
+            <button class="btn xs" style="margin-left:auto" onclick="Actions.autoLinkAll();render()">⚡ Auto-Link All</button>
+          </div>
+          ${unlinked.slice(0, 10).map(s => `
+            <div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);margin-bottom:5px;cursor:pointer" onclick="openSalePanel('${s.id}')">
+              <div style="flex:1;min-width:0">
+                <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(s.title||s.raw_title)}</div>
+                <div style="font-size:10px;font-family:var(--mono);color:var(--dim);margin-top:1px">${f$(s.price)} · ${s.raw_date||s.created_at?.slice(0,10)||'—'}</div>
+              </div>
+              <span style="font-size:10px;font-family:var(--mono);background:var(--red);color:#fff;padding:2px 7px;border-radius:var(--r2)">unlinked</span>
+            </div>`).join('')}
+          ${unlinked.length > 10 ? `<div style="font-size:11px;color:var(--faint);margin-top:4px">…and ${unlinked.length-10} more</div>` : ''}
+        </div>` : ''}
+
       </div>`;
   },
 
   settings() {
+    const customPlayers = [...(Store.get('custom_players') || [])].sort();
+    const customTypes   = [...(Store.get('custom_types')   || [])].sort();
+    const pageSize      = Store.get('page_size') || 50;
+    const cardCount     = Store.get('cards').length;
+    const salesCount    = Store.get('sales').length;
+    const photoCount    = Store.get('cards').reduce((s, c) => s + (c.photos||[]).length, 0);
+    let lsBytes = 0;
+    try { for (const k of Object.keys(localStorage)) { if (k.startsWith('cpq_')) lsBytes += (localStorage.getItem(k)||'').length * 2; } } catch {}
+    const lsKb = (lsBytes / 1024).toFixed(1);
+
     return `
       <div class="topbar"><div class="pg-title">Settings</div></div>
       <div class="content">
-        <div class="alert info">Settings page — coming in Step 7.</div>
-        <div style="margin-top:12px">
-          <button class="btn sm" onclick="DB.exportBackup()">⬇ Export JSON Backup</button>
+
+        <div class="ps">
+          <div class="ps-title">Data</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <button class="btn sm" onclick="DB.exportBackup()">⬇ Export Backup</button>
+            <button class="btn sm" onclick="nav('import')">⬆ Import / Restore</button>
+            <button class="btn red sm" style="margin-left:auto" onclick="_clearAllData()">⚠ Clear All Data</button>
+          </div>
+          <div style="font-size:10px;font-family:var(--mono);color:var(--faint);margin-top:8px">${cardCount} cards · ${salesCount} sales · ${photoCount} photos · ${lsKb} KB localStorage</div>
         </div>
+
+        <div class="ps">
+          <div class="ps-title">Display</div>
+          <div style="display:flex;align-items:center;gap:12px">
+            <label style="font-size:12px;color:var(--dim)">Cards per page</label>
+            <select class="field-input" style="width:auto;padding:4px 8px" onchange="Store.patch('page_size',parseInt(this.value));render()">
+              ${[25, 50, 100, 250].map(n => `<option value="${n}"${pageSize===n?' selected':''}>${n}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+
+        <div class="ps">
+          <div class="ps-title">Custom Players</div>
+          <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Names not in the built-in library. Added automatically from CSV imports; manage them here.</p>
+          <div style="display:flex;gap:8px;margin-bottom:10px">
+            <input class="field-input" type="text" id="cfg-player-input" placeholder="Player name…" style="flex:1" onkeydown="if(event.key==='Enter')_addCustomPlayer()">
+            <button class="btn sm" onclick="_addCustomPlayer()">Add</button>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px">
+            ${customPlayers.length
+              ? customPlayers.map(p => `<span style="display:inline-flex;align-items:center;gap:5px;background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);padding:3px 10px;font-size:11px">${esc(p)}<button data-v="${esc(p)}" onclick="_removeCustomPlayer(this.dataset.v)" style="background:none;border:none;color:var(--faint);cursor:pointer;padding:0;font-size:14px;line-height:1;margin-left:3px">×</button></span>`).join('')
+              : '<span style="font-size:11px;color:var(--faint)">None yet</span>'}
+          </div>
+        </div>
+
+        <div class="ps">
+          <div class="ps-title">Custom Card Types</div>
+          <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Extends the built-in types: ${esc(CFG.CARD_TYPES.join(', '))}.</p>
+          <div style="display:flex;gap:8px;margin-bottom:10px">
+            <input class="field-input" type="text" id="cfg-type-input" placeholder="Type name…" style="flex:1" onkeydown="if(event.key==='Enter')_addCustomType()">
+            <button class="btn sm" onclick="_addCustomType()">Add</button>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px">
+            ${customTypes.length
+              ? customTypes.map(t => `<span style="display:inline-flex;align-items:center;gap:5px;background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);padding:3px 10px;font-size:11px">${esc(t)}<button data-v="${esc(t)}" onclick="_removeCustomType(this.dataset.v)" style="background:none;border:none;color:var(--faint);cursor:pointer;padding:0;font-size:14px;line-height:1;margin-left:3px">×</button></span>`).join('')
+              : '<span style="font-size:11px;color:var(--faint)">None yet</span>'}
+          </div>
+        </div>
+
+        <div class="ps">
+          <div class="ps-title">About</div>
+          <div style="font-size:12px;font-family:var(--mono);color:var(--dim);line-height:2">
+            <div>${esc(CFG.APP)} <span style="color:var(--text)">v${esc(CFG.VERSION)}</span></div>
+            <div>${cardCount} card${cardCount!==1?'s':''} · ${salesCount} sale${salesCount!==1?'s':''} · ${photoCount} photo${photoCount!==1?'s':''}</div>
+            <div>localStorage used: <span style="color:var(--text)">${lsKb} KB</span></div>
+          </div>
+        </div>
+
       </div>`;
   },
 
@@ -2508,6 +2681,60 @@ function _triggerPhotoCapture(cardId) {
   inp.click();
 }
 
+/* ── Settings helpers ── */
+function _addCustomPlayer() {
+  const inp = document.getElementById('cfg-player-input');
+  const val = inp?.value?.trim();
+  if (!val) { toast('Enter a name'); return; }
+  const arr = [...new Set([...(Store.get('custom_players')||[]), val])];
+  Store.patch('custom_players', arr);
+  DB._write(DB.KEYS.CUSTOM_PLAYERS, arr);
+  if (inp) inp.value = '';
+  render();
+  toast(`Added: ${val}`);
+}
+
+function _removeCustomPlayer(name) {
+  const arr = (Store.get('custom_players') || []).filter(p => p !== name);
+  Store.patch('custom_players', arr);
+  DB._write(DB.KEYS.CUSTOM_PLAYERS, arr);
+  render();
+  toast('Removed');
+}
+
+function _addCustomType() {
+  const inp = document.getElementById('cfg-type-input');
+  const val = inp?.value?.trim();
+  if (!val) { toast('Enter a type'); return; }
+  const arr = [...new Set([...(Store.get('custom_types')||[]), val])];
+  Store.patch('custom_types', arr);
+  DB._write(DB.KEYS.CUSTOM_TYPES, arr);
+  if (inp) inp.value = '';
+  render();
+  toast(`Added: ${val}`);
+}
+
+function _removeCustomType(type) {
+  const arr = (Store.get('custom_types') || []).filter(t => t !== type);
+  Store.patch('custom_types', arr);
+  DB._write(DB.KEYS.CUSTOM_TYPES, arr);
+  render();
+  toast('Removed');
+}
+
+async function _clearAllData() {
+  const cc = Store.get('cards').length, sc = Store.get('sales').length;
+  if (!confirm(`Permanently delete all ${cc} cards and ${sc} sales? This cannot be undone.`)) return;
+  const ids = Store.get('cards').map(c => c.id);
+  Store.setCards([]);
+  Store.setSales([]);
+  await DB.saveCards([]);
+  await DB.saveSales([]);
+  await Promise.all(ids.map(id => PhotoDB.deleteAll(id).catch(()=>{})));
+  render();
+  toast('All data cleared');
+}
+
 /* ── Receive page helpers ── */
 function _rcPreview2(title) {
   const el = document.getElementById('rcv-preview');
@@ -2554,7 +2781,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   const data = await DB.load();
   Store.setCards(data.cards);
   Store.setSales(data.sales);
-  Store.patch('value_lookups', data.value_lookups);
+  Store.patch('value_lookups',   data.value_lookups   || {});
+  Store.patch('custom_players',  data.custom_players  || []);
+  Store.patch('custom_types',    data.custom_types    || []);
 
   // Warm up IndexedDB connection in background
   PhotoDB.open().catch(err => console.warn('PhotoDB init:', err));
