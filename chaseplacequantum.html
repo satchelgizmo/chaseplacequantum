@@ -1078,7 +1078,34 @@ const Actions = {
   addSale(fields)         { toast('Actions.addSale — coming soon'); },
   updateSale(id, fields)  { Store.patchSale(id, fields); render(); toast('Saved'); },
   deleteSale(id)          { toast('Actions.deleteSale — coming soon'); },
-  linkCardToSale(cardId, saleId) { toast('Actions.linkCardToSale — coming soon'); },
+  deleteCard(id) {
+    const cards = Store.get('cards').filter(c => c.id !== id);
+    Store.setCards(cards);
+    DB.saveCards(cards);
+    PhotoDB.deleteAll(id).catch(() => {});
+    closePanel();
+    render();
+    toast('Card deleted');
+  },
+
+  linkCardToSale(cardId, saleId) {
+    const sale = Store.getSale(saleId);
+    if (!sale) return;
+    const ids = new Set(sale.linked_card_ids || []);
+    ids.add(cardId);
+    Store.patchSale(saleId, { linked_card_ids: [...ids] });
+    render();
+    toast('Linked');
+  },
+
+  unlinkCardFromSale(cardId, saleId) {
+    const sale = Store.getSale(saleId);
+    if (!sale) return;
+    const ids = (sale.linked_card_ids || []).filter(id => id !== cardId);
+    Store.patchSale(saleId, { linked_card_ids: ids });
+    render();
+    toast('Unlinked');
+  },
   async importCards(drafts) {
     if (!drafts || !drafts.length) return;
     const now = new Date().toISOString();
@@ -1137,42 +1164,111 @@ const Actions = {
 };
 
 /* ══════════════════════════════════════════════════════
-   §7  COMPONENTS  (stubs — implemented in Step 4/5)
+   §7  COMPONENTS
 ══════════════════════════════════════════════════════ */
 const Components = {
+
+  parsedTags(card) {
+    const t = [];
+    if (card.year)      t.push(`<span class="pt year">${esc(card.year)}</span>`);
+    if (card.set)       t.push(`<span class="pt set">${esc(card.set)}</span>`);
+    if (card.variation) t.push(`<span class="pt var">${esc(card.variation)}</span>`);
+    if (card.serial)    t.push(`<span class="pt serial">/${esc(card.serial)}</span>`);
+    if (card.grade)     t.push(`<span class="pt grade">${esc(card.grade)}</span>`);
+    if (card.is_auto)   t.push(`<span class="pt auto">AUTO</span>`);
+    if (card.is_rc)     t.push(`<span class="pt rc">RC</span>`);
+    return t.length ? `<div class="ptags">${t.join('')}</div>` : '';
+  },
+
+  typeBadge(type) {
+    if (!type) return '';
+    const cls = type.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9-]/g,'');
+    return `<span class="tb ${cls}">${esc(type)}</span>`;
+  },
+
+  finBadge(fin) {
+    if (!fin) return '';
+    if (fin.isSold) return `<span class="sb sold">SOLD</span>`;
+    return `<span class="sb stock">IN STOCK</span>`;
+  },
+
   cardRow(card) {
-    const fin = Computed.cardFinancials(card.id);
+    const fin    = Computed.cardFinancials(card.id);
+    const isSold = fin?.isSold;
+    const mkt    = fin?.mktVal || 0;
+    const pnl    = fin?.pnl ?? 0;
     return `<tr onclick="openCardPanel('${card.id}')">
-      <td><span style="font-weight:600">${esc(card.display_name || card.raw_title || card.id)}</span></td>
+      <td class="cic"><div class="ctp">🃏</div></td>
+      <td>
+        <div class="cn">${esc(card.display_name || card.raw_title || card.id)}</div>
+        ${Components.parsedTags(card)}
+      </td>
+      <td>${Components.typeBadge(card.type)}</td>
       <td><span class="pr o">${f$(card.cost)}</span></td>
-      <td><span class="pr ${fin?.isSold ? 'd' : 'g'}">${fin?.isSold ? 'sold' : f$(fin?.mktVal)}</span></td>
-      <td><span class="sb ${fin?.isSold ? 'sold' : 'stock'}">${fin?.isSold ? 'SOLD' : 'IN STOCK'}</span></td>
+      <td>${mkt ? `<span class="pr ${isSold?'d':'g'}">${isSold?'—':f$(mkt)}</span>` : `<span class="pr d">—</span>`}</td>
+      <td>${Components.finBadge(fin)}</td>
     </tr>`;
   },
 
   saleRow(sale) {
     const pnl = Computed.linkedPnl(sale.id);
     const cls = pnl >= 0 ? 'g' : 'r';
+    const linked = (sale.linked_card_ids||[]).length;
     return `<tr onclick="openSalePanel('${sale.id}')">
-      <td><span style="font-weight:600">${esc(sale.title || sale.raw_title || sale.id)}</span></td>
+      <td>
+        <div class="cn">${esc(sale.title || sale.raw_title || sale.id)}</div>
+        ${sale.player ? `<div class="cm">${esc(sale.player)}${sale.year?' · '+esc(sale.year):''}${sale.set?' '+esc(sale.set):''}</div>` : ''}
+      </td>
+      <td>${sale.platform ? `<span style="font-size:10px;font-family:var(--mono);color:var(--dim)">${esc(sale.platform)}</span>` : ''}</td>
       <td><span class="pr g">${f$(sale.price)}</span></td>
-      <td><span class="pr ${cls}">${pnl >= 0 ? '+' : ''}${f$(pnl)}</span></td>
-      <td><span class="pr d">${sale.created_at ? sale.created_at.slice(0,10) : '—'}</span></td>
+      <td><span class="pr ${cls}">${pnl>=0?'+':''}${f$(pnl)}</span></td>
+      <td><span class="${linked?'sb linked':'sb unlinked'}">${linked ? linked+' card'+(linked>1?'s':'') : 'unlinked'}</span></td>
+      <td><span class="pr d">${sale.raw_date||sale.created_at?.slice(0,10)||'—'}</span></td>
     </tr>`;
   },
 
   statGrid() {
-    const inv   = Computed.invCount();
-    const cost  = Computed.totalCostBasis();
-    const rev   = Computed.totalRevenue();
+    const inv    = Computed.invCount();
+    const cost   = Computed.totalCostBasis();
+    const rev    = Computed.totalRevenue();
     const profit = Computed.totalProfit();
-    const cls   = profit >= 0 ? 'g' : 'r';
+    const cls    = profit >= 0 ? 'g' : 'r';
     return `<div class="sg">
       <div class="sc"><div class="sc-lbl">In Inventory</div><div class="sc-val o">${inv}</div></div>
       <div class="sc"><div class="sc-lbl">Cost Basis</div><div class="sc-val">${f$(cost)}</div></div>
       <div class="sc"><div class="sc-lbl">Total Revenue</div><div class="sc-val g">${f$(rev)}</div></div>
-      <div class="sc"><div class="sc-lbl">Net Profit</div><div class="sc-val ${cls}">${profit >= 0 ? '+' : ''}${f$(profit)}</div></div>
+      <div class="sc"><div class="sc-lbl">Net Profit</div><div class="sc-val ${cls}">${profit>=0?'+':''}${f$(profit)}</div></div>
     </div>`;
+  },
+
+  /* 3-col financial mini-grid used in panels */
+  finGrid(cells) {
+    return `<div style="display:grid;grid-template-columns:repeat(${cells.length},1fr);gap:8px">
+      ${cells.map(({label,value,color})=>`
+        <div style="background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);padding:10px;text-align:center">
+          <div style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:1px;margin-bottom:4px">${label}</div>
+          <div style="font-size:15px;font-weight:700;font-family:var(--mono)${color?';color:'+color:''}">${value}</div>
+        </div>`).join('')}
+    </div>`;
+  },
+
+  /* Editable inline field for panels */
+  editField(label, field, value, opts={}) {
+    const { type='text', cardId, saleId, mono=false } = opts;
+    const target = cardId ? `Store.patchCard('${cardId}',{${field}:this.value});updateSidebar()` :
+                   saleId ? `Store.patchSale('${saleId}',{${field}:this.value})` : '';
+    return `<div class="field-item">
+      <label>${esc(label)}</label>
+      <input class="field-input${mono?' mono':''}" type="${type}" value="${esc(value??'')}"
+        onchange="${target}" placeholder="—">
+    </div>`;
+  },
+
+  checkField(label, field, checked, opts={}) {
+    const { cardId, saleId } = opts;
+    const target = cardId ? `Store.patchCard('${cardId}',{${field}:this.checked})` :
+                   saleId ? `Store.patchSale('${saleId}',{${field}:this.checked})` : '';
+    return `<label class="cb-row"><input type="checkbox" ${checked?'checked':''} onchange="${target}"> ${esc(label)}</label>`;
   },
 };
 
@@ -1195,19 +1291,29 @@ const Pages = {
   },
 
   inventory() {
-    const { q, type, status } = Store.get('filters');
+    const filters = Store.get('filters');
+    const { q, type, status } = filters;
+    const auto_only = filters.auto_only || false;
+    const rc_only   = filters.rc_only   || false;
     const sort  = Store.get('sort');
     const pageN = Store.get('page_num');
     const pageS = Store.get('page_size');
     const sold  = Computed.soldCardIds();
 
     let list = Store.get('cards').filter(c => {
-      if (q && !JSON.stringify(c).toLowerCase().includes(q.toLowerCase())) return false;
-      if (type && c.type !== type) return false;
+      if (q) {
+        const hay = [c.display_name,c.raw_title,c.player,c.set,c.variation,c.seller,c.year,c.grade,c.type,c.serial,c.order_num].join(' ').toLowerCase();
+        if (!hay.includes(q.toLowerCase())) return false;
+      }
+      if (type   && c.type     !== type)   return false;
       if (status === 'sold'  && !sold.has(c.id)) return false;
       if (status === 'stock' &&  sold.has(c.id)) return false;
+      if (auto_only && !c.is_auto) return false;
+      if (rc_only   && !c.is_rc)  return false;
       return true;
     });
+
+    const sh = f => `<th class="sh${sort.field===f?' on':''}" onclick="setSort('${f}')">${{display_name:'Card',cost:'Cost',player:'Player',created_at:'Added'}[f]||f}${sort.field===f?(sort.dir==='asc'?' ↑':' ↓'):''}</th>`;
 
     list = [...list].sort((a, b) => {
       const av = a[sort.field] ?? '', bv = b[sort.field] ?? '';
@@ -1218,34 +1324,42 @@ const Pages = {
     const page  = list.slice(pageN * pageS, (pageN + 1) * pageS);
     const pages = Math.ceil(total / pageS);
 
+    const typeOpts = ['', ...CFG.CARD_TYPES].map(t =>
+      `<option value="${esc(t)}" ${type===t?'selected':''}>${t||'All Types'}</option>`).join('');
+
     const rows = page.length
       ? page.map(c => Components.cardRow(c)).join('')
-      : `<tr><td colspan="4"><div class="empty"><div class="ei">▦</div>No cards found</div></td></tr>`;
+      : `<tr><td colspan="6"><div class="empty"><div class="ei">▦</div>No cards match your filters</div></td></tr>`;
 
     return `
       <div class="topbar">
         <div class="pg-title">Inventory</div>
-        <span class="pg-sub"><span class="stat-num">${total}</span> cards</span>
+        <span class="pg-sub"><span class="stat-num">${total}</span> of ${Store.get('cards').length} cards</span>
         <button class="btn pri sm" onclick="openReceivePanel()">+ Add Card</button>
       </div>
       <div class="content">
         <div class="fb">
           <div class="sw">
             <span class="si">⌕</span>
-            <input type="text" placeholder="Search cards…" value="${esc(q)}" oninput="setFilter('q',this.value)">
+            <input type="text" placeholder="Search player, set, year, grade…" value="${esc(q)}" oninput="setFilter('q',this.value)">
             <button class="s-clr" onclick="setFilter('q','')">✕</button>
           </div>
+          <select onchange="setFilter('type',this.value)">${typeOpts}</select>
           <select onchange="setFilter('status',this.value)">
             <option value="" ${!status?'selected':''}>All Status</option>
             <option value="stock" ${status==='stock'?'selected':''}>In Stock</option>
             <option value="sold"  ${status==='sold'?'selected':''}>Sold</option>
           </select>
+          <button class="btn sm${auto_only?' pri':''}" onclick="setFilter('auto_only',${!auto_only})">AUTO</button>
+          <button class="btn sm${rc_only?' pri':''}"   onclick="setFilter('rc_only',${!rc_only})">RC</button>
         </div>
         <div class="tw">
           <table>
             <thead><tr>
-              <th class="sh" onclick="setSort('display_name')">Card</th>
-              <th class="sh" onclick="setSort('cost')">Cost</th>
+              <th style="width:46px"></th>
+              ${sh('display_name')}
+              <th>Type</th>
+              ${sh('cost')}
               <th>Market</th>
               <th>Status</th>
             </tr></thead>
@@ -1262,9 +1376,11 @@ const Pages = {
     const pageN = Store.get('page_num');
     const pageS = Store.get('page_size');
 
-    let list = Store.get('sales').filter(s =>
-      !q || JSON.stringify(s).toLowerCase().includes(q.toLowerCase())
-    );
+    let list = Store.get('sales').filter(s => {
+      if (!q) return true;
+      const hay = [s.title,s.raw_title,s.player,s.platform,s.buyer,s.order_num].join(' ').toLowerCase();
+      return hay.includes(q.toLowerCase());
+    });
     list = [...list].sort((a, b) => {
       const av = a[sort.field] ?? '', bv = b[sort.field] ?? '';
       return sort.dir === 'asc' ? (av > bv ? 1 : -1) : (av < bv ? 1 : -1);
@@ -1273,32 +1389,38 @@ const Pages = {
     const total = list.length;
     const page  = list.slice(pageN * pageS, (pageN + 1) * pageS);
     const pages = Math.ceil(total / pageS);
+    const sh = (f,label) => `<th class="sh${sort.field===f?' on':''}" onclick="setSort('${f}')">${label}${sort.field===f?(sort.dir==='asc'?' ↑':' ↓'):''}</th>`;
 
     const rows = page.length
       ? page.map(s => Components.saleRow(s)).join('')
-      : `<tr><td colspan="4"><div class="empty"><div class="ei">◎</div>No sales yet</div></td></tr>`;
+      : `<tr><td colspan="6"><div class="empty"><div class="ei">◎</div>No sales yet</div></td></tr>`;
 
     return `
       <div class="topbar">
         <div class="pg-title">Sales</div>
-        <span class="pg-sub"><span class="stat-num">${total}</span> sales</span>
+        <span class="pg-sub"><span class="stat-num">${total}</span> sales
+          <span class="stat-sep">·</span>
+          <span class="stat-money">${f$(Computed.totalRevenue())}</span> revenue
+        </span>
         <button class="btn pri sm" onclick="openAddSalePanel()">+ Add Sale</button>
       </div>
       <div class="content">
         <div class="fb">
           <div class="sw">
             <span class="si">⌕</span>
-            <input type="text" placeholder="Search sales…" value="${esc(q)}" oninput="setFilter('q',this.value)">
+            <input type="text" placeholder="Search player, buyer, platform…" value="${esc(q)}" oninput="setFilter('q',this.value)">
             <button class="s-clr" onclick="setFilter('q','')">✕</button>
           </div>
         </div>
         <div class="tw">
           <table>
             <thead><tr>
-              <th class="sh" onclick="setSort('title')">Sale</th>
-              <th class="sh" onclick="setSort('price')">Revenue</th>
+              ${sh('title','Sale')}
+              <th>Platform</th>
+              ${sh('price','Revenue')}
               <th>Profit</th>
-              <th class="sh" onclick="setSort('created_at')">Date</th>
+              <th>Links</th>
+              ${sh('raw_date','Date')}
             </tr></thead>
             <tbody>${rows}</tbody>
           </table>
@@ -1515,48 +1637,146 @@ function closePanel() {
 function openCardPanel(id) {
   const card = Store.getCard(id);
   if (!card) return;
-  const fin = Computed.cardFinancials(id);
+  const fin    = Computed.cardFinancials(id);
+  const isSold = fin?.isSold;
+  const pnl    = fin?.pnl ?? 0;
+  const eTitle = _ebayTitle(card);
+  const eTitleLen = eTitle.length;
+  const eTitleColor = eTitleLen > 80 ? 'var(--red)' : eTitleLen > 72 ? 'var(--orange)' : 'var(--faint)';
+  const compsUrl = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(eTitle)}&_sop=13`;
+
+  const linkedSales = Store.get('sales').filter(s => (s.linked_card_ids||[]).includes(id));
+
   openPanel(`
     <div class="pn-head">
-      <div>
+      <div style="flex:1;min-width:0">
         <div class="pn-title">${esc(card.display_name || card.raw_title || id)}</div>
-        <div class="pn-meta">${esc(card.id)}</div>
+        <div class="pn-meta" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:3px">
+          ${card.player ? `<span>${esc(card.player)}</span>` : ''}
+          ${card.year   ? `<span style="color:var(--blue)">${esc(card.year)}</span>` : ''}
+          ${card.set    ? `<span style="color:var(--purple)">${esc(card.set)}</span>` : ''}
+          ${Components.typeBadge(card.type)}
+          ${isSold ? `<span class="sb sold">SOLD</span>` : `<span class="sb stock">IN STOCK</span>`}
+        </div>
       </div>
       <span class="pn-close" onclick="closePanel()">✕</span>
     </div>
     <div class="pn-body">
+
+      <!-- Photos -->
       <div class="ps">
-        <div class="ps-title">Financials</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
-          <div style="background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);padding:10px;text-align:center">
-            <div style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:1px;margin-bottom:4px">COST</div>
-            <div style="font-size:15px;font-weight:700;font-family:var(--mono)">${f$(fin?.cost)}</div>
-          </div>
-          <div style="background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);padding:10px;text-align:center">
-            <div style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:1px;margin-bottom:4px">MKT VAL</div>
-            <div style="font-size:15px;font-weight:700;font-family:var(--mono);color:var(--gold)">${f$(fin?.mktVal)}</div>
-          </div>
-          <div style="background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);padding:10px;text-align:center">
-            <div style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:1px;margin-bottom:4px">P&amp;L</div>
-            <div style="font-size:15px;font-weight:700;font-family:var(--mono);color:${(fin?.pnl||0)>=0?'var(--green)':'var(--red)'}">${(fin?.pnl||0)>=0?'+':''}${f$(fin?.pnl)}</div>
-          </div>
+        <div class="ps-title">Photos
+          <button class="btn xs" style="margin-left:auto" onclick="_triggerPhotoCapture('${id}')">+ Add Photo</button>
+        </div>
+        <div id="cpq-photo-grid-${id}" style="display:flex;gap:8px;flex-wrap:wrap;min-height:24px">
+          ${(card.photos||[]).length ? '<span style="font-size:10px;font-family:var(--mono);color:var(--faint)">Loading photos…</span>' : '<span style="font-size:11px;color:var(--faint)">No photos</span>'}
         </div>
       </div>
+
+      <!-- Financials -->
+      <div class="ps">
+        <div class="ps-title">Financials</div>
+        ${Components.finGrid([
+          { label:'COST',    value: f$(fin?.cost),   color: '' },
+          { label:'MKT VAL', value: f$(fin?.mktVal), color: 'var(--gold)' },
+          { label:'P&L',     value: (pnl>=0?'+':'')+f$(pnl), color: pnl>=0?'var(--green)':'var(--red)' },
+        ])}
+        ${isSold && fin?.sale ? `<div style="font-size:11px;font-family:var(--mono);color:var(--dim);margin-top:8px">
+          Sold for <span style="color:var(--green)">${f$(fin.sale.price)}</span>
+          · fees <span style="color:var(--red)">${f$((fin.sale.fees||0)+(fin.sale.buyer_ship||0))}</span>
+          · net <span style="color:${pnl>=0?'var(--green)':'var(--red)'}">${pnl>=0?'+':''}${f$(pnl)}</span>
+        </div>` : ''}
+      </div>
+
+      <!-- Listing Tools -->
+      <div class="ps">
+        <div class="ps-title">Listing Tools</div>
+        <div style="background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);padding:10px 12px;margin-bottom:10px">
+          <div style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:.8px;text-transform:uppercase;margin-bottom:5px">eBay Title</div>
+          <div id="cpq-etitle-${id}" style="font-size:12px;font-family:var(--mono);line-height:1.5;word-break:break-word;color:var(--text)">${esc(eTitle)||'<span style="color:var(--faint)">No title generated — fill in card fields</span>'}</div>
+          <div style="font-size:9px;font-family:var(--mono);color:${eTitleColor};margin-top:4px">${eTitleLen} / 80 chars</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn sm" onclick="_copyEbayTitle('${id}',this)">📋 Copy Title</button>
+          <a class="btn sm" href="${esc(compsUrl)}" target="_blank" rel="noopener noreferrer">🔍 Find Comps</a>
+        </div>
+      </div>
+
+      <!-- Card Details (editable) -->
       <div class="ps">
         <div class="ps-title">Card Details</div>
         <div class="field-grid">
-          ${_panelField('Player',    card.player)}
-          ${_panelField('Year',      card.year)}
-          ${_panelField('Set',       card.set)}
-          ${_panelField('Variation', card.variation)}
-          ${_panelField('Serial',    card.serial)}
-          ${_panelField('Grade',     card.grade)}
-          ${_panelField('Source',    card.source)}
-          ${_panelField('Order #',   card.order_num)}
+          ${Components.editField('Player',    'player',    card.player,    {cardId:id})}
+          ${Components.editField('Year',      'year',      card.year,      {cardId:id})}
+          ${Components.editField('Set',       'set',       card.set,       {cardId:id})}
+          ${Components.editField('Variation', 'variation', card.variation, {cardId:id})}
+          ${Components.editField('Serial',    'serial',    card.serial,    {cardId:id,mono:true})}
+          ${Components.editField('Grade',     'grade',     card.grade,     {cardId:id})}
+          ${Components.editField('Cost ($)',  'cost',      card.cost,      {cardId:id,type:'number',mono:true})}
+          <div class="field-item"><label>Type</label>
+            <select class="field-input" style="padding:4px 6px" onchange="Store.patchCard('${id}',{type:this.value})">
+              <option value="">—</option>
+              ${CFG.CARD_TYPES.map(t=>`<option value="${esc(t)}" ${card.type===t?'selected':''}>${esc(t)}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <div style="display:flex;gap:16px;margin-top:10px;flex-wrap:wrap">
+          ${Components.checkField('Auto',   'is_auto', card.is_auto, {cardId:id})}
+          ${Components.checkField('Rookie', 'is_rc',   card.is_rc,   {cardId:id})}
+          ${Components.checkField('Lot',    'is_lot',  card.is_lot,  {cardId:id})}
         </div>
       </div>
-      ${card.notes ? `<div class="ps"><div class="ps-title">Notes</div><div style="font-size:12px;color:var(--dim);font-family:var(--mono);white-space:pre-wrap">${esc(card.notes)}</div></div>` : ''}
+
+      <!-- Tags (read-only parsed view) -->
+      <div class="ps">
+        <div class="ps-title">Tags</div>
+        ${Components.parsedTags(card)||'<span style="font-size:11px;color:var(--faint)">No parsed tags — fill in year, set, serial…</span>'}
+      </div>
+
+      <!-- Notes -->
+      <div class="ps">
+        <div class="ps-title">Notes</div>
+        <textarea class="field-input" style="width:100%;height:70px;resize:vertical;font-family:var(--mono);font-size:11px"
+          placeholder="Add notes…"
+          onchange="Store.patchCard('${id}',{notes:this.value})">${esc(card.notes||'')}</textarea>
+      </div>
+
+      <!-- Source -->
+      <div class="ps">
+        <div class="ps-title">Source</div>
+        <div class="field-grid">
+          ${_panelField('Acquired', card.raw_date)}
+          ${_panelField('Source',   card.source)}
+          ${_panelField('Seller',   card.seller)}
+          ${_panelField('Order #',  card.order_num)}
+          ${_panelField('Item ID',  card.item_id)}
+          ${_panelField('Added',    card.created_at?.slice(0,10))}
+        </div>
+      </div>
+
+      <!-- Linked Sales -->
+      <div class="ps">
+        <div class="ps-title">Linked Sales (${linkedSales.length})</div>
+        ${linkedSales.length ? linkedSales.map(s => `
+          <div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);margin-bottom:5px;cursor:pointer" onclick="closePanel();openSalePanel('${s.id}')">
+            <div style="flex:1;min-width:0">
+              <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(s.title||s.raw_title)}</div>
+              <div style="font-size:10px;font-family:var(--mono);color:var(--dim);margin-top:1px">${f$(s.price)} · ${s.raw_date||s.created_at?.slice(0,10)||'—'}</div>
+            </div>
+            <button class="btn xs red" onclick="event.stopPropagation();Actions.unlinkCardFromSale('${id}','${s.id}');openCardPanel('${id}')">Unlink</button>
+          </div>`).join('')
+        : `<div style="font-size:11px;color:var(--faint)">Not linked to any sale</div>`}
+      </div>
+
+      <!-- Danger -->
+      <div class="ps" style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border)">
+        <button class="btn red sm" onclick="if(confirm('Delete this card?'))Actions.deleteCard('${id}')">Delete Card</button>
+      </div>
+
     </div>`);
+
+  // Async-load photos after panel HTML is in the DOM
+  if ((card.photos||[]).length) _loadCardPhotos(id);
 }
 
 function openSalePanel(id) {
@@ -1619,14 +1839,22 @@ function openReceivePanel() {
       <span class="pn-close" onclick="closePanel()">✕</span>
     </div>
     <div class="pn-body">
-      <div class="alert info">Full receive flow coming in Step 6.</div>
       <div style="display:flex;flex-direction:column;gap:10px">
-        <div><label style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:.8px;text-transform:uppercase;display:block;margin-bottom:4px">Raw Title</label>
-          <input class="field-input" type="text" id="rc-title" placeholder="e.g. 2023 Panini Prizm Patrick Mahomes #1 PSA 10"></div>
-        <div><label style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:.8px;text-transform:uppercase;display:block;margin-bottom:4px">Cost ($)</label>
-          <input class="field-input mono" type="number" id="rc-cost" placeholder="0.00" step="0.01"></div>
-        <div><label style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:.8px;text-transform:uppercase;display:block;margin-bottom:4px">Source</label>
-          <input class="field-input" type="text" id="rc-source" placeholder="eBay, COMC, BSC…"></div>
+        <div>
+          <label style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:.8px;text-transform:uppercase;display:block;margin-bottom:4px">Title / Description</label>
+          <input class="field-input" type="text" id="rc-title" placeholder="e.g. 2023 Panini Prizm Patrick Mahomes /25 PSA 10" oninput="_rcPreview(this.value)">
+        </div>
+        <div id="rc-preview" style="display:none;background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);padding:8px 10px;font-size:11px"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div>
+            <label style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:.8px;text-transform:uppercase;display:block;margin-bottom:4px">Cost ($)</label>
+            <input class="field-input mono" type="number" id="rc-cost" placeholder="0.00" step="0.01">
+          </div>
+          <div>
+            <label style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:.8px;text-transform:uppercase;display:block;margin-bottom:4px">Source</label>
+            <input class="field-input" type="text" id="rc-source" placeholder="eBay, COMC, BSC…">
+          </div>
+        </div>
         <div style="display:flex;gap:8px;margin-top:6px">
           <button class="btn pri" onclick="_quickAddCard()">Add Card</button>
           <button class="btn ghost" onclick="closePanel()">Cancel</button>
@@ -1717,6 +1945,74 @@ function _panelField(label, val) {
     <label>${esc(label)}</label>
     <div class="field-val">${val != null && val !== '' ? esc(String(val)) : '<span style="color:var(--faint)">—</span>'}</div>
   </div>`;
+}
+
+/* ── eBay title builder ── */
+function _ebayTitle(card) {
+  const parts = [];
+  if (card.player)    parts.push(card.player);
+  if (card.variation) parts.push(card.variation);
+  if (card.year)      parts.push(card.year);
+  if (card.set)       parts.push(card.set);
+  if (card.serial)    parts.push(card.serial.includes('/') ? card.serial : '/'+card.serial);
+  if (card.grade)     parts.push(card.grade);
+  if (card.is_auto && !/auto/i.test(card.variation||'')) parts.push('Auto');
+  if (card.is_rc)     parts.push('RC');
+  return parts.join(' ').trim();
+}
+
+function _copyEbayTitle(id, btn) {
+  const el = document.getElementById(`cpq-etitle-${id}`);
+  const text = el?.textContent?.trim() || _ebayTitle(Store.getCard(id)||{});
+  if (!text) return;
+  navigator.clipboard?.writeText(text).then(() => {
+    const orig = btn.textContent; btn.textContent = '✓ Copied!';
+    setTimeout(() => btn.textContent = orig, 1800);
+  }).catch(() => {
+    const ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta); ta.select();
+    document.execCommand('copy'); ta.remove();
+    const orig = btn.textContent; btn.textContent = '✓ Copied!';
+    setTimeout(() => btn.textContent = orig, 1800);
+  });
+}
+
+/* ── Receive panel live preview ── */
+function _rcPreview(title) {
+  const el = document.getElementById('rc-preview');
+  if (!el) return;
+  if (!title.trim()) { el.style.display = 'none'; return; }
+  const p = Parsers.parseCardTitle(title);
+  const tags = [];
+  if (p.player)    tags.push(`<strong>${esc(p.player)}</strong>`);
+  if (p.year)      tags.push(`<span class="pt year" style="height:auto;padding:1px 5px">${esc(p.year)}</span>`);
+  if (p.set)       tags.push(`<span class="pt set"  style="height:auto;padding:1px 5px">${esc(p.set)}</span>`);
+  if (p.variation) tags.push(`<span class="pt var"  style="height:auto;padding:1px 5px">${esc(p.variation)}</span>`);
+  if (p.serial)    tags.push(`<span class="pt serial" style="height:auto;padding:1px 5px">/${esc(p.serial)}</span>`);
+  if (p.grade)     tags.push(`<span class="pt grade" style="height:auto;padding:1px 5px">${esc(p.grade)}</span>`);
+  if (p.is_auto)   tags.push(`<span class="pt auto" style="height:auto;padding:1px 5px">AUTO</span>`);
+  if (p.is_rc)     tags.push(`<span class="pt rc"   style="height:auto;padding:1px 5px">RC</span>`);
+  if (p.type)      tags.push(Components.typeBadge(p.type));
+  el.style.display = tags.length ? 'block' : 'none';
+  el.innerHTML = `<div style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:.8px;text-transform:uppercase;margin-bottom:5px">Parsed</div>
+    <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">${tags.join('')}</div>`;
+}
+
+/* ── Photo loading ── */
+async function _loadCardPhotos(id) {
+  const card = Store.getCard(id);
+  if (!card || !(card.photos||[]).length) return;
+  const urls = await PhotoDB.getAll(id).catch(() => []);
+  const el   = document.getElementById(`cpq-photo-grid-${id}`);
+  if (!el) return;
+  el.innerHTML = urls.length
+    ? urls.map((url, i) => `
+        <div style="position:relative">
+          <img src="${esc(url)}" style="width:80px;height:112px;object-fit:cover;border-radius:6px;border:1px solid var(--border);cursor:zoom-in;display:block" onclick="window.open(this.src)">
+          <button onclick="Actions.deletePhoto('${id}',${i});openCardPanel('${id}')"
+            style="position:absolute;top:3px;right:3px;background:rgba(0,0,0,.65);border:none;color:#fff;border-radius:50%;width:18px;height:18px;font-size:10px;cursor:pointer;line-height:18px;text-align:center;padding:0">✕</button>
+        </div>`).join('')
+    : '<span style="font-size:11px;color:var(--faint)">No photos stored</span>';
 }
 
 /* ── CSV parse helpers ── */
