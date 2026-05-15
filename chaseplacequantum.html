@@ -1077,7 +1077,35 @@ const Actions = {
   deleteCard(id)          { toast('Actions.deleteCard — coming soon'); },
   addSale(fields)         { toast('Actions.addSale — coming soon'); },
   updateSale(id, fields)  { Store.patchSale(id, fields); render(); toast('Saved'); },
-  deleteSale(id)          { toast('Actions.deleteSale — coming soon'); },
+  async deleteSale(id) {
+    const sales = Store.get('sales').filter(s => s.id !== id);
+    Store.setSales(sales);
+    await DB.saveSales(sales);
+    closePanel();
+    render();
+    toast('Sale deleted');
+  },
+
+  autoLinkAll() {
+    const sales = Store.get('sales');
+    let linked = 0;
+    sales.forEach(sale => {
+      if ((sale.linked_card_ids||[]).length) return;
+      const top = Parsers.getTopCandidates(sale, 1);
+      if (top.length && top[0].score > 50) {
+        Store.patchSale(sale.id, { linked_card_ids: [top[0].id] });
+        linked++;
+      }
+    });
+    if (linked) {
+      DB.saveSales(Store.get('sales'));
+      render();
+      toast(`Auto-linked ${linked} sale${linked>1?'s':''}`);
+    } else {
+      toast('No confident matches found');
+    }
+  },
+
   deleteCard(id) {
     const cards = Store.get('cards').filter(c => c.id !== id);
     Store.setCards(cards);
@@ -1255,8 +1283,9 @@ const Components = {
   /* Editable inline field for panels */
   editField(label, field, value, opts={}) {
     const { type='text', cardId, saleId, mono=false } = opts;
-    const target = cardId ? `Store.patchCard('${cardId}',{${field}:this.value});updateSidebar()` :
-                   saleId ? `Store.patchSale('${saleId}',{${field}:this.value})` : '';
+    const val  = type === 'number' ? `parseFloat(this.value)||0` : `this.value`;
+    const target = cardId ? `Store.patchCard('${cardId}',{${field}:${val}});updateSidebar()` :
+                   saleId ? `Store.patchSale('${saleId}',{${field}:${val}})` : '';
     return `<div class="field-item">
       <label>${esc(label)}</label>
       <input class="field-input${mono?' mono':''}" type="${type}" value="${esc(value??'')}"
@@ -1402,6 +1431,7 @@ const Pages = {
           <span class="stat-sep">·</span>
           <span class="stat-money">${f$(Computed.totalRevenue())}</span> revenue
         </span>
+        <button class="btn sm" onclick="Actions.autoLinkAll()">⚡ Auto-Link</button>
         <button class="btn pri sm" onclick="openAddSalePanel()">+ Add Sale</button>
       </div>
       <div class="content">
@@ -1782,53 +1812,101 @@ function openCardPanel(id) {
 function openSalePanel(id) {
   const sale = Store.getSale(id);
   if (!sale) return;
-  const pnl = Computed.linkedPnl(id);
+  const pnl  = Computed.linkedPnl(id);
+  const cogs = (sale.linked_card_ids||[]).reduce((s, cid) => s + (Store.getCard(cid)?.cost||0), 0);
+  const candidates = Parsers.getTopCandidates(sale, 5)
+    .filter(c => !(sale.linked_card_ids||[]).includes(c.id));
+
   openPanel(`
     <div class="pn-head">
-      <div>
+      <div style="flex:1;min-width:0">
         <div class="pn-title">${esc(sale.title || sale.raw_title || id)}</div>
-        <div class="pn-meta">${esc(sale.id)}</div>
+        <div class="pn-meta" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:3px">
+          ${sale.player   ? `<span>${esc(sale.player)}</span>` : ''}
+          ${sale.platform ? `<span style="color:var(--blue)">${esc(sale.platform)}</span>` : ''}
+          ${sale.raw_date ? `<span style="color:var(--faint)">${esc(sale.raw_date)}</span>` : ''}
+        </div>
       </div>
       <span class="pn-close" onclick="closePanel()">✕</span>
     </div>
     <div class="pn-body">
+
+      <!-- Financials -->
       <div class="ps">
         <div class="ps-title">Financials</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
-          <div style="background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);padding:10px;text-align:center">
-            <div style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:1px;margin-bottom:4px">REVENUE</div>
-            <div style="font-size:15px;font-weight:700;font-family:var(--mono);color:var(--green)">${f$(sale.price)}</div>
-          </div>
-          <div style="background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);padding:10px;text-align:center">
-            <div style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:1px;margin-bottom:4px">FEES</div>
-            <div style="font-size:15px;font-weight:700;font-family:var(--mono);color:var(--red)">${f$((sale.fees||0)+(sale.buyer_ship||0))}</div>
-          </div>
-          <div style="background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);padding:10px;text-align:center">
-            <div style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:1px;margin-bottom:4px">PROFIT</div>
-            <div style="font-size:15px;font-weight:700;font-family:var(--mono);color:${pnl>=0?'var(--green)':'var(--red)'}">${pnl>=0?'+':''}${f$(pnl)}</div>
-          </div>
-        </div>
+        ${Components.finGrid([
+          { label:'REVENUE', value: f$(sale.price),                          color:'var(--green)'  },
+          { label:'FEES',    value: f$((sale.fees||0)+(sale.buyer_ship||0)), color:'var(--red)'    },
+          { label:'COGS',    value: f$(cogs),                                color:'var(--orange)' },
+          { label:'PROFIT',  value: (pnl>=0?'+':'')+f$(pnl),                color: pnl>=0?'var(--green)':'var(--red)' },
+        ])}
       </div>
+
+      <!-- Editable Fields -->
       <div class="ps">
         <div class="ps-title">Sale Details</div>
         <div class="field-grid">
-          ${_panelField('Platform', sale.platform)}
-          ${_panelField('Date',     sale.created_at?.slice(0,10))}
-          ${_panelField('Buyer',    sale.buyer)}
-          ${_panelField('Order #',  sale.order_num)}
-          ${_panelField('Qty',      sale.qty)}
-          ${_panelField('Source',   sale.source)}
+          ${Components.editField('Title',    'title',      sale.title||sale.raw_title||'', {saleId:id})}
+          ${Components.editField('Player',   'player',     sale.player||'',    {saleId:id})}
+          ${Components.editField('Year',     'year',       sale.year||'',      {saleId:id})}
+          ${Components.editField('Set',      'set',        sale.set||'',       {saleId:id})}
+          ${Components.editField('Platform', 'platform',   sale.platform||'',  {saleId:id})}
+          ${Components.editField('Date',     'raw_date',   sale.raw_date||'',  {saleId:id})}
+          ${Components.editField('Order #',  'order_num',  sale.order_num||'', {saleId:id,mono:true})}
+          ${Components.editField('Buyer',    'buyer',      sale.buyer||'',     {saleId:id})}
+          ${Components.editField('Price $',  'price',      sale.price||'',     {saleId:id,type:'number',mono:true})}
+          ${Components.editField('Fees $',   'fees',       sale.fees||'',      {saleId:id,type:'number',mono:true})}
+          ${Components.editField('Ship $',   'buyer_ship', sale.buyer_ship||'',{saleId:id,type:'number',mono:true})}
+          ${Components.checkField('Autograph','is_auto',   sale.is_auto,       {saleId:id})}
         </div>
       </div>
+
+      <!-- Linked Cards -->
       <div class="ps">
-        <div class="ps-title">Linked Cards (${(sale.linked_card_ids||[]).length})</div>
+        <div class="ps-title" style="display:flex;align-items:center">
+          Linked Cards <span style="color:var(--faint);font-weight:400;margin-left:4px">(${(sale.linked_card_ids||[]).length})</span>
+          <button class="btn xs" style="margin-left:auto" onclick="Actions.autoLinkAll();openSalePanel('${id}')">Auto-Link</button>
+        </div>
         ${(sale.linked_card_ids||[]).map(cid => {
           const c = Store.getCard(cid);
           return c
-            ? `<div style="padding:7px 10px;background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);margin-bottom:5px;font-size:12px;cursor:pointer" onclick="closePanel();openCardPanel('${cid}')">${esc(c.display_name||c.raw_title||cid)}</div>`
+            ? `<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);margin-bottom:5px">
+                <div style="flex:1;min-width:0;cursor:pointer" onclick="closePanel();openCardPanel('${cid}')">
+                  <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(c.display_name||c.raw_title||cid)}</div>
+                  <div style="font-size:10px;font-family:var(--mono);color:var(--dim);margin-top:1px">${f$(c.cost)} cost${c.year?' · '+esc(c.year):''}</div>
+                </div>
+                <button class="btn xs red" onclick="Actions.unlinkCardFromSale('${cid}','${id}');openSalePanel('${id}')">Unlink</button>
+              </div>`
             : `<div style="font-size:11px;color:var(--faint);font-family:var(--mono);margin-bottom:3px">${esc(cid)}</div>`;
-        }).join('') || '<div style="font-size:12px;color:var(--faint)">No cards linked</div>'}
+        }).join('') || '<div style="font-size:11px;color:var(--faint);margin-bottom:8px">No cards linked</div>'}
+        <div style="margin-top:8px">
+          <input class="field-input" type="text" placeholder="Search cards to link…" oninput="_saleLinkSearch('${id}',this.value)">
+          <div id="sale-link-results-${id}" style="margin-top:5px"></div>
+        </div>
       </div>
+
+      ${candidates.length ? `
+      <!-- Suggested Matches -->
+      <div class="ps">
+        <div class="ps-title">Suggested Matches</div>
+        ${candidates.map(c => {
+          const card = Store.getCard(c.id);
+          if (!card) return '';
+          return `<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);margin-bottom:5px">
+            <div style="flex:1;min-width:0">
+              <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(card.display_name||card.raw_title)}</div>
+              <div style="font-size:10px;font-family:var(--mono);color:var(--dim);margin-top:1px">Score: ${c.score} · ${f$(card.cost)}</div>
+            </div>
+            <button class="btn xs" onclick="Actions.linkCardToSale('${c.id}','${id}');openSalePanel('${id}')">Link</button>
+          </div>`;
+        }).join('')}
+      </div>` : ''}
+
+      <!-- Danger -->
+      <div class="ps" style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border)">
+        <button class="btn red sm" onclick="if(confirm('Delete this sale?'))Actions.deleteSale('${id}')">Delete Sale</button>
+      </div>
+
     </div>`);
 }
 
@@ -1945,6 +2023,32 @@ function _panelField(label, val) {
     <label>${esc(label)}</label>
     <div class="field-val">${val != null && val !== '' ? esc(String(val)) : '<span style="color:var(--faint)">—</span>'}</div>
   </div>`;
+}
+
+function _saleLinkSearch(saleId, q) {
+  const el = document.getElementById(`sale-link-results-${saleId}`);
+  if (!el) return;
+  if (!q.trim()) { el.innerHTML = ''; return; }
+  const lq   = q.toLowerCase();
+  const sale = Store.getSale(saleId);
+  const linked = new Set(sale?.linked_card_ids || []);
+  const matches = Store.get('cards')
+    .filter(c => !linked.has(c.id))
+    .filter(c => (c.display_name||c.raw_title||'').toLowerCase().includes(lq) ||
+                 (c.player||'').toLowerCase().includes(lq))
+    .slice(0, 8);
+  if (!matches.length) {
+    el.innerHTML = '<div style="font-size:11px;color:var(--faint);padding:4px 0">No matches</div>';
+    return;
+  }
+  el.innerHTML = matches.map(c => `
+    <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);margin-bottom:4px">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(c.display_name||c.raw_title)}</div>
+        <div style="font-size:10px;font-family:var(--mono);color:var(--dim)">${f$(c.cost)}</div>
+      </div>
+      <button class="btn xs" onclick="Actions.linkCardToSale('${c.id}','${saleId}');openSalePanel('${saleId}')">Link</button>
+    </div>`).join('');
 }
 
 /* ── eBay title builder ── */
