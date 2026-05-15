@@ -231,9 +231,10 @@ input[type=text],input[type=number],textarea{caret-color:var(--gold)}
    §1  CONFIG
 ══════════════════════════════════════════════════════ */
 const CFG = {
-  APP:      'Chase Place Quantum',
-  VERSION:  '2.0.0',
+  APP:       'Chase Place Quantum',
+  VERSION:   '2.0.0',
   PAGE_SIZE: 50,
+  CARD_TYPES: ['Soccer','Pokémon','NFL','MLB','Marvel','NBA','Yu-Gi-Oh'],
 };
 
 /* ══════════════════════════════════════════════════════
@@ -500,27 +501,506 @@ const Store = {
 };
 
 /* ══════════════════════════════════════════════════════
-   §4  PARSERS  (stubs — implemented in Step 3)
+   §4  PARSERS  (pure functions — no side effects, no DOM)
 ══════════════════════════════════════════════════════ */
+
+/* ── Player noise filter ── */
+const PLAYER_NOISE = new Set([
+  'chrome','topps','panini','donruss','prizm','finest','select','merlin',
+  'sapphire','refractor','lava','raywave','prism','wave','geometric',
+  'mojo','starball','logofractor','toppsfractor','pulsar','aqua','magenta',
+  'orange','green','blue','pink','red','gold','black','white','silver','purple',
+  'auto','autograph','rc','rookie','sp','ssp','case','hit','insert','variation',
+  'hero','image','wonder','kids','youthquake','radiating','shadow','etch',
+  'future','stars','golazo','tifo','noise','night','munich','brush','final',
+  'destination','club','competition','competitions','uefa','ucl','ucc','uel',
+  'fifa','premier','league','bundesliga','mls','serie','lot','patch','relic',
+  'japanese','edition','korea','england','germany','spain','france','brazil',
+  'argentina','usa','belgium','portugal','netherlands','italy','mexico',
+  'archives','signature','obsidian','magmatic','prized','footballers','fusion',
+  'skillset','top','world','cover','big','picture','circle','power','voltage',
+  'high','shockwave','monday','lights','xi','base','set','optic','cubic',
+  'cracked','ice','plum','blossom','animation','beautiful','game','huge',
+  'psv','man','city','chelsea','arsenal','liverpool','barcelona','madrid',
+  'juventus','milan','psg','dortmund','bayern','inter','napoli','spurs',
+  'aston','villa','newcastle','fulham','brentford','wolves','brighton',
+  'nottingham','forest','crystal','palace','everton','tottenham',
+  'leicester','bournemouth','ipswich','southampton','sunderland',
+  'rangers','celtic','atletico','sevilla','valencia','benfica','porto',
+  'ajax','feyenoord','galatasaray','fenerbahce','besiktas',
+  'legend','legends','icons',
+  'card','cards','trading','parallel','numbered','limited','short','print',
+  'bowman','fleer','score','leaf','skybox','playoff','pacific','sage','absolute',
+  'spectra','mosaic','noir','luminance','illusions','platinum','inception',
+  'immaculate','contenders','certified','revolution','elements','majestic',
+  'holo','holofoil','foil','sparkle','camo','atomic','inferno','neon','marble',
+  'superfractor','xfractor','prizmatic','negative','sepia','status',
+  'xrc','sir','sar','vmax','vstar','gx',
+  'signed','autographed','graded','slabbed',
+  'nfl','nba','mlb','nhl','wnba','tcg','pokemon',
+  'super','bowl','series','championship','trophy','cup',
+]);
+
+const _NOISE_STARTERS = [
+  'club','obsidian','patch','archives','lot','huge','japanese','blue','orange',
+  'green','magenta','gold','black','red','pink','white','purple','aqua','night',
+  'hero','image','wonder','shadow','future','final','radiating','cover','big',
+  'circle','monday','shockwave','prized','animation','beautiful','top',
+  'signed','auto','rc','rookie','sp','ssp','holo','foil','neon','cracked',
+];
+let _noiseStartRx = null;
+function _getNoiseStartRx() {
+  if (!_noiseStartRx) _noiseStartRx = new RegExp(
+    '^(?:' + _NOISE_STARTERS.map(n => n.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|') + ')\\s+', 'i'
+  );
+  return _noiseStartRx;
+}
+
+function cleanPlayer(raw) {
+  if (!raw) return raw;
+  const words = raw.trim().split(/\s+/);
+  if (words.every(w => PLAYER_NOISE.has(w.toLowerCase().replace(/[^a-z]/g,'')))) return '';
+  if (_NOISE_STARTERS.some(n => raw.toLowerCase().startsWith(n + ' '))) return '';
+  return raw;
+}
+
+/* ── Color extraction (used by scorer) ── */
+const _COLOR_WORDS = ['red','orange','yellow','gold','green','teal','aqua','blue','purple','pink','black','white','silver','bronze','rainbow','cosmic','neon','rose'];
+function _extractColor(str) {
+  if (!str) return '';
+  const s = str.toLowerCase();
+  for (const c of _COLOR_WORDS) { if (new RegExp('\\b' + c + '\\b').test(s)) return c; }
+  return '';
+}
+
+/* ── Checklist player lookup map ── */
+function buildPlayerMap() {
+  const map = new Map();
+  const norm = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+  const cls = Store.get('checklists') || {};
+  const clsObj = Array.isArray(cls) ? {} : cls;
+  for (const cl of Object.values(clsObj)) {
+    for (const p of (cl.players || [])) { const k = norm(p); if (!map.has(k)) map.set(k, { name:p, fromChecklist:true }); }
+  }
+  for (const p of (Store.get('custom_players') || [])) {
+    const k = norm(p); if (!map.has(k)) map.set(k, { name:p, fromChecklist:false });
+  }
+  return map;
+}
+
+/* ── Standard display name builder ── */
+function buildStandardName(p) {
+  if (!p.player) return p.display_name || p.raw_title || '';
+  const rest = [];
+  if (p.is_auto && !/auto/i.test(p.variation || '')) rest.push('Auto');
+  if (p.is_rc) rest.push('RC');
+  if (p.serial) rest.push(p.serial.includes('/') ? p.serial : '/' + p.serial);
+  if (p.year) rest.push(p.year);
+  if (p.set) rest.push(p.set);
+  const segments = [p.player];
+  if (p.variation) segments.push(p.variation);
+  if (rest.length) segments.push(rest.join(' '));
+  return segments.join(' ');
+}
+
+/* ── CSV utilities ── */
+function _csvSplitRow(line, delim) {
+  delim = delim || ',';
+  const cells = []; let cur = '', inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') { if (inQ && line[i+1]==='"') { cur+='"'; i++; } else inQ=!inQ; }
+    else if (c === delim && !inQ) { cells.push(cur.trim()); cur = ''; }
+    else cur += c;
+  }
+  cells.push(cur.trim());
+  return cells;
+}
+function _detectDelim(firstLine) {
+  return (firstLine.match(/\t/g)||[]).length > (firstLine.match(/,/g)||[]).length ? '\t' : ',';
+}
+function _csvCols(header) {
+  return names => {
+    for (const name of names)
+      for (let j = 0; j < header.length; j++)
+        if (header[j].replace(/[^a-z0-9]/g,'').includes(name.replace(/[^a-z0-9]/g,''))) return j;
+    return -1;
+  };
+}
+
+/* ── Main Parsers namespace ── */
 const Parsers = {
-  parseCardTitle(raw) {
-    // TODO: extract player, year, set, variation, serial, grade, is_auto, is_rc
-    return { raw_title: raw, display_name: raw };
+
+  /* Title parser — returns new-schema fields, no side effects */
+  parseCardTitle(title) {
+    const t = title || '';
+    const out = {
+      raw_title: t, display_name: t,
+      player: '', year: '', brand: '', set: '', variation: '', serial: '',
+      grade: '', is_auto: false, is_rc: false, is_lot: false, lot_qty: 1,
+      type: '', comp: '',
+      _customPlayer: false,
+    };
+
+    // Year
+    const yearM = t.match(/\b((?:19|20)\d{2})(?:-(\d{2,4}))?\b/);
+    if (yearM) out.year = yearM[2] ? `${yearM[1]}-${yearM[2].length===2?yearM[1].slice(0,2)+yearM[2]:yearM[2]}` : yearM[1];
+
+    // Serial
+    const tNY = t.replace(/\b(?:19|20)\d{2}\/\d{2,4}\b/g,' ').replace(/\b\d{2}\/\d{2}\b(?=\s|$)/g,' ');
+    const sfM = tNY.match(/(?:^|\s)#?(\d+)\s*\/(\d+)\b/);
+    const sdM = !sfM && tNY.match(/(?:^|\s)\/(\d+)\b/);
+    if (sfM) out.serial = sfM[1]+'/'+sfM[2];
+    else if (sdM) out.serial = sdM[1];
+
+    // Grade
+    const gradeM = t.match(/\b(PSA|BGS|SGC|CGC|BVG)\s*(\d+(?:\.\d+)?)\b/i);
+    if (gradeM) out.grade = gradeM[1].toUpperCase()+gradeM[2];
+
+    // Flags
+    if (/\b(auto|autograph|signed)\b/i.test(t)) out.is_auto = true;
+    if (/\b(RC|rookie card|rookie)\b/i.test(t)) out.is_rc = true;
+    if (/\b(lot|bundle|collection)\b/i.test(t)) out.is_lot = true;
+
+    // Brand
+    for (const [kw,br] of [['Panini','Panini'],['Topps','Topps'],['Upper Deck','Upper Deck'],['Donruss','Donruss'],['Bowman','Bowman'],['Fleer','Fleer'],['Score','Score']]) {
+      if (t.toLowerCase().includes(kw.toLowerCase())) { out.brand=br; break; }
+    }
+
+    // Set
+    for (const [kw,sn] of [['Prizm','Prizm'],['Chrome','Chrome'],['Optic','Optic'],['Mosaic','Mosaic'],['Obsidian','Obsidian'],['National Treasures','National Treasures'],['Contenders','Contenders'],['Select','Select'],['Revolution','Revolution'],['Immaculate','Immaculate'],['Finest','Finest'],['Sapphire','Sapphire'],['Heritage','Heritage'],['Stadium Club','Stadium Club'],['Inception','Inception'],['Certified','Certified'],['Elements','Elements'],['Spectra','Spectra']]) {
+      if (t.toLowerCase().includes(kw.toLowerCase())) { out.set=sn; break; }
+    }
+
+    // Variation / parallel (most-specific first)
+    for (const [rx,vn] of [
+      [/\bBlack\s+Finite\b/i,'Black Finite'],[/\bBlack\s+Gold\b/i,'Black Gold'],
+      [/\bGold\s+Vinyl\b/i,'Gold Vinyl'],[/\bGold\s+Prizm\b/i,'Gold Prizm'],[/\bGold\s+Refractor\b/i,'Gold Refractor'],
+      [/\bSilver\s+Prizm\b/i,'Silver Prizm'],[/\bRainbow\s+Prizm\b/i,'Rainbow Prizm'],
+      [/\bRed\s+Wave\b/i,'Red Wave'],[/\bRed\s+Scope\b/i,'Red Scope'],[/\bRed\s+Ice\b/i,'Red Ice'],[/\bRed\s+Prizm\b/i,'Red Prizm'],
+      [/\bTrue\s+Blue\b/i,'True Blue'],[/\bBlue\s+Wave\b/i,'Blue Wave'],[/\bBlue\s+Prizm\b/i,'Blue Prizm'],
+      [/\bHolo\s+Gold\b/i,'Holo Gold'],[/\bHolo\s+Silver\b/i,'Holo Silver'],
+      [/\bSuperFractor\b/i,'Superfractor'],[/\bRefractor\b/i,'Refractor'],
+      [/\bSapphire\b/i,'Sapphire'],[/\bAqua\b/i,'Aqua'],[/\bOrange\b/i,'Orange'],
+      [/\bPurple\b/i,'Purple'],[/\bGreen\b/i,'Green'],[/\bPink\b/i,'Pink'],
+      [/\bCamo\b/i,'Camo'],[/\bWhite\s+Sparkle\b/i,'White Sparkle'],[/\bSparkle\b/i,'Sparkle'],
+      [/\bXRC\b/i,'XRC'],[/\bHolo\b/i,'Holo'],[/\bGold\b/i,'Gold'],[/\bSilver\b/i,'Silver'],
+      [/\bPrizm\b/i,'Base Prizm'],[/\bSIR\b/,'Special Illustration Rare'],[/\bSAR\b/,'Special Art Rare'],
+      [/\bFull\s+Art\b/i,'Full Art'],[/\bIllustration\s+Rare\b/i,'Illustration Rare'],
+      [/\bex\b/,'ex'],[/\bVmax\b/i,'VMAX'],[/\bVstar\b/i,'VSTAR'],
+    ]) { if (rx.test(t)) { out.variation=vn; break; } }
+
+    // Type / sport detection
+    if (/\b(Premier League|La Liga|Bundesliga|NWSL|FIFA|soccer|football club|Club World Cup)\b/i.test(t)||/\b(CWC|UCL|EPL)\b/.test(t)||(/\bMLS\b/.test(t)&&!/\bMLB\b/.test(t))) out.type='Soccer';
+    else if (/\b(Pokemon|Pok[eé]mon|TCG|Pikachu|Charizard|Bulbasaur|Squirtle|Mewtwo|Eevee|Vmax|Vstar|Illustration\s*Rare|Special\s*Art|Destined\s*Rivals|Scarlet|Violet|Paldea|Evolving\s*Skies|Silver\s*Tempest|Crown\s*Zenith)\b/i.test(t)) out.type='Pokémon';
+    else if (/\b(NFL|quarterback|qb|touchdown|Super Bowl|NFC|AFC)\b/i.test(t)||((/\bfootball\b/i.test(t))&&!/soccer/i.test(t)&&/\b(broncos|chiefs|eagles|saints|patriots|ravens|steelers|cowboys|packers|bears|rams|49ers|chargers|raiders|bengals|browns|titans|colts|seahawks|dolphins|bills|jets|giants|commanders|cardinals|falcons|panthers|buccaneers|vikings|lions)\b/i.test(t))) out.type='NFL';
+    else if (/\b(MLB|baseball|pitcher|batting|World Series|ALDS|NLCS)\b/i.test(t)||/\b(yankees|dodgers|mets|cubs|red sox|giants|braves|astros|phillies|padres|mariners|guardians|twins|brewers|pirates|rockies|diamondbacks|tigers|rays|orioles|blue jays|angels|athletics|rangers|royals|nationals|reds|white sox)\b/i.test(t)) out.type='MLB';
+    else if (/\b(NBA|basketball|dunk|three-point)\b/i.test(t)||/\b(lakers|celtics|warriors|bulls|heat|bucks|nets|knicks|76ers|suns|clippers|nuggets|jazz|thunder|rockets|spurs|mavericks|grizzlies|pelicans|hawks|hornets|pistons|pacers|magic|wizards|raptors|blazers|timberwolves|kings|cavaliers)\b/i.test(t)) out.type='NBA';
+    else if (/\b(Marvel|Spider-Man|Spider\s*Man|Avengers|Iron\s*Man|X-Men|Captain\s*America|Thor|Hulk|Wolverine|Deadpool|Black\s*Panther)\b/i.test(t)) out.type='Marvel';
+    else if (/\b(Yu-Gi-Oh|Yugioh|Duel\s*Monsters|Dark\s*Magician|Blue.Eyes)\b/i.test(t)) out.type='Yu-Gi-Oh';
+
+    // Competition
+    for (const [kw,cn] of [['UEFA Champions League','UCL'],['Champions League','UCL'],['UEFA','UEFA'],['UCL','UCL'],['Premier League','PL'],['EPL','PL'],['La Liga','La Liga'],['Bundesliga','Bundesliga'],['MLS','MLS'],['NWSL','NWSL'],['CWC','CWC'],['Serie A','Serie A'],['Ligue 1','Ligue 1']]) {
+      if (t.toLowerCase().includes(kw.toLowerCase())) { out.comp=cn; break; }
+    }
+
+    // ── Player extraction ──
+    let rem = t;
+    rem = rem.replace(/\b(PSA|BGS|SGC|CGC|BVG)\s*\d+(?:\.\d+)?\b/gi,' ');
+    rem = rem.replace(/\b(?:19|20)\d{2}(?:-\d{2,4})?\b/g,' ');
+    rem = rem.replace(/#?\s*\d+\s*\/\s*\d+/g,' ').replace(/\/\s*\d+\b/g,' ').replace(/#\s*\d+\b/g,' ');
+    rem = rem.replace(/\b(RC|Rookie\s*Card|Rookie|Auto|Autograph|Signed|Lot|Bundle|Collection|SIR|SAR|XRC|SP|SSP)\b/gi,' ');
+    rem = rem.replace(/\b(Panini|Topps|Upper\s*Deck|Donruss|Bowman|Fleer|Score|Leaf|Select|Skybox|Stadium\s*Club|Archives|Heritage|Gallery|Classics|Contenders|Certified|Absolute|Immaculate|Majestic|Sage|Playoff|Pacific)\b/gi,' ');
+    rem = rem.replace(/\b(Prizm|Chrome|Optic|Mosaic|Obsidian|National\s*Treasures|Finest|Topps\s*Now|Platinum|Luminance|Illusions|Spectra|Noir|Museum\s*Collection|Definitive|Inception|Revolution|Elements|Bowman\s*Draft)\b/gi,' ');
+    rem = rem.replace(/\b(Destined\s*Rivals|Scarlet\s*&?\s*Violet|Paldea|Evolving\s*Skies|Silver\s*Tempest|Crown\s*Zenith|Temporal\s*Forces|Stellar\s*Crown|Surging\s*Sparks|Twilight\s*Masquerade)\b/gi,' ');
+    rem = rem.replace(/\b(Refractor|Superfractor|Holo(?:\s+Gold|\s+Silver)?|Gold\s+Prizm|Silver\s+Prizm|Rainbow\s+Prizm|Red\s+(?:Wave|Scope|Ice|Prizm)|True\s+Blue|Blue\s+(?:Wave|Prizm)|Black\s+(?:Finite|Gold)|Gold\s+(?:Vinyl|Refractor)|Neon\s+Green\s+Refractor|White\s+Sparkle|Sparkle|Camo|Pulsar|Raywave|Lava|Mojo|Logofractor|Sapphire|Aqua|Marble|Magenta|Starball|Shockwave|Voltage|Prism|Holo|VMAX|VSTAR)\b/gi,' ');
+    rem = rem.replace(/\b(Premier\s*League|La\s*Liga|Bundesliga|MLS|NWSL|FIFA|UEFA|UCL|EPL|CWC|UEL|Club\s*World\s*Cup|Champions\s*League|World\s*Cup|Super\s*Bowl|World\s*Series|Football\s*Club)\b/gi,' ');
+    rem = rem.replace(/\b(Pokemon|Pok[eé]mon|TCG|Marvel|Avengers|X-?Men|Iron\s*Man|Spider-?Man|Yu-?Gi-?Oh|Yugioh|Duel\s*Monsters|NBA|NFL|MLB|NHL|NFC|AFC)\b/gi,' ');
+    rem = rem.replace(/\b(Illustration\s*Rare|Full\s*Art|Base|Insert|Variation|ex\b|GX|EX)\b/gi,' ');
+    rem = rem.replace(/[()[\]|\/\\#]/g,' ');
+    rem = rem.replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g,' ').replace(/[☀-➿⬀-⯿]/g,' ');
+    rem = rem.replace(/\s+/g,' ').trim();
+
+    const _nsRx = _getNoiseStartRx();
+    let playerCandidate = rem;
+    for (let safety = 0; safety < 6; safety++) {
+      const before = playerCandidate;
+      playerCandidate = playerCandidate.replace(_nsRx,'').trim();
+      if (playerCandidate === before) break;
+    }
+
+    const words = playerCandidate.split(/\s+/);
+    const allGroups = []; let curGroup = [];
+    for (const w of words) {
+      const wl = w.toLowerCase().replace(/[^a-z]/g,'');
+      if (wl.length >= 2 && !PLAYER_NOISE.has(wl) && /^[A-ZÀ-Þ][a-zß-ÿ]/.test(w)) {
+        curGroup.push(w);
+      } else {
+        if (curGroup.length) { allGroups.push(curGroup); curGroup = []; }
+      }
+    }
+    if (curGroup.length) allGroups.push(curGroup);
+
+    const _pMap = buildPlayerMap();
+    const norm = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+    let _found = null;
+    const nameTokens = words.filter(w => {
+      const wl = w.toLowerCase().replace(/[^a-z]/g,'');
+      return wl.length >= 2 && !PLAYER_NOISE.has(wl) && /^[A-ZÀ-Þ][a-zß-ÿ]/.test(w);
+    });
+    if (_pMap.size > 0 && nameTokens.length > 0) {
+      chkLoop: for (const wSz of [3,2,1]) {
+        for (let i = 0; i <= nameTokens.length - wSz; i++) {
+          const cand = nameTokens.slice(i, i+wSz).join(' ');
+          const match = _pMap.get(norm(cand));
+          if (match) { _found = match; break chkLoop; }
+        }
+      }
+    }
+    if (_found) {
+      out.player = _found.name;
+      if (!_found.fromChecklist) out._customPlayer = true;
+    } else {
+      const bestGroup = allGroups.find(g => g.length >= 2) || allGroups.find(g => g.length >= 1) || [];
+      if (bestGroup.length) out.player = bestGroup.slice(0,3).join(' ');
+      if (out.player && _pMap.size > 0) out._customPlayer = true;
+    }
+
+    if (out.player) out.display_name = buildStandardName(out);
+    return out;
   },
 
   parseSaleTitle(raw) {
-    // TODO: extract player, year, set, variation, serial, grade, is_auto, qty
-    return { raw_title: raw, title: raw };
+    const p = Parsers.parseCardTitle(raw);
+    return { ...p, title: p.display_name || raw };
   },
 
-  parseOrderCsv(csvText) {
-    // TODO: parse eBay/COMC/BSC order export CSV into card records
-    return [];
+  /* Sale-purchase fuzzy scorer — returns numeric score; <0 = definitive mismatch */
+  scoreSalePurchase(s, p) {
+    let score = 0;
+    const sPlayer = (s.player||'').toLowerCase().trim();
+    const pPlayer = (p.player||'').toLowerCase().trim();
+    const sSerial = (s.serial||'').replace(/[^0-9]/g,'');
+    const pSerial = (p.serial||'').replace(/[^0-9]/g,'');
+    const sVar    = (s.variation||'').toLowerCase().trim();
+    const pVar    = (p.variation||'').toLowerCase().trim();
+    const sYear   = (s.year||'').trim();
+    const pYear   = (p.year||'').trim();
+    const sSet    = (s.set||'').toLowerCase().trim();
+    const pSet    = (p.set||'').toLowerCase().trim();
+
+    if (sSerial && pSerial) {
+      if (sSerial === pSerial) score += 55;
+      else return -999;
+    }
+    if (sPlayer && pPlayer) {
+      if (sPlayer === pPlayer) score += 30;
+      else if (sPlayer.includes(pPlayer) || pPlayer.includes(sPlayer)) score += 12;
+      else return -999;
+    }
+    if (sYear && pYear) {
+      if (sYear === pYear) score += 15;
+      else score -= 25;
+    }
+    if (sSet && pSet) {
+      if (sSet === pSet) score += 20;
+      else if (sSet.includes(pSet) || pSet.includes(sSet)) score += 8;
+    }
+    if (sVar && pVar) {
+      if (sVar === pVar) score += 22;
+      else if (sVar.includes(pVar) || pVar.includes(sVar)) score += 10;
+      else score -= 10;
+    }
+    const sColor = _extractColor(sVar) || _extractColor((s.raw_title||s.title||'').toLowerCase());
+    const pColor = _extractColor(pVar) || _extractColor((p.display_name||p.raw_title||'').toLowerCase());
+    if (sColor && pColor) {
+      if (sColor === pColor) score += 12;
+      else score -= 20;
+    }
+    if (s.type && p.type && s.type === p.type) score += 8;
+    if (s.grade && p.grade && s.grade === p.grade) score += 8;
+    if (s.is_auto && p.is_auto) score += 6;
+    else if (s.is_auto && !p.is_auto) score -= 8;
+
+    const sTitle = (s.raw_title || s.title || '').toLowerCase();
+    const sw = new Set(sTitle.split(/\W+/).filter(w => w.length > 3));
+    const pWords = (p.display_name || p.raw_title || '').toLowerCase();
+    const pw = new Set(pWords.split(/\W+/).filter(w => w.length > 3));
+    let overlap = 0;
+    sw.forEach(w => { if (pw.has(w)) overlap++; });
+    score += Math.min(overlap * 2, 10);
+
+    return score;
   },
 
-  parseSaleCsv(csvText) {
-    // TODO: parse eBay sold listings CSV into sale records
-    return [];
+  /* Returns top card candidates for linking to a sale */
+  getTopCandidates(sale, n = 10) {
+    const sold = Computed.soldCardIds();
+    const alreadyLinked = new Set(sale.linked_card_ids || []);
+    return Store.get('cards')
+      .filter(c => !sold.has(c.id) || alreadyLinked.has(c.id))
+      .map(c => ({ id: c.id, score: Parsers.scoreSalePurchase(sale, c) }))
+      .filter(c => c.score > 20)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, n);
+  },
+
+  /* eBay order CSV → array of card draft objects (new schema) */
+  parseOrderCsv(text) {
+    if (!text || !text.trim()) return { records:[], skipped:0, duplicates:0, error:'No text provided' };
+    const lines = text.trim().split(/\r?\n/).filter(l => l.trim());
+    if (lines.length < 2) return { records:[], skipped:0, duplicates:0, error:'Need header + data rows' };
+
+    const delim  = _detectDelim(lines[0]);
+    const header = _csvSplitRow(lines[0], delim).map(h => h.toLowerCase().replace(/['"]/g,'').trim());
+    const col    = _csvCols(header);
+
+    const iName    = col(['title','itemtitle','name','card','description','item']);
+    const iCost    = col(['cost','price','paid','amount','purchaseprice','totalprice']);
+    const iDate    = col(['date','purchasedate','orderdate','bought','saledate']);
+    const iPlayer  = col(['player','subject','athlete','person']);
+    const iSeller  = col(['seller','source','vendor','from','sellerid']);
+    const iType    = col(['type','sport','category']);
+    const iYear    = col(['year']);
+    const iSet     = col(['set','series']);
+    const iGrade   = col(['grade','grading']);
+    const iNotes   = col(['notes','note','comments']);
+    const iOrderNum= col(['ordernumber','orderid','ordernum','order#','transactionid']);
+    const iItemId  = col(['itemnumber','itemid','item number','listingid','ebayitemid','item#']);
+
+    if (iName < 0) return { records:[], skipped:0, duplicates:0, error:'No title column. Got: '+header.join(', ') };
+
+    const existingItemIds = new Set(Store.get('cards').map(c => c.item_id).filter(Boolean));
+    const records = []; let skipped = 0, duplicates = 0;
+    const g  = (cells, i) => i >= 0 ? (cells[i]||'').replace(/['"]/g,'').trim() : '';
+    const gn = (cells, i) => parseFloat(g(cells,i).replace(/[^0-9.]/g,'')) || 0;
+
+    for (let r = 1; r < lines.length; r++) {
+      const cells   = _csvSplitRow(lines[r], delim);
+      const rawTitle = g(cells, iName);
+      if (!rawTitle) { skipped++; continue; }
+      const itemId = g(cells, iItemId);
+      if (itemId && existingItemIds.has(itemId)) { duplicates++; continue; }
+
+      const cleanTitle = rawTitle.replace(/\s*\|\s*Quantity:\s*\d+.*/i,'').replace(/^\d+\s+x\s+/i,'').trim();
+      const parsed  = Parsers.parseCardTitle(cleanTitle);
+      const player  = g(cells, iPlayer)  || parsed.player;
+      const type    = g(cells, iType)    || parsed.type;
+      const year    = g(cells, iYear)    || parsed.year;
+      const set     = g(cells, iSet)     || parsed.set;
+      const grade   = g(cells, iGrade)   || parsed.grade;
+      const costRaw = gn(cells, iCost);
+      const lotQty  = Math.max(parsed.lot_qty || 1, 1);
+      const now     = new Date().toISOString();
+
+      const draft = {
+        id:           null,  // assigned when committed
+        raw_title:    rawTitle,
+        display_name: player ? buildStandardName({...parsed, player, year, set, grade}) : (parsed.display_name || cleanTitle),
+        raw_cost:     String(costRaw),
+        raw_date:     g(cells, iDate),
+        source:       'ebay_csv',
+        order_num:    g(cells, iOrderNum),
+        item_id:      itemId,
+        seller:       g(cells, iSeller),
+        player, year, set,
+        variation:    parsed.variation,
+        serial:       parsed.serial,
+        grade,
+        is_auto:      parsed.is_auto,
+        is_rc:        parsed.is_rc,
+        is_lot:       parsed.is_lot,
+        lot_qty:      lotQty,
+        type,
+        cost:         costRaw / lotQty,
+        photos:       [],
+        notes:        g(cells, iNotes),
+        tags:         [],
+        _customPlayer: parsed._customPlayer,
+        created_at:   now,
+        updated_at:   now,
+      };
+      records.push(draft);
+    }
+    return { records, skipped, duplicates };
+  },
+
+  /* eBay sold CSV → array of sale draft objects (new schema) */
+  parseSaleCsv(text) {
+    if (!text || !text.trim()) return { records:[], skipped:0, error:'No text provided' };
+    const lines = text.trim().split(/\r?\n/).filter(l => l.trim());
+    if (lines.length < 2) return { records:[], skipped:0, error:'Need header + data rows' };
+
+    const delim  = _detectDelim(lines[0]);
+    const header = _csvSplitRow(lines[0], delim).map(h => h.toLowerCase().replace(/['"]/g,'').trim());
+    const col    = _csvCols(header);
+
+    const iTitle    = col(['title','itemtitle','item title','name','card','description']);
+    const iPrice    = col(['soldfor','saleamount','saleprice','totalprice','itemprice','price','amount']);
+    const iDate     = col(['saledate','orderdate','date','solddate','created date']);
+    const iOrderNum = col(['ordernumber','orderid','ordernum','order#','transactionid']);
+    const iQty      = col(['quantity','qty','quantitysold']);
+    const iBuyer    = col(['buyer','buyerusername','buyername','buyerid']);
+    const iItemNum  = col(['itemnumber','itemid','item number','listingid']);
+    const iType     = col(['type','sport','category']);
+    const iPlayer   = col(['player','playercard','subject','athlete']);
+    const iYear     = col(['year']);
+    const iSet      = col(['set','setname','series']);
+    const iGrade    = col(['grade','grading']);
+    const iSerial   = col(['serial','serialnumber','serial number','serial#']);
+    const iVar      = col(['parallel','variation']);
+    const iBuyerShip= col(['buyerpaidship','buyershipcost','shipping','buyershipping','buyer paid ship']);
+    const iFees     = col(['totalfees','total fees','fees','ebay fees','platformfees']);
+    const iPlatform = col(['platform','marketplace','channel']);
+
+    if (iTitle < 0) return { records:[], skipped:0, error:'No title column. Got: '+header.join(', ') };
+
+    const records = []; let skipped = 0;
+    const g  = (cells, i) => i >= 0 ? (cells[i]||'').replace(/['"]/g,'').trim() : '';
+    const gn = (cells, i) => parseFloat(g(cells,i).replace(/[^0-9.]/g,'')) || 0;
+
+    for (let r = 1; r < lines.length; r++) {
+      const cells    = _csvSplitRow(lines[r], delim);
+      let rawTitle   = g(cells, iTitle);
+      if (!rawTitle) { skipped++; continue; }
+      rawTitle = rawTitle.replace(/\s*\|\s*Quantity:\s*\d+.*/i,'').replace(/^\d+\s+x\s+/i,'').trim();
+
+      const parsed   = Parsers.parseCardTitle(rawTitle);
+      const player   = g(cells, iPlayer)  || parsed.player;
+      const type     = g(cells, iType)    || parsed.type;
+      const year     = g(cells, iYear)    || parsed.year;
+      const set      = g(cells, iSet)     || parsed.set;
+      const grade    = g(cells, iGrade)   || parsed.grade;
+      const serial   = g(cells, iSerial).replace(/[^0-9\/]/g,'') || parsed.serial || '';
+      const variation= g(cells, iVar)     || parsed.variation || '';
+      const now      = new Date().toISOString();
+
+      records.push({
+        id:              null,
+        raw_title:       rawTitle,
+        raw_price:       g(cells, iPrice),
+        raw_date:        g(cells, iDate),
+        source:          'ebay_csv',
+        platform:        g(cells, iPlatform) || 'eBay',
+        order_num:       g(cells, iOrderNum),
+        buyer:           g(cells, iBuyer),
+        player, year, set, variation, serial, grade,
+        is_auto:         parsed.is_auto,
+        type,
+        title:           player ? buildStandardName({...parsed, player, year, set, grade, variation, serial}) : rawTitle,
+        price:           gn(cells, iPrice),
+        qty:             parseInt(g(cells, iQty)) || 1,
+        fees:            gn(cells, iFees),
+        buyer_ship:      gn(cells, iBuyerShip),
+        linked_card_ids: [],
+        photos:          [],
+        notes:           '',
+        _customPlayer:   parsed._customPlayer,
+        created_at:      now,
+        updated_at:      now,
+      });
+    }
+    return { records, skipped };
   },
 };
 
@@ -599,8 +1079,30 @@ const Actions = {
   updateSale(id, fields)  { Store.patchSale(id, fields); render(); toast('Saved'); },
   deleteSale(id)          { toast('Actions.deleteSale — coming soon'); },
   linkCardToSale(cardId, saleId) { toast('Actions.linkCardToSale — coming soon'); },
-  importCards(records)    { toast('Actions.importCards — coming soon'); },
-  importSales(records)    { toast('Actions.importSales — coming soon'); },
+  async importCards(drafts) {
+    if (!drafts || !drafts.length) return;
+    const now = new Date().toISOString();
+    const newCards = drafts.map(d => ({ ...d, id: d.id || newId('P') }));
+    const cards = [...Store.get('cards'), ...newCards];
+    Store.setCards(cards);
+    await DB.saveCards(cards);
+    // Register any newly discovered custom players
+    const customs = new Set(Store.get('custom_players') || []);
+    newCards.filter(c => c._customPlayer && c.player).forEach(c => customs.add(c.player));
+    Store.patch('custom_players', [...customs]);
+    render();
+    toast(`Imported ${newCards.length} card${newCards.length===1?'':'s'}`);
+  },
+
+  async importSales(drafts) {
+    if (!drafts || !drafts.length) return;
+    const newSales = drafts.map(d => ({ ...d, id: d.id || newId('S') }));
+    const sales = [...Store.get('sales'), ...newSales];
+    Store.setSales(sales);
+    await DB.saveSales(sales);
+    render();
+    toast(`Imported ${newSales.length} sale${newSales.length===1?'':'s'}`);
+  },
 
   async attachPhoto(cardId, dataUrl) {
     const card = Store.getCard(cardId);
@@ -845,20 +1347,35 @@ const Pages = {
           </div>
         </div>
 
-        <!-- ── CSV Import (Step 3) ── -->
+        <!-- ── CSV Import ── -->
         <div>
-          <div style="font-size:11px;font-family:var(--mono);color:var(--faint);letter-spacing:1px;text-transform:uppercase;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid var(--border)">CSV Import — Step 3</div>
+          <div style="font-size:11px;font-family:var(--mono);color:var(--faint);letter-spacing:1px;text-transform:uppercase;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid var(--border)">CSV Import</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+
             <div style="background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:18px">
-              <div style="font-weight:700;margin-bottom:6px">📦 Import Cards</div>
-              <p style="font-size:12px;color:var(--dim);margin-bottom:12px">eBay order CSV or COMC export → inventory cards with parsed fields.</p>
-              <button class="btn ghost sm" disabled>Coming in Step 3</button>
+              <div style="font-weight:700;margin-bottom:6px">📦 Import Cards (Orders CSV)</div>
+              <p style="font-size:12px;color:var(--dim);margin-bottom:10px">Paste an eBay order export, COMC CSV, or any file with a <code style="font-size:10px;background:var(--surf2);padding:1px 4px;border-radius:3px">title</code> and <code style="font-size:10px;background:var(--surf2);padding:1px 4px;border-radius:3px">cost</code> column.</p>
+              <textarea id="imp-cards-csv" style="width:100%;height:90px;background:var(--surf2);border:1px solid var(--border2);color:var(--text);padding:8px;border-radius:var(--r2);font-size:10px;font-family:var(--mono);resize:vertical;outline:none" placeholder="Paste CSV here…"></textarea>
+              <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+                <button class="btn pri sm" onclick="_parseCardsCsv()">⚡ Parse</button>
+                <button class="btn ghost sm" onclick="document.getElementById('imp-cards-csv').value=''">Clear</button>
+                <span id="imp-cards-status" style="font-size:10px;font-family:var(--mono);color:var(--faint)"></span>
+              </div>
+              <div id="imp-cards-review"></div>
             </div>
+
             <div style="background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:18px">
-              <div style="font-weight:700;margin-bottom:6px">💰 Import Sales</div>
-              <p style="font-size:12px;color:var(--dim);margin-bottom:12px">eBay sold listings CSV → sale records with auto-linking.</p>
-              <button class="btn ghost sm" disabled>Coming in Step 3</button>
+              <div style="font-weight:700;margin-bottom:6px">💰 Import Sales (Sold CSV)</div>
+              <p style="font-size:12px;color:var(--dim);margin-bottom:10px">Paste an eBay sold listings export or any file with a <code style="font-size:10px;background:var(--surf2);padding:1px 4px;border-radius:3px">title</code> and <code style="font-size:10px;background:var(--surf2);padding:1px 4px;border-radius:3px">price</code> column.</p>
+              <textarea id="imp-sales-csv" style="width:100%;height:90px;background:var(--surf2);border:1px solid var(--border2);color:var(--text);padding:8px;border-radius:var(--r2);font-size:10px;font-family:var(--mono);resize:vertical;outline:none" placeholder="Paste CSV here…"></textarea>
+              <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+                <button class="btn pri sm" onclick="_parseSalesCsv()">⚡ Parse</button>
+                <button class="btn ghost sm" onclick="document.getElementById('imp-sales-csv').value=''">Clear</button>
+                <span id="imp-sales-status" style="font-size:10px;font-family:var(--mono);color:var(--faint)"></span>
+              </div>
+              <div id="imp-sales-review"></div>
             </div>
+
           </div>
         </div>
 
@@ -1200,6 +1717,106 @@ function _panelField(label, val) {
     <label>${esc(label)}</label>
     <div class="field-val">${val != null && val !== '' ? esc(String(val)) : '<span style="color:var(--faint)">—</span>'}</div>
   </div>`;
+}
+
+/* ── CSV parse helpers ── */
+let _cardDrafts = [], _saleDrafts = [];
+
+function _parseCardsCsv() {
+  const text = document.getElementById('imp-cards-csv')?.value || '';
+  const result = Parsers.parseOrderCsv(text);
+  const status = document.getElementById('imp-cards-status');
+  const review = document.getElementById('imp-cards-review');
+  if (result.error) { if (status) status.textContent = '✕ ' + result.error; return; }
+  _cardDrafts = result.records;
+  const notes = [];
+  if (result.skipped)    notes.push(`${result.skipped} blank skipped`);
+  if (result.duplicates) notes.push(`${result.duplicates} dupes skipped`);
+  if (status) status.textContent = `${_cardDrafts.length} parsed${notes.length ? ' · '+notes.join(' · ') : ''}`;
+  if (review) review.innerHTML = _renderCardDraftReview();
+}
+
+function _parseSalesCsv() {
+  const text = document.getElementById('imp-sales-csv')?.value || '';
+  const result = Parsers.parseSaleCsv(text);
+  const status = document.getElementById('imp-sales-status');
+  const review = document.getElementById('imp-sales-review');
+  if (result.error) { if (status) status.textContent = '✕ ' + result.error; return; }
+  _saleDrafts = result.records;
+  const notes = result.skipped ? `${result.skipped} blank skipped` : '';
+  if (status) status.textContent = `${_saleDrafts.length} parsed${notes ? ' · '+notes : ''}`;
+  if (review) review.innerHTML = _renderSaleDraftReview();
+}
+
+function _renderCardDraftReview() {
+  if (!_cardDrafts.length) return '';
+  const rows = _cardDrafts.map((d, i) => `
+    <div style="background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);padding:8px 10px;margin-top:5px;font-size:11px">
+      <div style="font-weight:600;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(d.raw_title)}">${esc(d.display_name || d.raw_title)}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;font-family:var(--mono);font-size:10px;color:var(--dim)">
+        ${d.player ? `<span style="color:var(--text)">${esc(d.player)}</span>` : ''}
+        ${d.year   ? `<span class="pt year" style="height:auto;padding:1px 5px">${esc(d.year)}</span>` : ''}
+        ${d.set    ? `<span class="pt set"  style="height:auto;padding:1px 5px">${esc(d.set)}</span>` : ''}
+        ${d.serial ? `<span class="pt serial" style="height:auto;padding:1px 5px">/${esc(d.serial)}</span>` : ''}
+        ${d.grade  ? `<span class="pt grade" style="height:auto;padding:1px 5px">${esc(d.grade)}</span>` : ''}
+        ${d.is_auto ? `<span class="pt auto" style="height:auto;padding:1px 5px">AUTO</span>` : ''}
+        ${d.is_rc   ? `<span class="pt rc"   style="height:auto;padding:1px 5px">RC</span>` : ''}
+        <span style="margin-left:auto;color:var(--green);font-weight:600">${f$(d.cost)}</span>
+      </div>
+    </div>`).join('');
+  return `
+    <div style="margin-top:10px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <span style="font-size:11px;font-family:var(--mono);color:var(--dim)">${_cardDrafts.length} cards ready to import</span>
+        <button class="btn pri sm" style="margin-left:auto" onclick="_confirmCardImport()">✓ Import All</button>
+        <button class="btn ghost sm" onclick="_cardDrafts=[];document.getElementById('imp-cards-review').innerHTML=''">✕</button>
+      </div>
+      <div style="max-height:280px;overflow-y:auto">${rows}</div>
+    </div>`;
+}
+
+function _renderSaleDraftReview() {
+  if (!_saleDrafts.length) return '';
+  const rows = _saleDrafts.map((d, i) => `
+    <div style="background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);padding:8px 10px;margin-top:5px;font-size:11px">
+      <div style="font-weight:600;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(d.raw_title)}">${esc(d.title || d.raw_title)}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;font-family:var(--mono);font-size:10px;color:var(--dim)">
+        ${d.player   ? `<span style="color:var(--text)">${esc(d.player)}</span>` : ''}
+        ${d.platform ? `<span>${esc(d.platform)}</span>` : ''}
+        ${d.raw_date ? `<span>${esc(d.raw_date)}</span>` : ''}
+        <span style="margin-left:auto;color:var(--green);font-weight:600">${f$(d.price)}</span>
+        ${d.fees     ? `<span style="color:var(--red)">-${f$(d.fees)} fees</span>` : ''}
+      </div>
+    </div>`).join('');
+  return `
+    <div style="margin-top:10px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <span style="font-size:11px;font-family:var(--mono);color:var(--dim)">${_saleDrafts.length} sales ready to import</span>
+        <button class="btn pri sm" style="margin-left:auto" onclick="_confirmSaleImport()">✓ Import All</button>
+        <button class="btn ghost sm" onclick="_saleDrafts=[];document.getElementById('imp-sales-review').innerHTML=''">✕</button>
+      </div>
+      <div style="max-height:280px;overflow-y:auto">${rows}</div>
+    </div>`;
+}
+
+async function _confirmCardImport() {
+  await Actions.importCards(_cardDrafts);
+  _cardDrafts = [];
+  const review = document.getElementById('imp-cards-review');
+  const status = document.getElementById('imp-cards-status');
+  if (review) review.innerHTML = '';
+  if (status) status.textContent = '';
+  document.getElementById('imp-cards-csv').value = '';
+}
+
+async function _confirmSaleImport() {
+  await Actions.importSales(_saleDrafts);
+  _saleDrafts = [];
+  const review = document.getElementById('imp-sales-review');
+  const status = document.getElementById('imp-sales-status');
+  if (review) review.innerHTML = '';
+  if (status) status.textContent = '';
+  document.getElementById('imp-sales-csv').value = '';
 }
 
 /* ── Restore helpers (called from Import page) ── */
