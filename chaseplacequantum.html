@@ -1,0 +1,1022 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chase Place Quantum</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&family=Space+Grotesk:wght@300;400;500;600;700&family=Orbitron:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+/* ─────────────────────────────────────────────
+   RESET & TOKENS
+───────────────────────────────────────────── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#04070f;--surf:#09111e;--surf2:#0e1929;--surf3:#142035;
+  --border:#1a2d44;--border2:#22395a;
+  --text:#c4d8f5;--dim:#6e94be;--faint:#4a6a8a;
+  --gold:#00d4ff;--gold2:#0099cc;
+  --green:#00e5aa;--red:#ff4a68;--blue:#5aadff;--purple:#b87aff;--orange:#ff8a4a;
+  --cyan-glow:rgba(0,212,255,.15);--cyan-dim:rgba(0,212,255,.08);
+  --mono:'DM Mono',monospace;--ui:'Space Grotesk',sans-serif;
+  --r:10px;--r2:7px;
+}
+body{background:var(--bg);color:var(--text);font-family:var(--ui);min-height:100vh;overflow-x:hidden}
+
+/* ─────────────────────────────────────────────
+   LAYOUT
+───────────────────────────────────────────── */
+.shell{display:flex;height:100vh;overflow:hidden}
+.side{width:210px;min-width:210px;background:var(--surf);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+.main{flex:1;overflow-y:auto;overflow-x:hidden;display:flex;flex-direction:column}
+
+/* ─────────────────────────────────────────────
+   SIDEBAR
+───────────────────────────────────────────── */
+.brand{padding:18px 16px 16px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,rgba(0,212,255,.04) 0%,transparent 100%)}
+.brand-name{font-size:14px;font-weight:700;letter-spacing:.5px;font-family:'Orbitron',sans-serif;line-height:1.3}
+.brand-name em{color:var(--gold);font-style:normal;text-shadow:0 0 18px rgba(0,212,255,.6);display:block;font-size:18px;letter-spacing:1px}
+.brand-tag{font-size:9px;font-family:var(--mono);color:var(--faint);letter-spacing:2px;margin-top:4px;text-transform:uppercase}
+.nav{padding:8px 0;flex:1}
+.ni{display:flex;align-items:center;gap:9px;padding:9px 16px;font-size:12.5px;font-weight:600;color:var(--dim);cursor:pointer;border-left:2px solid transparent;transition:all .12s;letter-spacing:.2px}
+.ni:hover{color:var(--text);background:var(--surf2)}
+.ni.on{color:var(--gold);border-left-color:var(--gold);background:var(--cyan-dim);box-shadow:inset 0 0 12px rgba(0,212,255,.05)}
+.ni .ic{font-size:15px;width:18px;text-align:center}
+.side-foot{padding:14px 16px;border-top:1px solid var(--border);font-family:var(--mono)}
+.sf-row{margin-bottom:6px}
+.sf-lbl{font-size:9px;color:var(--faint);letter-spacing:1px;text-transform:uppercase;margin-bottom:2px}
+.sf-val{font-size:13px;font-weight:500}
+.sf-val.g{color:var(--green)}.sf-val.r{color:var(--red)}.sf-val.o{color:var(--gold)}
+
+/* ─────────────────────────────────────────────
+   TOPBAR
+───────────────────────────────────────────── */
+.topbar{padding:14px 24px;border-bottom:1px solid var(--border2);display:flex;align-items:center;gap:12px;background:var(--surf2);position:sticky;top:0;z-index:20;box-shadow:0 2px 12px rgba(0,0,0,.4)}
+.pg-title{font-size:17px;font-weight:700;flex:1}
+.pg-sub{font-size:13px;color:var(--text);font-family:var(--mono);margin-left:8px;font-weight:400;opacity:.85}
+.pg-sub .stat-num{color:var(--gold);font-weight:600}
+.pg-sub .stat-money{color:var(--green);font-weight:600}
+.pg-sub .stat-sep{color:var(--faint);margin:0 5px}
+
+/* ─────────────────────────────────────────────
+   CONTENT
+───────────────────────────────────────────── */
+.content{padding:20px 24px;flex:1}
+
+/* ─────────────────────────────────────────────
+   STAT CARDS
+───────────────────────────────────────────── */
+.sg{display:grid;grid-template-columns:repeat(auto-fill,minmax(165px,1fr));gap:10px;margin-bottom:24px}
+.sc{background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:12px 14px}
+.sc-lbl{font-size:9px;color:var(--dim);letter-spacing:1px;text-transform:uppercase;font-family:var(--mono);margin-bottom:7px}
+.sc-val{font-size:17px;font-weight:700;letter-spacing:-.5px;line-height:1.2;white-space:nowrap;font-family:var(--mono)}
+.sc-val.g{color:var(--green)}.sc-val.r{color:var(--red)}.sc-val.o{color:var(--gold)}.sc-val.b{color:var(--blue)}
+.sc-sub{font-size:11px;color:var(--faint);margin-top:3px;font-family:var(--mono)}
+
+/* ─────────────────────────────────────────────
+   BUTTONS & INPUTS
+───────────────────────────────────────────── */
+.fb{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center}
+.sw{position:relative;flex:1;min-width:200px}
+.sw input{width:100%;background:var(--surf);border:1px solid var(--border);color:var(--text);padding:8px 26px 8px 30px;border-radius:var(--r2);font-size:12.5px;font-family:var(--ui);outline:none;transition:border .12s}
+.sw input:focus{border-color:var(--gold)}
+.sw .si{position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--faint);font-size:13px;pointer-events:none}
+.sw .s-clr{display:none;position:absolute;right:7px;top:50%;transform:translateY(-50%);color:var(--faint);cursor:pointer;font-size:15px;line-height:1;border:none;background:none;padding:0 3px;border-radius:3px}
+.sw .s-clr:hover{color:var(--text)}
+.sw input:not(:placeholder-shown)~.s-clr{display:block}
+select,.btn{background:var(--surf);border:1px solid var(--border);color:var(--text);padding:7px 12px;border-radius:var(--r2);font-size:12.5px;font-family:var(--ui);cursor:pointer;outline:none;transition:all .12s}
+.btn{font-weight:600}
+.btn:hover{background:var(--surf2);border-color:var(--border2)}
+.btn.pri{background:var(--gold);color:#040810;border-color:var(--gold);font-weight:700;box-shadow:0 0 14px rgba(0,212,255,.25)}
+.btn.pri:hover{background:var(--gold2);box-shadow:0 0 20px rgba(0,212,255,.4)}
+.btn.sm{padding:4px 9px;font-size:11px}
+.btn.xs{padding:3px 7px;font-size:10px;font-family:var(--mono)}
+.btn.ghost{background:transparent;border-color:var(--border);color:var(--dim)}
+.btn.ghost:hover{color:var(--text);border-color:var(--border2)}
+.btn.red{border-color:var(--red);color:var(--red)}
+.btn.red:hover{background:rgba(224,82,82,.1)}
+
+/* ─────────────────────────────────────────────
+   OVERLAY & PANEL
+───────────────────────────────────────────── */
+.ov{position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:100;display:none;align-items:flex-start;justify-content:flex-end;padding:0}
+.ov.open{display:flex}
+.pn{background:var(--surf);border-left:1px solid var(--border);width:560px;max-width:100vw;height:100vh;overflow-y:auto;display:flex;flex-direction:column}
+.pn-head{padding:18px 20px 16px;border-bottom:1px solid var(--border);display:flex;gap:14px;align-items:flex-start;position:sticky;top:0;background:var(--surf);z-index:5}
+.pn-title{font-size:14px;font-weight:700;line-height:1.4;margin-bottom:4px}
+.pn-meta{font-size:11px;color:var(--dim);font-family:var(--mono)}
+.pn-close{margin-left:auto;font-size:18px;cursor:pointer;color:var(--dim);flex-shrink:0;padding:2px 6px;border-radius:4px;line-height:1}
+.pn-close:hover{color:var(--text);background:var(--surf2)}
+.pn-body{padding:18px 20px;flex:1}
+.ps{margin-bottom:20px}
+.ps-title{font-size:9px;letter-spacing:1px;text-transform:uppercase;font-family:var(--mono);color:var(--faint);margin-bottom:10px;padding-bottom:5px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
+
+/* ─────────────────────────────────────────────
+   FORM FIELDS
+───────────────────────────────────────────── */
+.field-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.field-item label{font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:.8px;text-transform:uppercase;display:block;margin-bottom:4px}
+.field-val{font-size:13px;font-weight:600;min-height:20px}
+.field-input{width:100%;background:var(--surf2);border:1px solid var(--border2);color:var(--text);padding:6px 8px;border-radius:5px;font-size:12px;font-family:var(--ui);outline:none;transition:border .12s}
+.field-input:focus{border-color:var(--gold)}
+.field-input.mono{font-family:var(--mono)}
+.cb-row{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--dim)}
+.cb-row input[type=checkbox]{accent-color:var(--gold);cursor:pointer}
+
+/* ─────────────────────────────────────────────
+   TABLE
+───────────────────────────────────────────── */
+.tw{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+thead th{text-align:left;padding:8px 10px;font-size:9px;font-family:var(--mono);letter-spacing:1px;color:var(--faint);border-bottom:1px solid var(--border);white-space:nowrap;user-select:none}
+thead th.sh{cursor:pointer}
+thead th.sh:hover{color:var(--text)}
+thead th.sh.on{color:var(--gold)}
+tbody tr{border-bottom:1px solid var(--border);transition:background .08s}
+tbody tr:hover{background:var(--surf2);cursor:pointer}
+td{padding:8px 10px;vertical-align:middle}
+
+/* ─────────────────────────────────────────────
+   PARSED TAGS & BADGES
+───────────────────────────────────────────── */
+.ptags{display:flex;flex-wrap:wrap;gap:3px;margin-top:4px}
+.pt{display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:3px;font-size:9px;font-family:var(--mono);font-weight:500;letter-spacing:.3px;background:var(--surf3);border:1px solid var(--border);color:var(--dim);white-space:nowrap;height:18px;line-height:14px}
+.pt.year{border-color:rgba(77,166,255,.3);color:var(--blue)}
+.pt.set{border-color:rgba(164,126,245,.3);color:var(--purple)}
+.pt.serial{border-color:rgba(0,212,255,.4);color:var(--gold)}
+.pt.auto{border-color:rgba(245,130,74,.3);color:var(--orange)}
+.pt.rc{border-color:rgba(46,204,138,.3);color:var(--green)}
+.pt.grade{border-color:rgba(224,82,82,.4);color:var(--red)}
+.pt.var{border-color:rgba(142,162,184,.2);color:var(--dim)}
+.tb{display:inline-block;padding:2px 7px;border-radius:3px;font-size:9px;font-family:var(--mono);font-weight:500;letter-spacing:.5px}
+.sb{display:inline-block;padding:2px 7px;border-radius:3px;font-size:9px;font-family:var(--mono);font-weight:500;letter-spacing:.3px}
+.sb.sold{background:rgba(224,82,82,.1);color:var(--red);border:1px solid rgba(224,82,82,.2)}
+.sb.stock{background:rgba(46,204,138,.1);color:var(--green);border:1px solid rgba(46,204,138,.2)}
+.pr{font-family:var(--mono);font-weight:500}
+.pr.g{color:var(--green)}.pr.r{color:var(--red)}.pr.o{color:var(--gold)}.pr.d{color:var(--dim)}
+
+/* ─────────────────────────────────────────────
+   MISC
+───────────────────────────────────────────── */
+.sep{border:none;border-top:1px solid var(--border);margin:14px 0}
+.empty{text-align:center;padding:50px 20px;color:var(--dim)}
+.empty .ei{font-size:36px;margin-bottom:10px}
+.alert{padding:10px 14px;border-radius:7px;font-size:12px;margin-bottom:12px}
+.alert.warn{background:rgba(0,212,255,.07);border:1px solid rgba(0,212,255,.2);color:var(--gold)}
+.alert.info{background:rgba(77,166,255,.08);border:1px solid rgba(77,166,255,.2);color:var(--blue)}
+.alert.err{background:rgba(224,82,82,.1);border:1px solid rgba(224,82,82,.2);color:var(--red)}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid var(--border2);border-top-color:var(--gold);border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.toast{position:fixed;bottom:20px;right:20px;background:var(--surf2);border:1px solid var(--border2);border-radius:8px;padding:10px 16px;font-size:12px;z-index:9999;pointer-events:none;opacity:0;transition:opacity .2s;font-family:var(--mono)}
+.toast.show{opacity:1}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:var(--faint)}
+input[type=text],input[type=number],textarea{caret-color:var(--gold)}
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- ── SIDEBAR ── -->
+  <aside class="side">
+    <div class="brand">
+      <div class="brand-name">Chase Place<em>QUANTUM</em></div>
+      <div class="brand-tag">Card Portfolio v2</div>
+    </div>
+    <nav class="nav" id="nav">
+      <div class="ni on" data-page="dashboard" onclick="nav('dashboard')"><span class="ic">◈</span> Dashboard</div>
+      <div class="ni" data-page="inventory" onclick="nav('inventory')"><span class="ic">▦</span> Inventory</div>
+      <div class="ni" data-page="sales" onclick="nav('sales')"><span class="ic">◎</span> Sales</div>
+      <div class="ni" data-page="import" onclick="nav('import')"><span class="ic">⇪</span> Import</div>
+      <div class="ni" data-page="receive" onclick="nav('receive')"><span class="ic">⬓</span> Receive</div>
+      <div class="ni" data-page="analytics" onclick="nav('analytics')"><span class="ic">⌬</span> Analytics</div>
+      <div class="ni" data-page="settings" onclick="nav('settings')"><span class="ic">⚙</span> Settings</div>
+    </nav>
+    <div class="side-foot" id="side-foot">
+      <div class="sf-row">
+        <div class="sf-lbl">Inventory</div>
+        <div class="sf-val o" id="sf-inv">—</div>
+      </div>
+      <div class="sf-row">
+        <div class="sf-lbl">Cost Basis</div>
+        <div class="sf-val" id="sf-cost">—</div>
+      </div>
+      <div class="sf-row">
+        <div class="sf-lbl">Revenue</div>
+        <div class="sf-val g" id="sf-rev">—</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ── MAIN ── -->
+  <main class="main" id="main">
+    <!-- topbar and content rendered by JS -->
+  </main>
+
+</div>
+
+<!-- ── OVERLAY PANEL ── -->
+<div class="ov" id="ov" onclick="if(event.target===this)closePanel()">
+  <div class="pn" id="pn"></div>
+</div>
+
+<!-- ── TOAST ── -->
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+
+/* ══════════════════════════════════════════════════════
+   §1  CONFIG
+══════════════════════════════════════════════════════ */
+const CFG = {
+  APP:      'Chase Place Quantum',
+  VERSION:  '2.0.0',
+  PAGE_SIZE: 50,
+};
+
+/* ══════════════════════════════════════════════════════
+   §2  DB  (localStorage — Supabase-ready interface)
+══════════════════════════════════════════════════════ */
+const DB = {
+  KEYS: {
+    CARDS:          'cpq_cards',
+    SALES:          'cpq_sales',
+    CHECKLISTS:     'cpq_checklists',
+    CUSTOM_PLAYERS: 'cpq_custom_players',
+    CUSTOM_TYPES:   'cpq_custom_types',
+    CATEGORY_DEFS:  'cpq_category_defs',
+    VALUE_LOOKUPS:  'cpq_value_lookups',
+    META:           'cpq_meta',
+  },
+
+  _read(key, fallback) {
+    try { return JSON.parse(localStorage.getItem(key)) ?? fallback; }
+    catch { return fallback; }
+  },
+  _write(key, val) {
+    try { localStorage.setItem(key, JSON.stringify(val)); } catch(e) { console.error('DB write', key, e); }
+  },
+
+  load() {
+    return {
+      cards:          DB._read(DB.KEYS.CARDS,          []),
+      sales:          DB._read(DB.KEYS.SALES,          []),
+      checklists:     DB._read(DB.KEYS.CHECKLISTS,     []),
+      custom_players: DB._read(DB.KEYS.CUSTOM_PLAYERS, []),
+      custom_types:   DB._read(DB.KEYS.CUSTOM_TYPES,   []),
+      category_defs:  DB._read(DB.KEYS.CATEGORY_DEFS,  []),
+      value_lookups:  DB._read(DB.KEYS.VALUE_LOOKUPS,  {}),
+    };
+  },
+
+  saveCards(cards) { DB._write(DB.KEYS.CARDS, cards); },
+  saveSales(sales) { DB._write(DB.KEYS.SALES, sales); },
+
+  saveCard(card) {
+    const cards = DB._read(DB.KEYS.CARDS, []);
+    const idx = cards.findIndex(c => c.id === card.id);
+    if (idx >= 0) cards[idx] = card; else cards.push(card);
+    DB._write(DB.KEYS.CARDS, cards);
+  },
+
+  saveSale(sale) {
+    const sales = DB._read(DB.KEYS.SALES, []);
+    const idx = sales.findIndex(s => s.id === sale.id);
+    if (idx >= 0) sales[idx] = sale; else sales.push(sale);
+    DB._write(DB.KEYS.SALES, sales);
+  },
+
+  saveMeta(key, value) {
+    const meta = DB._read(DB.KEYS.META, {});
+    meta[key] = value;
+    DB._write(DB.KEYS.META, meta);
+  },
+
+  getMeta(key, fallback = null) {
+    return DB._read(DB.KEYS.META, {})[key] ?? fallback;
+  },
+
+  saveValueLookup(id, data) {
+    const vl = DB._read(DB.KEYS.VALUE_LOOKUPS, {});
+    vl[id] = data;
+    DB._write(DB.KEYS.VALUE_LOOKUPS, vl);
+  },
+
+  exportBackup() {
+    const data = {
+      version: CFG.VERSION,
+      exported_at: new Date().toISOString(),
+      cards:   DB._read(DB.KEYS.CARDS,  []),
+      sales:   DB._read(DB.KEYS.SALES,  []),
+      meta:    DB._read(DB.KEYS.META,   {}),
+      value_lookups: DB._read(DB.KEYS.VALUE_LOOKUPS, {}),
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `cpq-backup-${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+  },
+};
+
+/* ══════════════════════════════════════════════════════
+   §3  STORE  (central state)
+══════════════════════════════════════════════════════ */
+const Store = {
+  state: {
+    cards:          [],
+    sales:          [],
+    checklists:     [],
+    custom_players: [],
+    custom_types:   [],
+    category_defs:  [],
+    value_lookups:  {},
+
+    page:        'dashboard',
+    panel:       null,
+    filters:     { q: '', type: '', status: '' },
+    sort:        { field: 'created_at', dir: 'desc' },
+    page_num:    0,
+    page_size:   CFG.PAGE_SIZE,
+    selected_ids: [],
+    receive_draft: null,
+    panel_edit:  false,
+  },
+
+  get(key)             { return this.state[key]; },
+  patch(key, partial)  { this.state[key] = typeof partial === 'object' && !Array.isArray(partial)
+                            ? { ...this.state[key], ...partial }
+                            : partial; },
+
+  setCards(cards)      { this.state.cards = cards; },
+  setSales(sales)      { this.state.sales = sales; },
+
+  getCard(id)  { return this.state.cards.find(c => c.id === id) ?? null; },
+  getSale(id)  { return this.state.sales.find(s => s.id === id) ?? null; },
+
+  patchCard(id, fields) {
+    const idx = this.state.cards.findIndex(c => c.id === id);
+    if (idx < 0) return;
+    const now = new Date().toISOString();
+    this.state.cards[idx] = { ...this.state.cards[idx], ...fields, updated_at: now };
+    DB.saveCard(this.state.cards[idx]);
+  },
+
+  patchSale(id, fields) {
+    const idx = this.state.sales.findIndex(s => s.id === id);
+    if (idx < 0) return;
+    const now = new Date().toISOString();
+    this.state.sales[idx] = { ...this.state.sales[idx], ...fields, updated_at: now };
+    DB.saveSale(this.state.sales[idx]);
+  },
+};
+
+/* ══════════════════════════════════════════════════════
+   §4  PARSERS  (stubs — implemented in Step 3)
+══════════════════════════════════════════════════════ */
+const Parsers = {
+  parseCardTitle(raw) {
+    // TODO: extract player, year, set, variation, serial, grade, is_auto, is_rc
+    return { raw_title: raw, display_name: raw };
+  },
+
+  parseSaleTitle(raw) {
+    // TODO: extract player, year, set, variation, serial, grade, is_auto, qty
+    return { raw_title: raw, title: raw };
+  },
+
+  parseOrderCsv(csvText) {
+    // TODO: parse eBay/COMC/BSC order export CSV into card records
+    return [];
+  },
+
+  parseSaleCsv(csvText) {
+    // TODO: parse eBay sold listings CSV into sale records
+    return [];
+  },
+};
+
+/* ══════════════════════════════════════════════════════
+   §5  COMPUTED  (derived values)
+══════════════════════════════════════════════════════ */
+const Computed = {
+  soldCardIds() {
+    const ids = new Set();
+    Store.get('sales').forEach(s =>
+      (s.linked_card_ids || []).forEach(id => ids.add(id))
+    );
+    return ids;
+  },
+
+  invCards() {
+    const sold = this.soldCardIds();
+    return Store.get('cards').filter(c => !sold.has(c.id));
+  },
+
+  invCount() { return this.invCards().length; },
+
+  totalCostBasis() {
+    return this.invCards().reduce((sum, c) => sum + (c.cost || 0), 0);
+  },
+
+  totalRevenue() {
+    return Store.get('sales').reduce((sum, s) => sum + (s.price || 0), 0);
+  },
+
+  totalFees() {
+    return Store.get('sales').reduce((sum, s) => sum + (s.fees || 0) + (s.buyer_ship || 0), 0);
+  },
+
+  totalProfit() {
+    const revenue = this.totalRevenue();
+    const fees = this.totalFees();
+    const sold = this.soldCardIds();
+    const cogs = Store.get('cards')
+      .filter(c => sold.has(c.id))
+      .reduce((sum, c) => sum + (c.cost || 0), 0);
+    return revenue - fees - cogs;
+  },
+
+  cardFinancials(id) {
+    const card = Store.getCard(id);
+    if (!card) return null;
+    const sale = Store.get('sales').find(s => (s.linked_card_ids || []).includes(id));
+    const vl = Store.get('value_lookups')[id];
+    const cost = card.cost || 0;
+    const mktVal = vl?.avgPrice || 0;
+    const salePrice = sale?.price || 0;
+    const fees = sale ? (sale.fees || 0) + (sale.buyer_ship || 0) : 0;
+    const isSold = !!sale;
+    const pnl = isSold ? (salePrice - fees - cost) : (mktVal - cost);
+    return { cost, mktVal, salePrice, fees, pnl, isSold, sale };
+  },
+
+  linkedPnl(saleId) {
+    const sale = Store.getSale(saleId);
+    if (!sale) return 0;
+    const cogs = (sale.linked_card_ids || [])
+      .reduce((sum, id) => sum + (Store.getCard(id)?.cost || 0), 0);
+    return (sale.price || 0) - (sale.fees || 0) - (sale.buyer_ship || 0) - cogs;
+  },
+};
+
+/* ══════════════════════════════════════════════════════
+   §6  ACTIONS  (stubs — implemented in Step 6)
+══════════════════════════════════════════════════════ */
+const Actions = {
+  addCard(fields)         { toast('Actions.addCard — coming soon'); },
+  updateCard(id, fields)  { Store.patchCard(id, fields); render(); toast('Saved'); },
+  deleteCard(id)          { toast('Actions.deleteCard — coming soon'); },
+  addSale(fields)         { toast('Actions.addSale — coming soon'); },
+  updateSale(id, fields)  { Store.patchSale(id, fields); render(); toast('Saved'); },
+  deleteSale(id)          { toast('Actions.deleteSale — coming soon'); },
+  linkCardToSale(cardId, saleId) { toast('Actions.linkCardToSale — coming soon'); },
+  importCards(records)    { toast('Actions.importCards — coming soon'); },
+  importSales(records)    { toast('Actions.importSales — coming soon'); },
+};
+
+/* ══════════════════════════════════════════════════════
+   §7  COMPONENTS  (stubs — implemented in Step 4/5)
+══════════════════════════════════════════════════════ */
+const Components = {
+  cardRow(card) {
+    const fin = Computed.cardFinancials(card.id);
+    return `<tr onclick="openCardPanel('${card.id}')">
+      <td><span style="font-weight:600">${esc(card.display_name || card.raw_title || card.id)}</span></td>
+      <td><span class="pr o">${f$(card.cost)}</span></td>
+      <td><span class="pr ${fin?.isSold ? 'd' : 'g'}">${fin?.isSold ? 'sold' : f$(fin?.mktVal)}</span></td>
+      <td><span class="sb ${fin?.isSold ? 'sold' : 'stock'}">${fin?.isSold ? 'SOLD' : 'IN STOCK'}</span></td>
+    </tr>`;
+  },
+
+  saleRow(sale) {
+    const pnl = Computed.linkedPnl(sale.id);
+    const cls = pnl >= 0 ? 'g' : 'r';
+    return `<tr onclick="openSalePanel('${sale.id}')">
+      <td><span style="font-weight:600">${esc(sale.title || sale.raw_title || sale.id)}</span></td>
+      <td><span class="pr g">${f$(sale.price)}</span></td>
+      <td><span class="pr ${cls}">${pnl >= 0 ? '+' : ''}${f$(pnl)}</span></td>
+      <td><span class="pr d">${sale.created_at ? sale.created_at.slice(0,10) : '—'}</span></td>
+    </tr>`;
+  },
+
+  statGrid() {
+    const inv   = Computed.invCount();
+    const cost  = Computed.totalCostBasis();
+    const rev   = Computed.totalRevenue();
+    const profit = Computed.totalProfit();
+    const cls   = profit >= 0 ? 'g' : 'r';
+    return `<div class="sg">
+      <div class="sc"><div class="sc-lbl">In Inventory</div><div class="sc-val o">${inv}</div></div>
+      <div class="sc"><div class="sc-lbl">Cost Basis</div><div class="sc-val">${f$(cost)}</div></div>
+      <div class="sc"><div class="sc-lbl">Total Revenue</div><div class="sc-val g">${f$(rev)}</div></div>
+      <div class="sc"><div class="sc-lbl">Net Profit</div><div class="sc-val ${cls}">${profit >= 0 ? '+' : ''}${f$(profit)}</div></div>
+    </div>`;
+  },
+};
+
+/* ══════════════════════════════════════════════════════
+   §8  PAGES  (stub renderers)
+══════════════════════════════════════════════════════ */
+const Pages = {
+  dashboard() {
+    const cards = Store.get('cards');
+    const sales = Store.get('sales');
+    return `
+      <div class="topbar"><div class="pg-title">Dashboard</div></div>
+      <div class="content">
+        ${Components.statGrid()}
+        <div class="alert info">
+          <strong>Chase Place Quantum v2</strong> — Dashboard analytics coming in Step 5.
+          You have <strong>${cards.length}</strong> cards and <strong>${sales.length}</strong> sales loaded.
+        </div>
+      </div>`;
+  },
+
+  inventory() {
+    const { q, type, status } = Store.get('filters');
+    const sort  = Store.get('sort');
+    const pageN = Store.get('page_num');
+    const pageS = Store.get('page_size');
+    const sold  = Computed.soldCardIds();
+
+    let list = Store.get('cards').filter(c => {
+      if (q && !JSON.stringify(c).toLowerCase().includes(q.toLowerCase())) return false;
+      if (type && c.type !== type) return false;
+      if (status === 'sold'  && !sold.has(c.id)) return false;
+      if (status === 'stock' &&  sold.has(c.id)) return false;
+      return true;
+    });
+
+    list = [...list].sort((a, b) => {
+      const av = a[sort.field] ?? '', bv = b[sort.field] ?? '';
+      return sort.dir === 'asc' ? (av > bv ? 1 : -1) : (av < bv ? 1 : -1);
+    });
+
+    const total = list.length;
+    const page  = list.slice(pageN * pageS, (pageN + 1) * pageS);
+    const pages = Math.ceil(total / pageS);
+
+    const rows = page.length
+      ? page.map(c => Components.cardRow(c)).join('')
+      : `<tr><td colspan="4"><div class="empty"><div class="ei">▦</div>No cards found</div></td></tr>`;
+
+    return `
+      <div class="topbar">
+        <div class="pg-title">Inventory</div>
+        <span class="pg-sub"><span class="stat-num">${total}</span> cards</span>
+        <button class="btn pri sm" onclick="openReceivePanel()">+ Add Card</button>
+      </div>
+      <div class="content">
+        <div class="fb">
+          <div class="sw">
+            <span class="si">⌕</span>
+            <input type="text" placeholder="Search cards…" value="${esc(q)}" oninput="setFilter('q',this.value)">
+            <button class="s-clr" onclick="setFilter('q','')">✕</button>
+          </div>
+          <select onchange="setFilter('status',this.value)">
+            <option value="" ${!status?'selected':''}>All Status</option>
+            <option value="stock" ${status==='stock'?'selected':''}>In Stock</option>
+            <option value="sold"  ${status==='sold'?'selected':''}>Sold</option>
+          </select>
+        </div>
+        <div class="tw">
+          <table>
+            <thead><tr>
+              <th class="sh" onclick="setSort('display_name')">Card</th>
+              <th class="sh" onclick="setSort('cost')">Cost</th>
+              <th>Market</th>
+              <th>Status</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+        ${pages > 1 ? Pages._pager(pageN, pages) : ''}
+      </div>`;
+  },
+
+  sales() {
+    const { q } = Store.get('filters');
+    const sort  = Store.get('sort');
+    const pageN = Store.get('page_num');
+    const pageS = Store.get('page_size');
+
+    let list = Store.get('sales').filter(s =>
+      !q || JSON.stringify(s).toLowerCase().includes(q.toLowerCase())
+    );
+    list = [...list].sort((a, b) => {
+      const av = a[sort.field] ?? '', bv = b[sort.field] ?? '';
+      return sort.dir === 'asc' ? (av > bv ? 1 : -1) : (av < bv ? 1 : -1);
+    });
+
+    const total = list.length;
+    const page  = list.slice(pageN * pageS, (pageN + 1) * pageS);
+    const pages = Math.ceil(total / pageS);
+
+    const rows = page.length
+      ? page.map(s => Components.saleRow(s)).join('')
+      : `<tr><td colspan="4"><div class="empty"><div class="ei">◎</div>No sales yet</div></td></tr>`;
+
+    return `
+      <div class="topbar">
+        <div class="pg-title">Sales</div>
+        <span class="pg-sub"><span class="stat-num">${total}</span> sales</span>
+        <button class="btn pri sm" onclick="openAddSalePanel()">+ Add Sale</button>
+      </div>
+      <div class="content">
+        <div class="fb">
+          <div class="sw">
+            <span class="si">⌕</span>
+            <input type="text" placeholder="Search sales…" value="${esc(q)}" oninput="setFilter('q',this.value)">
+            <button class="s-clr" onclick="setFilter('q','')">✕</button>
+          </div>
+        </div>
+        <div class="tw">
+          <table>
+            <thead><tr>
+              <th class="sh" onclick="setSort('title')">Sale</th>
+              <th class="sh" onclick="setSort('price')">Revenue</th>
+              <th>Profit</th>
+              <th class="sh" onclick="setSort('created_at')">Date</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+        ${pages > 1 ? Pages._pager(pageN, pages) : ''}
+      </div>`;
+  },
+
+  import() {
+    return `
+      <div class="topbar"><div class="pg-title">Import</div></div>
+      <div class="content">
+        <div class="alert warn">Import UI — coming in Step 3 (Parsers).</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+          <div style="background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:18px">
+            <div style="font-weight:700;margin-bottom:8px">📦 Import Cards</div>
+            <p style="font-size:12px;color:var(--dim);margin-bottom:12px">Paste eBay order CSV or COMC export to add cards to inventory.</p>
+            <button class="btn ghost sm" disabled>Coming Soon</button>
+          </div>
+          <div style="background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:18px">
+            <div style="font-weight:700;margin-bottom:8px">💰 Import Sales</div>
+            <p style="font-size:12px;color:var(--dim);margin-bottom:12px">Paste eBay sold listings CSV to record sales.</p>
+            <button class="btn ghost sm" disabled>Coming Soon</button>
+          </div>
+        </div>
+        <div style="margin-top:16px;text-align:right">
+          <button class="btn sm" onclick="DB.exportBackup()">⬇ Export Backup</button>
+        </div>
+      </div>`;
+  },
+
+  receive() {
+    return `
+      <div class="topbar"><div class="pg-title">Receive</div></div>
+      <div class="content">
+        <div class="alert info">Receive / bulk-add flow — coming in Step 6 (Actions).</div>
+      </div>`;
+  },
+
+  analytics() {
+    return `
+      <div class="topbar"><div class="pg-title">Analytics</div></div>
+      <div class="content">
+        <div class="alert info">Analytics charts — coming in Step 5.</div>
+      </div>`;
+  },
+
+  settings() {
+    return `
+      <div class="topbar"><div class="pg-title">Settings</div></div>
+      <div class="content">
+        <div class="alert info">Settings page — coming in Step 7.</div>
+        <div style="margin-top:12px">
+          <button class="btn sm" onclick="DB.exportBackup()">⬇ Export JSON Backup</button>
+        </div>
+      </div>`;
+  },
+
+  _pager(current, total) {
+    const prev = current > 0;
+    const next = current < total - 1;
+    return `<div class="pag">
+      <button class="btn sm" ${prev?'':'disabled'} onclick="setPage(${current-1})">‹ Prev</button>
+      <span>Page ${current+1} / ${total}</span>
+      <button class="btn sm" ${next?'':'disabled'} onclick="setPage(${current+1})">Next ›</button>
+    </div>`;
+  },
+};
+
+/* ══════════════════════════════════════════════════════
+   §9  INIT  (routing, panels, utilities, boot)
+══════════════════════════════════════════════════════ */
+
+/* ── Utilities ── */
+function newId(prefix = 'P') {
+  const ts  = Date.now();
+  const rnd = Math.random().toString(36).slice(2, 6);
+  return `${prefix}_${ts}_${rnd}`;
+}
+
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function f$(n) {
+  if (n == null || n === '') return '—';
+  return '$' + Number(n).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
+function toast(msg, dur = 2200) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove('show'), dur);
+}
+
+/* ── Routing ── */
+function nav(page) {
+  Store.patch('page', page);
+  Store.patch('page_num', 0);
+  Store.patch('filters', { q: '', type: '', status: '' });
+  render();
+}
+
+function render() {
+  const page = Store.get('page');
+  const renderer = Pages[page];
+  document.getElementById('main').innerHTML = renderer ? renderer() : Pages.dashboard();
+
+  document.querySelectorAll('.ni').forEach(el => {
+    el.classList.toggle('on', el.dataset.page === page);
+  });
+
+  updateSidebar();
+}
+
+function updateSidebar() {
+  const inv  = Computed.invCount();
+  const cost = Computed.totalCostBasis();
+  const rev  = Computed.totalRevenue();
+  const sfInv  = document.getElementById('sf-inv');
+  const sfCost = document.getElementById('sf-cost');
+  const sfRev  = document.getElementById('sf-rev');
+  if (sfInv)  sfInv.textContent  = inv;
+  if (sfCost) sfCost.textContent = f$(cost);
+  if (sfRev)  sfRev.textContent  = f$(rev);
+}
+
+/* ── Filters & Sort ── */
+function setFilter(key, val) {
+  const filters = { ...Store.get('filters'), [key]: val };
+  Store.patch('filters', filters);
+  Store.patch('page_num', 0);
+  render();
+}
+
+function setSort(field) {
+  const cur = Store.get('sort');
+  const dir = cur.field === field && cur.dir === 'asc' ? 'desc' : 'asc';
+  Store.patch('sort', { field, dir });
+  render();
+}
+
+function setPage(n) {
+  Store.patch('page_num', n);
+  render();
+}
+
+/* ── Panel ── */
+function openPanel(html) {
+  document.getElementById('pn').innerHTML = html;
+  document.getElementById('ov').classList.add('open');
+}
+
+function closePanel() {
+  document.getElementById('ov').classList.remove('open');
+  document.getElementById('pn').innerHTML = '';
+  Store.patch('panel', null);
+}
+
+function openCardPanel(id) {
+  const card = Store.getCard(id);
+  if (!card) return;
+  const fin = Computed.cardFinancials(id);
+  openPanel(`
+    <div class="pn-head">
+      <div>
+        <div class="pn-title">${esc(card.display_name || card.raw_title || id)}</div>
+        <div class="pn-meta">${esc(card.id)}</div>
+      </div>
+      <span class="pn-close" onclick="closePanel()">✕</span>
+    </div>
+    <div class="pn-body">
+      <div class="ps">
+        <div class="ps-title">Financials</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+          <div style="background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);padding:10px;text-align:center">
+            <div style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:1px;margin-bottom:4px">COST</div>
+            <div style="font-size:15px;font-weight:700;font-family:var(--mono)">${f$(fin?.cost)}</div>
+          </div>
+          <div style="background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);padding:10px;text-align:center">
+            <div style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:1px;margin-bottom:4px">MKT VAL</div>
+            <div style="font-size:15px;font-weight:700;font-family:var(--mono);color:var(--gold)">${f$(fin?.mktVal)}</div>
+          </div>
+          <div style="background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);padding:10px;text-align:center">
+            <div style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:1px;margin-bottom:4px">P&amp;L</div>
+            <div style="font-size:15px;font-weight:700;font-family:var(--mono);color:${(fin?.pnl||0)>=0?'var(--green)':'var(--red)'}">${(fin?.pnl||0)>=0?'+':''}${f$(fin?.pnl)}</div>
+          </div>
+        </div>
+      </div>
+      <div class="ps">
+        <div class="ps-title">Card Details</div>
+        <div class="field-grid">
+          ${_panelField('Player',    card.player)}
+          ${_panelField('Year',      card.year)}
+          ${_panelField('Set',       card.set)}
+          ${_panelField('Variation', card.variation)}
+          ${_panelField('Serial',    card.serial)}
+          ${_panelField('Grade',     card.grade)}
+          ${_panelField('Source',    card.source)}
+          ${_panelField('Order #',   card.order_num)}
+        </div>
+      </div>
+      ${card.notes ? `<div class="ps"><div class="ps-title">Notes</div><div style="font-size:12px;color:var(--dim);font-family:var(--mono);white-space:pre-wrap">${esc(card.notes)}</div></div>` : ''}
+    </div>`);
+}
+
+function openSalePanel(id) {
+  const sale = Store.getSale(id);
+  if (!sale) return;
+  const pnl = Computed.linkedPnl(id);
+  openPanel(`
+    <div class="pn-head">
+      <div>
+        <div class="pn-title">${esc(sale.title || sale.raw_title || id)}</div>
+        <div class="pn-meta">${esc(sale.id)}</div>
+      </div>
+      <span class="pn-close" onclick="closePanel()">✕</span>
+    </div>
+    <div class="pn-body">
+      <div class="ps">
+        <div class="ps-title">Financials</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+          <div style="background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);padding:10px;text-align:center">
+            <div style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:1px;margin-bottom:4px">REVENUE</div>
+            <div style="font-size:15px;font-weight:700;font-family:var(--mono);color:var(--green)">${f$(sale.price)}</div>
+          </div>
+          <div style="background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);padding:10px;text-align:center">
+            <div style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:1px;margin-bottom:4px">FEES</div>
+            <div style="font-size:15px;font-weight:700;font-family:var(--mono);color:var(--red)">${f$((sale.fees||0)+(sale.buyer_ship||0))}</div>
+          </div>
+          <div style="background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);padding:10px;text-align:center">
+            <div style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:1px;margin-bottom:4px">PROFIT</div>
+            <div style="font-size:15px;font-weight:700;font-family:var(--mono);color:${pnl>=0?'var(--green)':'var(--red)'}">${pnl>=0?'+':''}${f$(pnl)}</div>
+          </div>
+        </div>
+      </div>
+      <div class="ps">
+        <div class="ps-title">Sale Details</div>
+        <div class="field-grid">
+          ${_panelField('Platform', sale.platform)}
+          ${_panelField('Date',     sale.created_at?.slice(0,10))}
+          ${_panelField('Buyer',    sale.buyer)}
+          ${_panelField('Order #',  sale.order_num)}
+          ${_panelField('Qty',      sale.qty)}
+          ${_panelField('Source',   sale.source)}
+        </div>
+      </div>
+      <div class="ps">
+        <div class="ps-title">Linked Cards (${(sale.linked_card_ids||[]).length})</div>
+        ${(sale.linked_card_ids||[]).map(cid => {
+          const c = Store.getCard(cid);
+          return c
+            ? `<div style="padding:7px 10px;background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);margin-bottom:5px;font-size:12px;cursor:pointer" onclick="closePanel();openCardPanel('${cid}')">${esc(c.display_name||c.raw_title||cid)}</div>`
+            : `<div style="font-size:11px;color:var(--faint);font-family:var(--mono);margin-bottom:3px">${esc(cid)}</div>`;
+        }).join('') || '<div style="font-size:12px;color:var(--faint)">No cards linked</div>'}
+      </div>
+    </div>`);
+}
+
+function openReceivePanel() {
+  openPanel(`
+    <div class="pn-head">
+      <div><div class="pn-title">Add Card</div></div>
+      <span class="pn-close" onclick="closePanel()">✕</span>
+    </div>
+    <div class="pn-body">
+      <div class="alert info">Full receive flow coming in Step 6.</div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div><label style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:.8px;text-transform:uppercase;display:block;margin-bottom:4px">Raw Title</label>
+          <input class="field-input" type="text" id="rc-title" placeholder="e.g. 2023 Panini Prizm Patrick Mahomes #1 PSA 10"></div>
+        <div><label style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:.8px;text-transform:uppercase;display:block;margin-bottom:4px">Cost ($)</label>
+          <input class="field-input mono" type="number" id="rc-cost" placeholder="0.00" step="0.01"></div>
+        <div><label style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:.8px;text-transform:uppercase;display:block;margin-bottom:4px">Source</label>
+          <input class="field-input" type="text" id="rc-source" placeholder="eBay, COMC, BSC…"></div>
+        <div style="display:flex;gap:8px;margin-top:6px">
+          <button class="btn pri" onclick="_quickAddCard()">Add Card</button>
+          <button class="btn ghost" onclick="closePanel()">Cancel</button>
+        </div>
+      </div>
+    </div>`);
+}
+
+function openAddSalePanel() {
+  openPanel(`
+    <div class="pn-head">
+      <div><div class="pn-title">Add Sale</div></div>
+      <span class="pn-close" onclick="closePanel()">✕</span>
+    </div>
+    <div class="pn-body">
+      <div class="alert info">Full sale import coming in Step 3.</div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div><label style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:.8px;text-transform:uppercase;display:block;margin-bottom:4px">Title</label>
+          <input class="field-input" type="text" id="as-title" placeholder="Sale title"></div>
+        <div><label style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:.8px;text-transform:uppercase;display:block;margin-bottom:4px">Sale Price ($)</label>
+          <input class="field-input mono" type="number" id="as-price" placeholder="0.00" step="0.01"></div>
+        <div><label style="font-size:9px;color:var(--faint);font-family:var(--mono);letter-spacing:.8px;text-transform:uppercase;display:block;margin-bottom:4px">Platform</label>
+          <input class="field-input" type="text" id="as-platform" placeholder="eBay, StockX…"></div>
+        <div style="display:flex;gap:8px;margin-top:6px">
+          <button class="btn pri" onclick="_quickAddSale()">Add Sale</button>
+          <button class="btn ghost" onclick="closePanel()">Cancel</button>
+        </div>
+      </div>
+    </div>`);
+}
+
+/* ── Quick-add helpers (minimal, real implementation in Step 6) ── */
+function _quickAddCard() {
+  const raw  = document.getElementById('rc-title')?.value?.trim();
+  const cost = parseFloat(document.getElementById('rc-cost')?.value) || 0;
+  const src  = document.getElementById('rc-source')?.value?.trim();
+  if (!raw) { toast('Title is required'); return; }
+  const now = new Date().toISOString();
+  const card = {
+    id: newId('P'),
+    raw_title: raw,
+    display_name: raw,
+    cost,
+    raw_cost: String(cost),
+    source: src || null,
+    photos: [],
+    created_at: now,
+    updated_at: now,
+  };
+  const cards = [...Store.get('cards'), card];
+  Store.setCards(cards);
+  DB.saveCards(cards);
+  closePanel();
+  render();
+  toast('Card added');
+}
+
+function _quickAddSale() {
+  const title    = document.getElementById('as-title')?.value?.trim();
+  const price    = parseFloat(document.getElementById('as-price')?.value) || 0;
+  const platform = document.getElementById('as-platform')?.value?.trim();
+  if (!title) { toast('Title is required'); return; }
+  const now = new Date().toISOString();
+  const sale = {
+    id: newId('S'),
+    raw_title: title,
+    title,
+    price,
+    raw_price: String(price),
+    platform: platform || null,
+    linked_card_ids: [],
+    photos: [],
+    fees: 0,
+    buyer_ship: 0,
+    created_at: now,
+    updated_at: now,
+  };
+  const sales = [...Store.get('sales'), sale];
+  Store.setSales(sales);
+  DB.saveSales(sales);
+  closePanel();
+  render();
+  toast('Sale added');
+}
+
+function _panelField(label, val) {
+  return `<div class="field-item">
+    <label>${esc(label)}</label>
+    <div class="field-val">${val != null && val !== '' ? esc(String(val)) : '<span style="color:var(--faint)">—</span>'}</div>
+  </div>`;
+}
+
+/* ── Boot ── */
+document.addEventListener('DOMContentLoaded', () => {
+  const data = DB.load();
+  Store.setCards(data.cards);
+  Store.setSales(data.sales);
+  Store.patch('value_lookups', data.value_lookups);
+
+  render();
+});
+</script>
+</body>
+</html>
